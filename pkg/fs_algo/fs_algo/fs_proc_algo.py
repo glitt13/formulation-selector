@@ -1,118 +1,110 @@
-import argparse
+
+from sklearn.model_selection import train_test_split
 import yaml
 import pandas as pd
 from pathlib import Path
-import fs_algo.fs_algo_train_eval as fsate
-import ast
+import xarray as xr
 
-"""Workflow script to train algorithms on catchment attribute data for predicting
-    formulation metrics and/or hydrologic signatures.
 
-:raises ValueError: When the algorithm config file path does not exist
-:note python fs_proc_algo.py "/path/to/algo_config.yaml"
+# Read in yaml file
+path_config =  '/Users/guylitt/git/fsds/scripts/eval_ingest/xssa/xssa_attr_config.yaml' 
 
-"""
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description = 'process the algorithm config file')
-    parser.add_argument('path_algo_config', type=str, help='Path to the YAML configuration file specific for algorithm training')
-    args = parser.parse_args()
-    home_dir = Path.home()
-    path_algo_config = Path(args.path_algo_config) #Path(f'{home_dir}/git/formulation-selector/scripts/eval_ingest/xssa/xssa_algo_config.yaml') 
+# attribute data of interest:
+# Attribute data location:
+with open(path_config, 'r') as file:
+    config = yaml.safe_load(file)
 
-    with open(path_algo_config, 'r') as file:
-        algo_cfg = yaml.safe_load(file)
+# TODO create a model configuration file
+algo_config = {'rf': {'n_estimators':100},
+                    'mlp': {'hidden_layer_sizes' :(4,),
+                             'activation':'relu',
+                             'solver':'lbfgs',
+                             'alpha':0.001,
+                             'batch_size':'auto',
+                             'learning_rate':'constant',
+                             'power_t':0.5,
+                             'max_iter':10000,
+                             }}
+
+
+home_dir = str(Path.home())
+dir_base = list([x for x in config['file_io'] if 'dir_base' in x][0].values())[0].format(home_dir=home_dir)
+# Location of attributes (predictor data):
+dir_db_attrs = list([x for x in config['file_io'] if 'dir_db_attrs' in x][0].values())[0].format(dir_base = dir_base)
+
+# parent location of response variable data:
+dir_std_base =  list([x for x in config['file_io'] if 'dir_std_base' in x][0].values())[0].format(dir_base = dir_base)
+
+# Identify datasets of interest:
+datasets = list([x for x in config['formulation_metadata'] if 'datasets' in x][0].values())[0]
+
+for ds in datasets: 
+    # TODO implement a check to ensure each dataset directory exists
+    path_nc = [x for x in Path(dir_std_base/Path(ds)).glob("*.nc") if x.is_file()]
+    #path_zarr = [x for x in Path(dir_std_base/Path(ds)).glob("*.zarr") if x.is_dir()]
+    try:
+        dat_resp = xr.open_dataset(path_nc, engine='netcdf4')
+    except:
+        path_zarr = [x for x in Path(dir_std_base/Path(ds)).glob("*.zarr")]
+        try:
+            dat_resp = xr.open_dataset(path_zarr,engine='zarr')
+        except:
+            raise ValueError(f"Could not identify an approach to read in dataset via {path_nc} nor {path_zarr}")
+    # The metrics approach
+
+    metrics = dat_resp.attrs['metric_mappings'].split('|')
+    gage_ids = dat_resp['gage_id'].values
+
+    # %% COMID retrieval and assignment to response variable's coordinate
+    [featureSource,featureID] = _find_feat_srce_id(dat_resp,config)
+    comids_resp = fs_retr_nhdp_comids(featureSource,featureID,gage_ids)
+    dat_resp = dat_resp.assign_coords(comid = comids_resp)
+    # TODO allow secondary option where featureSource and featureIDs already provided, not COMID 
+
+    #%%  Read in predictor variable data (aka basin attributes) 
+    # TODO list of variables of interest:
+    # TODO  Setup the s3fs filesystem that is going to be used by xarray to open the parquet files
+    _s3 = s3fs.S3FileSystem(anon=True)
+
+    # TODO subset based on variables of interest
+    # attr_arr = attr_df_sub.to_dask_array(lengths=True)
+    dd_attr = fs_read_attr_comid(dir_db_attrs, comids_resp, attrs_sel = 'all',_s3 = None,storage_options=None)
+
+    # NOTE: additional subsetting may be performed on attr_df here before computing 
+    df_attr = dd_attr.compute() # Create a pandas DataFrame
+    vars = df_attr['attribute'].unique()
+    df_attr_wide = df_attr.pivot(index='featureID', columns = 'attribute', values = 'value')
+    dd_resp = dat_resp.to_dask_dataframe()
     
-    # Ensure the string literal is converted to a tuple for `hidden_layer_sizes`
-    algo_config = {k: algo_cfg['algorithms'][k] for k in algo_cfg['algorithms']}
-    if algo_config['mlp'][0].get('hidden_layer_sizes',None): # purpose: evaluate string literal to a tuple
-        algo_config['mlp'][0]['hidden_layer_sizes'] = ast.literal_eval(algo_config['mlp'][0]['hidden_layer_sizes'])
+
+    #%% Join attribute data and response data
+    for metr in metrics:
+        # Subset response data to metric of interest & the comid
+        df_metr_resp = pd.DataFrame({'comid': dat_resp['comid'],
+                                     metr : dat_resp[metr].data})
         
-    verbose = algo_cfg['verbose']
-    test_size = algo_cfg['test_size']
-    seed = algo_cfg['seed']
+        df_pred_resp = df_metr_resp.merge(df_attr_wide, left_on = 'comid', right_on = 'featureID')
 
-    #%% Attribute configuration
-    name_attr_config = algo_cfg.get('name_attr_config', Path(path_algo_config).name.replace('algo','attr')) 
-    path_attr_config = fsate.build_cfig_path(path_algo_config, name_attr_config)
-    
-    if not Path(path_attr_config).exists():
-        raise ValueError(f"Ensure that 'name_attr_config' as defined inside {path_algo_config.name} \
-                          \n is also in the same directory as the algo config file {path_algo_config.parent}" )
-    print("BEGINNING algorithm training, testing, & evaluation.")
+        # %% TRAIN ALGORITHMS AND EVALUATE PERFORMANCE
+        # Train/test split
+        X = df_pred_resp[vars]
+        y = df_pred_resp[metr]
+        X_train, X_test, y_train, y_test = train_test_split(X,y, test_size = 0.3, random_state=32)
 
-    # Initialize attribute configuration class for extracting attributes
-    attr_cfig = fsate.AttrConfigAndVars(path_attr_config)
-    attr_cfig._read_attr_config()
+        alg_cfig = algo_config.copy() # Back up the original model config before popping
 
-    attrs_sel = attr_cfig.attrs_cfg_dict.get('attrs_sel', None)
-    dir_db_attrs = attr_cfig.attrs_cfg_dict.get('dir_db_attrs')
-    dir_std_base = attr_cfig.attrs_cfg_dict.get('dir_std_base')
-    dir_base = attr_cfig.attrs_cfg_dict.get('dir_base')
-    datasets = attr_cfig.attrs_cfg_dict.get('datasets') # Identify datasets of interest
+        # Initialize the trainer with algo_config and metric
+        trainer = AlgoTrainEval(algo_config={'rf': {'n_estimators': 100}, 
+                                                'mlp': {'hidden_layer_sizes': (100,), 'max_iter': 300}},
+                                metr='accuracy')
 
-    #%%  Generate standardized output directories
-    dir_out = fsate.fs_save_algo_dir_struct(dir_base).get('dir_out')
-    dir_out_alg_base = fsate.fs_save_algo_dir_struct(dir_base).get('dir_out_alg_base')
-    
-    # %% Looping over datasets
-    for ds in datasets: 
-        print(f'PROCESSING {ds} dataset inside \n {dir_std_base}')
+        # Train algorithms
+        algs_dict = trainer.train_algos(X_train, y_train)
 
-        dir_out_alg_ds = Path(dir_out_alg_base/Path(ds))
-        dir_out_alg_ds.mkdir(exist_ok=True)
+        # Make predictions
+        preds_dict = trainer.predict_algos(X_test)
 
-        # TODO allow secondary option where dat_resp and metrics read in from elsewhere
-        # Read in the standardized dataset generated by fs_proc
-        dat_resp = fsate._open_response_data_fs(dir_std_base,ds)
-        
-        # The metrics approach. These are xarray data variables of the response(s)
-        metrics = dat_resp.attrs['metric_mappings'].split('|')
-
-        # %% COMID retrieval and assignment to response variable's coordinate
-        [featureSource,featureID] = fsate._find_feat_srce_id(dat_resp,attr_cfig.attr_config) # e.g. ['nwissite','USGS-{gage_id}']
-        comids_resp = fsate.fs_retr_nhdp_comids(featureSource,featureID,gage_ids=dat_resp['gage_id'].values)
-        dat_resp = dat_resp.assign_coords(comid = comids_resp)
-
-        # TODO allow secondary option where featureSource and featureIDs already provided, not COMID 
-
-        #%%  Read in predictor variable data (aka basin attributes) 
-        # Read the predictor variable data (basin attributes) generated by proc.attr.hydfab
-        df_attr = fsate.fs_read_attr_comid(dir_db_attrs, comids_resp, attrs_sel = attrs_sel,
-                                        _s3 = None,storage_options=None)
-        # Convert into wide format for model training
-        df_attr_wide = df_attr.pivot(index='featureID', columns = 'attribute', values = 'value')
-
-    # %% Train, test, and evaluate
-        rslt_eval = dict()
-        for metr in metrics:
-            print(f' - Processing {metr}')
-            # Subset response data to metric of interest & the comid
-            df_metr_resp = pd.DataFrame({'comid': dat_resp['comid'],
-                                        metr : dat_resp[metr].data})
-            # Join attribute data and response data
-            df_pred_resp = df_metr_resp.merge(df_attr_wide, left_on = 'comid', right_on = 'featureID')
-
-            # TODO may need to add additional distinguishing strings to dataset_id, e.g. in cases of probabilistic simulation
-
-            # Instantiate the training, testing, and evaluation class
-            train_eval = fsate.AlgoTrainEval(df=df_pred_resp,
-                                        attrs=attrs_sel,
-                                        algo_config=algo_config,
-                                        dir_out_alg_ds=dir_out_alg_ds, dataset_id=ds,
-                                        metr=metr,test_size=test_size, rs = seed,
-                                        verbose=verbose)
-            train_eval.train_eval() # Train, test, eval wrapper
-            
-            # Retrieve evaluation metrics dataframe
-            rslt_eval[metr] = train_eval.eval_df
-
-        # Compile results and write to file
-        rslt_eval_df = pd.concat(rslt_eval).reset_index(drop=True)
-        rslt_eval_df['dataset'] = ds
-        rslt_eval_df.to_parquet(Path(dir_out_alg_ds)/Path('algo_eval_'+ds+'.parquet'))
-
-        print(f'... Wrote training and testing evaluation to file for {ds}')
-
-        dat_resp.close()
-    print("FINISHED algorithm training, testing, & evaluation")
+        # Evaluate predictions
+        eval_dict = trainer.evaluate_algos(y_test, preds_dict)
+dat_resp.close()
