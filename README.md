@@ -6,7 +6,7 @@
 **Description**:  
 The formulation-selector tool, aka Regionalization and Formulation Testing & Selection (RaFTS), is under development. For more information, see the [Wiki](https://github.com/NOAA-OWP/formulation-selector/wiki). 
 
-As NOAA OWP builds the model-agnostic NextGen framework, the hydrologic modeling community will need to know how to optimally select model formulations and estimate parameter values across ungauged catchments. This problem becomes intractable when considering the unique combinations of current and future model formulations combined with the innumerable possible parameter combinations across the continent. To simplify the model selection problem, we apply an analytical tool that predicts hydrologic formulation performance (Bolotin et al., 2022, Liu et al., 2022) using community-generated data. The regionalization and formulation testing and selection (RaFTS) tool readily predicts how models might perform across catchments based on catchment attributes. This decision support tool is designed such that as the hydrologic modeling community generates more results, better decisions can be made on where formulations would be best suited.
+As NOAA OWP builds the model-agnostic NextGen framework, the hydrologic modeling community will need to know how to optimally select model formulations and estimate parameter values across ungauged catchments. This problem becomes intractable when considering the unique combinations of current and future model formulations combined with the innumerable possible parameter combinations across the continent. To simplify the model selection problem, we apply an analytical tool that predicts hydrologic formulation performance (Bolotin et al., 2022, Liu et al., 2022) using community-generated data. The formulation selection decision support (FSDS) tool readily predicts how models might perform across catchments based on catchment attributes. This decision support tool is designed such that as the hydrologic modeling community generates more results, better decisions can be made on where formulations would be best suited.
 
 **Technology stack**: 
   - **Python:** The features of the formulation-selector that ingest model results and catchment attributes to predict model performances based on catchment attributes is written in Python. 
@@ -28,23 +28,6 @@ N/A
 #### Python Packages
 Thus far, `formulation-selector` has been developed in and tested with Python versions 3.11 and 3.12, so these are currently the recommended versions. 
 
-You may consider creating a new virtual environment for employing `formulation-selector` with the following packages:  
-
-- [pynhd](https://github.com/hyriver/pynhd)
-- dask
-- joblib
-- netcdf4
-- numpy
-- pandas
-- pyyaml
-- scikit_learn
-- setuptools
-- xarray
-
-
-## Installation - `fs_proc` Python package
-
-### TL;DR
 - [NOAA-OWP/hydrofabric](https://github.com/NOAA-OWP/hydrofabric)
   - Note that the arrow package needs `arrow::arrow_with_s3() == TRUE`. If `FALSE`, consider downloading arrow via [apache's r-universe](https://apache.r-universe.dev/arrow)
   - Steps to install hydrofabric: Refer to wiki
@@ -52,7 +35,7 @@ You may consider creating a new virtual environment for employing `formulation-s
 - [pynhd](https://github.com/hyriver/pynhd)
 
 
-## Installation - fs_proc python package
+## Installation - proc_fsds python package
 
 ### TLDR
  - Install `fs_proc` package
