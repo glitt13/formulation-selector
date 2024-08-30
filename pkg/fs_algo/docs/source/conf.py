@@ -6,7 +6,6 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-
 project = 'Formulation Selector Algorithms'
 copyright = '2024, Guy Litt'
 author = 'Guy Litt'
