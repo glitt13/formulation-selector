@@ -321,7 +321,7 @@ proc_attr_wrap <- function(comid, Retr_Params, lyrs='network',overwrite=FALSE){
   message(base::paste0("Processing COMID ",comid))
 
   # Retrieve the hydrofabric id
-  net <- try(proc.attr.hydfab::proc_attr_hf(comid=comid,
+  net <- proc.attr.hydfab::proc_attr_hf(comid=comid,
                                         dir_db_hydfab=Retr_Params$paths$dir_db_hydfab,
                                         custom_name ="{lyrs}_",
                                         lyrs=lyrs,overwrite=overwrite))
@@ -625,12 +625,12 @@ grab_attrs_datasets_fs_wrap <- function(Retr_Params,lyrs="network",overwrite=FAL
     message(glue::glue("--- PROCESSING {dataset_name} DATASET ---"))
     dir_dataset <- base::file.path(Retr_Params$paths$dir_std_base,dataset_name)
 
-    # Retrieve the gage_ids, featureSource, & featureID from fs_proc standardized output
-    ls_fs_std <- proc.attr.hydfab::proc_attr_read_gage_ids_fs(dir_dataset)
+    # Retrieve the gage_ids, featureSource, & featureID from fsds_proc standardized output
+    ls_fsds_std <- proc.attr.hydfab::proc_attr_read_gage_ids_fsds(dir_dataset)
     # TODO add option to read in gage ids from a separate data source
-    gage_ids <- ls_fs_std$gage_ids
-    featureSource <- ls_fs_std$featureSource
-    featureID <- ls_fs_std$featureID
+    gage_ids <- ls_fsds_std$gage_ids
+    featureSource <- ls_fsds_std$featureSource
+    featureID <- ls_fsds_std$featureID
 
     # ---------------------- Grab all needed attributes ---------------------- #
     ls_comids <- proc.attr.hydfab::proc_attr_gageids(gage_ids,
