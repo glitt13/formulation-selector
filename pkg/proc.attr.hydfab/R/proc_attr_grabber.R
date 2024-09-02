@@ -321,7 +321,7 @@ proc_attr_wrap <- function(comid, Retr_Params, lyrs='network',overwrite=FALSE){
   message(base::paste0("Processing COMID ",comid))
 
   # Retrieve the hydrofabric id
-  net <- proc.attr.hydfab::proc_attr_hf(comid=comid,
+  net <- try(proc.attr.hydfab::proc_attr_hf(comid=comid,
                                         dir_db_hydfab=Retr_Params$paths$dir_db_hydfab,
                                         custom_name ="{lyrs}_",
                                         lyrs=lyrs,overwrite=overwrite))
