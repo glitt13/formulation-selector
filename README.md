@@ -35,13 +35,13 @@ Thus far, `formulation-selector` has been developed in and tested with Python ve
 - [pynhd](https://github.com/hyriver/pynhd)
 
 
-## Installation - proc_fsds python package
+## Installation - fsds_proc python package
 
 ### TLDR
- - Install `fs_proc` package
-   `pip install /path/to/pkg/fs_proc/fs_proc/.`
- - Build a yaml config file `/sripts/eval_metrics/name_of_dataset_here/name_of_dataset_schema.yaml` [refer to this template](https://github.com/NOAA-OWP/formulation-selector/blob/main/scripts/eval_ingest/xssa/xssa_schema.yaml)
- - Create a script that reads in the data and runs the standardization processing. [Example script here](https://github.com/NOAA-OWP/formulation-selector/blob/main/scripts/eval_ingest/xssa/proc_xssa_metrics.py)
+ - Install `fsds_proc` package
+   `pip install /path/to/pkg/fsds_proc/fsds_proc/.`
+ - Build a yaml config file `/sripts/eval_metrics/name_of_dataset_here/name_of_dataset_schema.yaml` (refer to this template)[https://github.com/glitt13/fsds/blob/std_catg/scripts/eval_ingest/xssa/xssa_schema.yaml)
+ - Create a script that reads in the data and runs the standardization processing. [Example script here](https://github.com/glitt13/fsds/blob/std_catg/scripts/eval_ingest/xssa/proc_xssa_metrics.py)
  - Then run the following:
   ```
   cd /path/to/scripts/eval_metrics/name_of_dataset_here/
@@ -50,7 +50,7 @@ Thus far, `formulation-selector` has been developed in and tested with Python ve
 
 ### 1. Install the `fs_proc` package, which standardizes raw input data into a common format.
 ```
-> cd /path/to/pkg/fs_proc/fs_proc
+> cd /path/to/pkg/fsds_proc/fsds_proc
 > pip install .
 ```
 
