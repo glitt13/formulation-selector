@@ -13,10 +13,6 @@
 #' @seealso [fs_proc] A python package that processes input data for the
 #' formulation-selector
 #' @usage Rscript fs_attrs_grab.R "/path/to/attribute_config.yaml"
-<<<<<<< HEAD
-=======
-
->>>>>>> origin/main
 # Changelog / Contributions
 #   2024-07-24 Originally created, GL
 
@@ -100,10 +96,6 @@ Retr_Params <- base::list(paths = base::list(
                    datasets = datasets
        )
 # PROCESS ATTRIBUTES
-<<<<<<< HEAD
-=======
-
->>>>>>> origin/main
 ls_comids <- proc.attr.hydfab:::grab_attrs_datasets_fs_wrap(Retr_Params,overwrite = TRUE)
 
 # --------------------------- Compile attributes --------------------------- #
