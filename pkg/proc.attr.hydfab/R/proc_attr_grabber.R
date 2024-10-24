@@ -325,7 +325,7 @@ proc_attr_exst_wrap <- function(comid,path_attrs,vars_ls,bucket_conn=NA){
   return(list(dt_all=dt_all,need_vars=need_vars))
 }
 
-proc_attr_wrap <- function(comid, Retr_Params, lyrs='network',overwrite=FALSE){
+proc_attr_wrap <- function(comid, Retr_Params, lyrs='network',overwrite=FALSE,hfab_retr=FALSE){
   #' @title Wrapper to retrieve variables when processing attributes
   #' @author Guy Litt \email{guy.litt@noaa.gov}
   #' @description Identifies a comid location using the hydrofabric and then
@@ -343,6 +343,7 @@ proc_attr_wrap <- function(comid, Retr_Params, lyrs='network',overwrite=FALSE){
   #' @param Retr_Params list. List of list structure with parameters/paths needed to acquire variables of interest
   #' @param lyrs character. The layer names of interest from the hydrofabric gpkg. Default 'network'
   #' @param overwrite boolean. Should the hydrofabric cloud data acquisition be redone and overwrite any local files? Default FALSE.
+  #' @param hfab_retr boolean. Should the hydrofabric geopackage data be retrieved? Default FALSE.
   #' @seealso \code{\link{proc_attrs_gageids}}
   #' @export
 
@@ -369,6 +370,7 @@ proc_attr_wrap <- function(comid, Retr_Params, lyrs='network',overwrite=FALSE){
     net <- list()
     net$hf_id <- comid
   }
+
 
   path_attrs <- base::file.path(Retr_Params$paths$dir_db_attrs,
                           base::paste0("comid_",comid,"_attrs.parquet"))
