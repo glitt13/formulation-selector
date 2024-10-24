@@ -6,11 +6,10 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-
-project = 'Formulation Selector Algorithms'
-copyright = '2024, Guy Litt'
-author = 'Guy Litt'
-release = '0.0.1'
+project = 'Formulation Selector Processing'
+copyright = '2024, Guy Litt, Lauren Bolotin, Ben Choat'
+author = 'Guy Litt, Lauren Bolotin, Ben Choat'
+release = '0.1.3'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
@@ -26,11 +25,6 @@ extensions = [
 templates_path = ['_templates']
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
-intersphinx_mapping = {
-    'python': ('https://docs.python.org/3', None),
-    'sklearn': ('https://scikit-learn.org/stable/',None)
-    # other mappings
-}
 
 
 # -- Options for HTML output -------------------------------------------------
