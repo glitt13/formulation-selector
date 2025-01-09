@@ -23,6 +23,12 @@ from pathlib import Path
 import argparse
 import fs_algo.fs_algo_train_eval as fsate
 import xarray as xr
+<<<<<<< HEAD
+=======
+import urllib.request
+import zipfile
+import pkg_resources
+>>>>>>> upstream/main
 
 
 if __name__ == "__main__":
@@ -57,6 +63,7 @@ if __name__ == "__main__":
     path_pred_config = fsate.build_cfig_path(path_viz_config,viz_cfg.get('name_pred_config',None)) # currently, this gives the pred config path, not the attr config path
     pred_cfg = yaml.safe_load(open(path_pred_config, 'r'))
     path_attr_config = fsate.build_cfig_path(path_pred_config,pred_cfg.get('name_attr_config',None)) 
+<<<<<<< HEAD
 
     # Get features from the attr config file --------------------------
     with open(path_attr_config, 'r') as file:
@@ -79,6 +86,28 @@ if __name__ == "__main__":
     prefix_attr = str(path_attr_config.name).split('_')[0]
     if (prefix_viz != prefix_attr):
         raise ValueError('The base config file (e.g. [dataset]_config.yaml) must be in the same direcotry and identifiable using the same prefix as the other config files (e.g. [dataset]_pred_config.yaml, [dataset]_attr_config.yaml, etc.)')
+=======
+    ds_type = pred_cfg.get('ds_type')
+    write_type = pred_cfg.get('write_type')
+
+    # Get features from the attr config file --------------------------
+    attr_cfg = fsate.AttrConfigAndVars(path_attr_config)
+    attr_cfg._read_attr_config()
+    datasets = attr_cfg.attrs_cfg_dict.get('datasets')
+    dir_base = attr_cfg.attrs_cfg_dict.get('dir_base')  
+    dir_std_base = attr_cfg.attrs_cfg_dict.get('dir_std_base')
+
+    # Get features from the main config file --------------------------
+    # NOTE: This assumes that the main config file is just called [same prefix as all other config files]_config.yaml
+    # Build the path to the main config file by referencing the other config files we've already read in
+    prefix_viz = str(path_viz_config.name).split('_')[0]
+    prefix_attr = str(path_attr_config.name).split('_')[0]
+    if (prefix_viz != prefix_attr):
+        raise ValueError('All config files must be in the same directory and be\
+                          identifiable using the same prefix as each other (e.g.\
+                          [dataset]_config.yaml, [dataset]_pred_config.yaml, \
+                         [dataset]_attr_config.yaml, etc.)')
+>>>>>>> upstream/main
     else:
         prefix = prefix_viz
 
@@ -101,6 +130,14 @@ if __name__ == "__main__":
 
     # Location for accessing existing outputs and saving plots
     dir_out = fsate.fs_save_algo_dir_struct(dir_base).get('dir_out')
+<<<<<<< HEAD
+=======
+    dir_out_viz_base = Path(dir_out/Path("data_visualizations"))
+
+    # Enforce style
+    style_path = pkg_resources.resource_filename('fs_algo', 'RaFTS_theme.mplstyle')
+    plt.style.use(style_path)
+>>>>>>> upstream/main
 
     # Loop through all datasets
     for ds in datasets:
@@ -115,14 +152,23 @@ if __name__ == "__main__":
                 path_pred = fsate.std_pred_path(dir_out,algo=algo,metric=metric,dataset_id=ds)
                 pred = pd.read_parquet(path_pred)
                 data = pd.merge(meta_pred, pred, how = 'inner', on = 'comid')
+<<<<<<< HEAD
                 os.makedirs(f'{dir_out}/data_visualizations', exist_ok= True)
+=======
+                Path(f'{dir_out}/data_visualizations').mkdir(parents=True, exist_ok=True)
+>>>>>>> upstream/main
                 # If you want to export the merged data for any reason: 
                 # data.to_csv(f'{dir_out}/data_visualizations/{ds}_{algo}_{metric}_data.csv')
 
                 # Does the user want a scatter plot comparing the observed module performance and the predicted module performance by RaFTS?
+<<<<<<< HEAD
                 if 'perf_map' in true_keys:
                     states = gpd.read_file('/Users/laurenbolotin/data/conus_states_census.shp')
                     states = states.to_crs("EPSG:4326")
+=======
+                if 'pred_map' in true_keys:
+                    states = fsate.gen_conus_basemap(f'{dir_out}/data_visualizations/')
+>>>>>>> upstream/main
 
                     # Plot performance on map
                     lat = data['Y']
@@ -132,6 +178,7 @@ if __name__ == "__main__":
                     geo_df['performance'] = data['prediction'].values
                     geo_df.crs = ("EPSG:4326")
 
+<<<<<<< HEAD
                     fig, ax = plt.subplots(1, 1, figsize=(20, 24))
                     base = states.boundary.plot(ax=ax,color="#555555", linewidth=1)
                     # Points
@@ -155,6 +202,21 @@ if __name__ == "__main__":
                     plt.clf()
                     plt.close()
 
+=======
+                    fsate.plot_map_pred(geo_df=geo_df, states=states, 
+                                        title=f'RaFTS Predicted Performance Map: {ds}', 
+                                        metr=metric, colname_data='performance')
+
+                    # Save the plot as a .png file
+                    output_path = fsate.std_map_pred_path(dir_out_viz_base=dir_out_viz_base,
+                                                          ds=ds, metr=metric, algo_str=algo,
+                                                          split_type='prediction')
+                    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+                    plt.clf()
+                    plt.close()
+                    
+                    
+>>>>>>> upstream/main
                 if 'obs_vs_sim_scatter' in true_keys:
                     # Scatter plot of observed vs. predicted module performance
                     # Remove 'USGS-' from ids so it can be merged with the actual performance data
@@ -182,6 +244,7 @@ if __name__ == "__main__":
                     data = pd.merge(data, obs, how = 'inner', on = 'identifier')
 
                     # Plot the observed vs. predicted module performance
+<<<<<<< HEAD
                     plt.scatter(data['prediction'], data[metric], c='teal')
                     plt.axline((0, 0), (1, 1), color='black', linestyle='--')
                     plt.xlabel('Predicted {}'.format(metric))
@@ -190,6 +253,15 @@ if __name__ == "__main__":
 
                     # Save the plot as a .png file
                     output_path = f'{dir_out}/data_visualizations/{ds}_{algo}_{metric}_obs_vs_sim_scatter.png'
+=======
+                    fsate.plot_pred_vs_obs_regr(y_pred=data['prediction'], y_obs=data[metric], 
+                                                ds = ds, metr=metric)
+
+                    # Save the plot as a .png file
+                    output_path = fsate.std_regr_pred_obs_path(dir_out_viz_base=dir_out_viz_base,
+                                                               ds=ds, metr=metric, algo_str=algo,
+                                                            split_type='prediction')
+>>>>>>> upstream/main
                     plt.savefig(output_path, dpi=300, bbox_inches='tight')
                     plt.clf()
                     plt.close()
