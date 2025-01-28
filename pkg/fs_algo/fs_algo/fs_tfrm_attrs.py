@@ -159,5 +159,93 @@ if __name__ == "__main__":
                 print(f"Could not run the Rscript {path_fs_attrs_miss}." +
                         "\nEnsure proc.attr.hydfab R package installed and appropriate path to fs_attrs_miss.R")
 ###############################################################################
-    #%% Run the standard processing of attribute transformation:
-    fta.tfrm_attr_comids_wrap(comids=comids, path_tfrm_cfig=path_tfrm_cfig)
+ #%% Run the standard processing of attribute transformation:
+    for comid in comids:
+        ddf_loc_attrs=fta._subset_ddf_parquet_by_comid(dir_db_attrs,
+                                        fp_struct='_'+str(comid)+'_')
+        
+
+        # Identify the needed functions based on querying the comid's attr data's 'data_source' column
+        #  Note the custom attributes used the function string as the 'data_source'
+        dict_need_vars_funcs = fta._id_need_tfrm_attrs(
+                                all_attr_ddf=ddf_loc_attrs,
+                                ls_all_cstm_vars=None,
+                                ls_all_cstm_funcs = ls_all_cstm_funcs,
+                                overwrite_tfrm=overwrite_tfrm)
+
+        # Find the custom variable names we need to create; also the key values in the dicts returned by _retr_cstm_funcs()
+        cstm_vars_need =  [k for k, val in dict_all_cstm_funcs.items() \
+                           if val in dict_need_vars_funcs.get('funcs')]
+
+        #%% Loop over each needed attribute:
+        ls_df_rows = list()
+        for new_var in cstm_vars_need: 
+            if len(cstm_vars_need) != len(dict_need_vars_funcs.get('funcs')):
+                raise ValueError("DO NOT PROCEED! Double check assumptions around fta._id_need_tfrm_attrs indexing")
+            
+            # Retrieve the transformation function object
+            func_tfrm = dict_func_objs[new_var]
+
+            # The attributes used for creating the new variable
+            attrs_retr_sub = dict_retr_vars.get(new_var)
+            
+
+
+            # Retrieve the variables of interest for the function
+            df_attr_sub = fsate.fs_read_attr_comid(dir_db_attrs, comids_resp=[str(comid)], attrs_sel=attrs_retr_sub,
+                            _s3 = None,storage_options=None,read_type='filename')
+
+            # Check if needed attribute data all exist. If not, write to 
+            # csv file to know what is missing
+            if df_attr_sub.shape[0] < len(attrs_retr_sub):
+                fta.write_missing_attrs(attrs_retr_sub=attrs_retr_sub,
+                                    dir_db_attrs=dir_db_attrs,
+                                    comid = comid, 
+                                    path_tfrm_cfig = path_tfrm_cfig)
+                #  Re-run the Rscript for acquiring missing attributes, then retry attribute retrieval
+                if fio.get('path_fs_attrs_miss'):
+                    # Path to the Rscript, requires proc.attr.hydfab package to be installed!
+                    path_fs_attrs_miss = fio.get('path_fs_attrs_miss').format(home_dir = home_dir)
+                    args = [str(path_attr_config)]
+                    try:
+                        print(f"Attempting to retrieve missing attributes using {Path(path_fs_attrs_miss).name}")
+                        result = subprocess.run(['Rscript', path_fs_attrs_miss] + args, capture_output=True, text=True)
+                        print(result.stdout) # Print the output from the Rscript
+                        print(result.stderr)  # If there's any error output
+                    except:
+                        print(f"Could not run the Rscript {path_fs_attrs_miss}." +
+                              "\nEnsure proc.attr.hydfab R package installed and appropriate path to fs_attrs_miss.R")
+                    # Re-run the attribute retrieval in case new ones now available
+                    fsate.fs_read_attr_comid(dir_db_attrs, comids_resp=[str(comid)], attrs_sel=attrs_retr_sub,
+                                _s3 = None,storage_options=None,read_type='filename')
+                continue
+
+            # Transform: subset data to variables and compute new attribute
+            attr_val = fta._sub_tform_attr_ddf(all_attr_ddf=ddf_loc_attrs, 
+                        retr_vars=attrs_retr_sub, func = func_tfrm)
+            
+            if any(pd.isnull(attr_val)):
+                raise ValueError("Unexpected NULL value returned after " +
+                                  "aggregating and transforming attributes. " +
+                                  f"Inspect {new_var} with comid {comid}")
+
+            # Populate new values in the new dataframe
+            new_df = fta._gen_tform_df(all_attr_ddf=ddf_loc_attrs, 
+                                new_var_id=new_var,
+                                attr_val=attr_val,
+                                tform_type = dict_cstm_func.get(new_var),
+                                retr_vars = attrs_retr_sub)
+            ls_df_rows.append(new_df)
+
+        if len(ls_df_rows) >0:
+            df_new_vars = pd.concat(ls_df_rows)
+            # Update existing dataset with new attributes/write updates to file
+            df_new_vars_updated = fta.io_std_attrs(df_new_vars=df_new_vars,
+                            dir_db_attrs=dir_db_attrs,
+                            comid=comid, 
+                            attrtype='tfrmattr')
+
+    # Ensure no duplicates exist in the needed attributes file
+    if path_need_attrs.exists():
+        print(f"Dropping any duplicate entries in {path_need_attrs}")
+        pd.read_csv(path_need_attrs).drop_duplicates().to_csv(path_need_attrs,index=False)
