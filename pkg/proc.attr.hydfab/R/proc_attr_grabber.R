@@ -964,7 +964,7 @@ retr_comids <- function(gage_ids,featureSource,featureID,dir_db_attrs){
   #' @export
   # ---------------- COMID RETRIEVAL ------------------- #
   # TODO create a std function that makes the path_meta_loc
-  path_meta_loc <- proc.attr.hydfab:::std_path_map_loc_ids(Retr_Params$paths$dir_db_attrs)
+  path_meta_loc <- proc.attr.hydfab:::std_path_map_loc_ids(dir_db_attrs)
   if(file.exists(path_meta_loc)){
     if(!base::grepl('csv',path_meta_loc)){
       stop(glue::glue("Expecting the file path to metadata to be a csv:
