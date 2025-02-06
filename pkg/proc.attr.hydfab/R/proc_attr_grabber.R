@@ -939,7 +939,7 @@ std_path_map_loc_ids <- function(dir_db_attrs){
   #' @title Standardize the path of the csv file that maps NLDI IDs to comids
   #' @description Uses a sub-directory in the dir_db_attrs to place data
   #' @param dir_db_attrs The attributes database path
-  dir_meta_loc <- file.path(Retr_Params$paths$dir_db_attrs,'meta_loc')
+  dir_meta_loc <- file.path(dir_db_attrs,'meta_loc')
   path_meta_loc <- file.path(dir_meta_loc,"comid_featID_map.csv")
   if(!dir.exists(dir_meta_loc)){
     base::dir.create(base::dirname(path_meta_loc),showWarnings = FALSE)
