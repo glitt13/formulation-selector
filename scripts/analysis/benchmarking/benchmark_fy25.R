@@ -139,7 +139,6 @@ library(arrow)
 hydatl <- arrow::read_parquet("~/Downloads/hydroatlas_vars.parquet")
 # TODO retrieve hydroatlas catchment attributes (make them a parquet format)
 
-
 # tabular data:
 dir_hfab_tab_dat <- "~/noaa/hydrofabric/tabular-data/" # Save the parquet file here
 path_attrs_all_oconus <- proc.attr.hydfab:::std_path_attrs_all_parq(dir_hfab_tab_dat, ls_vpus=c("ak","prvi"))
