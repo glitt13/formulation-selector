@@ -93,6 +93,40 @@ parse_hfab_oconus_config <- function(path_oconus_config){
   return(dt_hfab_map)
 }
 
+# Standardize data to featureID & featureSource
+std_feat_id <- function(df, name_featureSource = c("COMID","custom_hfab")[1],
+                        col_featureID = NULL, vals_featureID = NULL){
+  #' @title Generate the standardized format of featureID and featureSource
+  #' @param df The data.frame of interest containing an identifier
+  #' @param name_featureSource The expected name of the feature source. Default "COMID" expected for CONUS, but OCONUS will use "custom_hfab"
+  #' @param col_featureID The column name inside `df` containing featureID of interest. Must provide if `vals_featureID` empty.
+  #' @param vals_featureID The unique identifiers to populate featureID of interest. Must provide if `col_featureID` empty.
+  #' @export
+
+  # Check expected featureSource names
+  allowed_names <- c("COMID","custom_hfab")
+  if(!name_featureSource %in% allowed_names){
+    warning(glue::glue("The name_featureSource {name_featureSource} is not in
+                       the list of expected featureSource names:
+                       {paste0(allowed_names,collapse='\n'}.
+                       STRONGLY RECONSIDER THIS CHOICE!!"))
+  }
+
+  if(!base::is.null(col_featureID)){
+    df$featureID <- df[[col_featureID]]
+  } else if (!base::is.null(vals_featureID)){
+    df$featureID <- vals_featureID
+  } else {
+    stop("Must provide either col_featureID or vals_featureID")
+  }
+  # Add in the featureSource for non-NA featureID columns
+  if(!"featureSource" %in% names(df)){
+    df$featureSource <- NA
+  }
+  df$featureSource[base::which(!base::is.na(df$featureID))] <- name_featureSource
+
+  return(df)
+}
 
 # Hydrofabric-specific processing used in RaFTS
 read_hfab_layers <- function(path_gpkg, layers=NULL){
