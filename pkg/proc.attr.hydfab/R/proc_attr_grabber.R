@@ -154,10 +154,6 @@ attr_cfig_parse <- function(path_attr_config){
   return(Retr_Params)
 }
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 0877a09 (feat: integrate transformation attribute dependencies into automated attribute retrieval when using the attribute config file)
 tform_cfig_parse <- function(path_tfrm_config){
   #' @title Read & parse the transformation config yaml file
   #' @param path_tfrm_config Full filepath to the transformation config file
@@ -283,12 +279,6 @@ map_attrs_to_dataset <- function(vars){
   return(ls_attrs_name)
 }
 
-
-<<<<<<< HEAD
-=======
->>>>>>> 9e88745 (fix: address merge conflicts)
-=======
->>>>>>> 0877a09 (feat: integrate transformation attribute dependencies into automated attribute retrieval when using the attribute config file)
 proc_attr_std_hfsub_name <- function(comid,custom_name='', fileext='gpkg'){
   #' @title Standardidze hydrofabric subsetter's local filename
   #' @description Internal function that ensures consistent filename
@@ -2337,14 +2327,9 @@ fs_attrs_miss_mlti_wrap <- function(path_attr_config){
   # Generate the parameter list
   Retr_Params <- proc.attr.hydfab::attr_cfig_parse(path_attr_config = path_attr_config)
 
-<<<<<<< HEAD
   # Missing attributes specifically needed for transformation
   path_missing_attrs <- proc.attr.hydfab::std_path_miss_tfrm(Retr_Params$paths$dir_db_attrs)
   df_miss <- proc.attr.hydfab::std_path_miss_tfrm_io(path_missing_attrs, read=TRUE)
-=======
-  path_missing_attrs <- proc.attr.hydfab::std_miss_path(Retr_Params$paths$dir_db_attrs)
-  df_miss <- utils::read.csv(path_missing_attrs)
->>>>>>> 0877a09 (feat: integrate transformation attribute dependencies into automated attribute retrieval when using the attribute config file)
   # Remove any null comids:
   idxs_none <- base::which(df_miss$comid == "None")
   if(base::length(idxs_none)>0){
@@ -2461,15 +2446,9 @@ fs_attrs_miss_mlti_wrap <- function(path_attr_config){
     } else {
       message("Some missing comid-attribute pairings still remain")
     }
-<<<<<<< HEAD
     # Now update the transformation's missing comid-attribute pairing file
     proc.attr.hydfab::std_path_miss_tfrm_io(path_missing_attrs,
                                        df_miss=df_still_missing,read=FALSE)
-=======
-
-    # Write the updated missing attributes file
-    base::write.csv(df_still_missing,path_missing_attrs,row.names = FALSE)
->>>>>>> 0877a09 (feat: integrate transformation attribute dependencies into automated attribute retrieval when using the attribute config file)
   } else {
     message("No missing comid-attribute pairings.")
   }
