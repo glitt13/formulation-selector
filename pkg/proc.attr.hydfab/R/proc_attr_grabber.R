@@ -380,16 +380,8 @@ proc_attr_hf <- function(comid, dir_db_hydfab,custom_name="{lyrs}_",fileext = 'g
                         overwrite=overwrite),pattern="exists and overwrite is FALSE")
 
   # Read the hydrofabric file gpkg for each layer
-  hfab_ls <- list()
-  if (fileext == 'gpkg') {
-    # Define layers
-    layers <- sf::st_layers(dsn = fp_cat)
-    for (lyr in layers$name){
-      hfab_ls[[lyr]] <- sf::read_sf(fp_cat,layer=lyr)
-    }
-  } else {
-    stop("# TODO add in the type of hydrofabric file to read based on extension")
-  }
+  hfab_ls <- proc.attr.hydfab(path_gpkg=fp_cat,layers=NULL)
+
   net <- hfab_ls[[lyrs]] %>%
     dplyr::select(divide_id, hf_id) %>%
     dplyr::filter(complete.cases(.)) %>%
