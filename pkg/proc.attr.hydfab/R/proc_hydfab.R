@@ -162,6 +162,24 @@ std_feat_id <- function(df, name_featureSource = c("COMID","custom_hfab")[1],
   return(df)
 }
 
+
+parse_hfab_oconus_config <- function(path_oconus_config){
+  #' @title Parse the OCONUS hydrofabric metadata
+  #' @param path_oconus_config filepath to the yaml configuration file
+  #' @export
+  cfig <- yaml::read_yaml(path_oconus_config)
+  dir_base_hfab <- cfig$dir_base_hfab
+  srces <- base::names(cfig)[base::grep("source_map",base::names(cfig))]
+
+
+  dt_hfab_map <- data.table::rbindlist(base::lapply(srces, function(x)
+                                    base::data.frame(cfig[[x]])))
+  dt_hfab_map$path <- lapply(dt_hfab_map$path, function(x) glue::glue(x)) %>%
+    base::unlist()
+  return(dt_hfab_map)
+}
+
+
 # Hydrofabric-specific processing used in RaFTS
 read_hfab_layers <- function(path_gpkg, layers=NULL){
   #' @title Read the hydrofabric file gpkg for each layer
@@ -238,7 +256,6 @@ map_hfab_oconus_sources_wrap <- function( dt_need_hf, hfab_srce_map,
       lat <- dt_need_hf[[col_lat]][i]
       lon <- dt_need_hf[[col_lon]][i]
       if(base::any(base::is.na(base::c(lat,lon)))){
-
         warning(glue::glue("Lat/Lon unavailable for
                            {paste0(names(dt_need_hf),collapse='|')}
                            {paste0(dt_need_hf[i,],collapse='|')}"))
@@ -443,6 +460,14 @@ retr_hfab_id_wrap <- function(dt_need_hf, path_oconus_hfab_config,
 
   # Parse the hydrofabric config file
   hfab_srce_map <- proc.attr.hydfab::parse_hfab_oconus_config(path_oconus_hfab_config)
+
+  # Identify postal code and gpkg mappings:
+  dt_need_hf <- proc.attr.hydfab::map_hfab_oconus_sources_wrap(dt_need_hf,
+                                                               hfab_srce_map)
+  col_gpkg_path <- "path" # column name inside `dt_need_hf` for hydrofabric
+
+  # Parse the hydrofabric config file
+  hfab_srce_map <- proc.attr.hydfab::parse_hfab_oconus_config(path_oconus_config)
 
   # Identify postal code and gpkg mappings:
   dt_need_hf <- proc.attr.hydfab::map_hfab_oconus_sources_wrap(dt_need_hf,
