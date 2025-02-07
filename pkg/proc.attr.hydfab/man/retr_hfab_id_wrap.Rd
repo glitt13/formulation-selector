@@ -6,8 +6,7 @@
 \usage{
 retr_hfab_id_wrap(
   dt_need_hf,
-  hfab_srce_map,
-  col_gpkg_path = "paths",
+  path_oconus_hfab_config,
   col_usgsId = "usgsId",
   col_lon = "longitude",
   col_lat = "latitude",
@@ -17,18 +16,17 @@ retr_hfab_id_wrap(
 \arguments{
 \item{dt_need_hf}{data.table of needed}
 
-\item{hfab_srce_map}{A mapping of OCONUS hydrofabric locations, postal codes, and expected CRS}
-
-\item{col_gpkg_path}{column name inside \code{dt_need_hf} for hydrofabric
-geopackage filepaths}
-
 \item{col_usgsId}{column name inside \code{dt_need_hf} for the USGS gage ID}
 
 \item{col_lon}{column name inside \code{dt_need_hf} for longitude value}
 
 \item{col_lat}{column name inside \code{dt_need_hf} for latitude value}
 
-\item{epsg_coords}{The CRS for the lat/lon data insed `dt_need_hf}
+\item{epsg_coords}{The CRS for the lat/lon data inside \code{dt_need_hf}}
+
+\item{path_oconus_config}{File path to yaml config mapping of OCONUS hydrofabric locations, postal codes, and expected CRS
+
+geopackage filepaths}
 }
 \description{
 Retrieve hydrofabric IDs wrapper

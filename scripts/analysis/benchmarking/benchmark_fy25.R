@@ -24,7 +24,7 @@ library(mapdata)
 # state_name <- get_state_or_territory(latitude, longitude)
 #
 # print(state_name)
-
+path_oconus_config <- "~/git/formulation-selector/scripts/eval_ingest/bm_test25/bm_oconus_config.yaml"
 
 gauge_ids <- c("JOPM7","RNDO2","CSNC2",
                "UCHA2","TYAA2","WLWA2",
@@ -72,38 +72,38 @@ dt_meta_noaa <- proc.attr.hydfab::std_feat_id(df=dt_meta_noaa,
 # -----
 # TODO build this map based on config file rather than hard-code it
 # Mapping the geopackage file locations to their postal id & expected CRS
-hfab_srce_map <- data.table::data.table(domain = c("AK","PR","VI","HI"),
-           paths = c("~/noaa/hydrofabric/v2.2/ak_nextgen.gpkg",
-                     "~/noaa/hydrofabric/v2.2/prvi_nextgen.gpkg",
-                     "~/noaa/hydrofabric/v2.2/prvi_nextgen.gpkg",
-                     "~/noaa/hydrofabric/v2.2/hi_nextgen.gpkg"),
-           crs_epsg = c("EPSG:3338","EPSG:6566",
-                        "EPSG:6566","ESRI:102007") # just in case can't be automatically detected with sf
-           )
+# hfab_srce_map <- data.table::data.table(domain = c("AK","PR","VI","HI"),
+#            paths = c("~/noaa/hydrofabric/v2.2/ak_nextgen.gpkg",
+#                      "~/noaa/hydrofabric/v2.2/prvi_nextgen.gpkg",
+#                      "~/noaa/hydrofabric/v2.2/prvi_nextgen.gpkg",
+#                      "~/noaa/hydrofabric/v2.2/hi_nextgen.gpkg"),
+#            crs_epsg = c("EPSG:3338","EPSG:6566",
+#                         "EPSG:6566","ESRI:102007") # just in case can't be automatically detected with sf
+#            )
 
 # ################### SEARCH FOR MISSING HYDROFABRIC IDS #######################
 
 if (base::any(base::is.na(dt_meta_noaa$featureID))){
   dt_need_hf <- dt_meta_noaa[base::which(base::is.na(dt_meta_noaa$featureID)),]
 
-  # Identify postal code and gpkg mappings:
-  dt_need_hf <- proc.attr.hydfab::map_hfab_oconus_sources_wrap(dt_need_hf,
-                                                               hfab_srce_map)
+  # # Parse the OCONUS hydrofabric config file (metadata)
+  # hfab_srce_map <- proc.attr.hydfab::parse_hfab_oconus_config(path_oconus_config)
+  #
+
 
   # Retrieve the hydrofabric IDs wrapper for needed locations
-  dt_have_hf <- retr_hfab_id_wrap(dt_need_hf, hfab_srce_map, col_gpkg_path = "paths",
+  dt_have_hf <- proc.attr.hydfab::retr_hfab_id_wrap(dt_need_hf, path_oconus_config,
+                                  #col_gpkg_path = "path",
                                   col_usgsId = 'usgsId',col_lon= 'longitude',
                                   col_lat= 'latitude',epsg_coords=4326)
 
-  # Reconcile the missing data
+  # TODO Reconcile the missing data
 
 }
 
 
 
 # df <- arrow::read_parquet("~/noaa/regionalization/data/input/attributes/comid_10023916_attrs.parquet")
-
-df
 
 
 
