@@ -10,8 +10,43 @@ library(rnaturalearthdata)
 library(sf)
 library(data.table)
 
-# Hydrofabric-specific processing used in RaFTS
 
+# Standardize data to featureID & featureSource
+std_feat_id <- function(df, name_featureSource = c("COMID","custom_hfab")[1],
+                        col_featureID = NULL, vals_featureID = NULL){
+  #' @title Generate the standardized format of featureID and featureSource
+  #' @param df The data.frame of interest containing an identifier
+  #' @param name_featureSource The expected name of the feature source. Default "COMID" expected for CONUS, but OCONUS will use "custom_hfab"
+  #' @param col_featureID The column name inside `df` containing featureID of interest. Must provide if `vals_featureID` empty.
+  #' @param vals_featureID The unique identifiers to populate featureID of interest. Must provide if `col_featureID` empty.
+  #' @export
+
+  # Check expected featureSource names
+  allowed_names <- c("COMID","custom_hfab")
+  if(!name_featureSource %in% allowed_names){
+    warning(glue::glue("The name_featureSource {name_featureSource} is not in
+                       the list of expected featureSource names:
+                       {paste0(allowed_names,collapse='\n'}.
+                       STRONGLY RECONSIDER THIS CHOICE!!"))
+  }
+
+  if(!base::is.null(col_featureID)){
+    df$featureID <- df[[col_featureID]]
+  } else if (!base::is.null(vals_featureID)){
+    df$featureID <- vals_featureID
+  } else {
+    stop("Must provide either col_featureID or vals_featureID")
+  }
+  # Add in the featureSource for non-NA featureID columns
+  if(!"featureSource" %in% names(df)){
+    df$featureSource <- NA
+  }
+  df$featureSource[base::which(!base::is.na(df$featureID))] <- name_featureSource
+
+  return(df)
+}
+
+# Hydrofabric-specific processing used in RaFTS
 read_hfab_layers <- function(path_gpkg, layers=NULL){
   #' @title Read the hydrofabric file gpkg for each layer
   #' @param path_gpkg The filepath of the geopackage for a hydrofabric domain
@@ -150,11 +185,16 @@ custom_hfab_id <- function(df){
   #' @param df The dataframe for a specific location corresponding to the
   #' hydrofabric 'network'
   #' @export
+
+  # Remove NA values
+  idxs_na <- base::c(base::which(base::is.na(df$vpu)),
+                     base::which(base::is.na(df$id)) ) %>% base::unique()
+  df <- df[-idxs_na,]
+
   cstm_id <- paste0(df$vpu,"-",df$id) %>% unique()
   if(length(cstm_id)>1){
     stop("More than one custom id for hydrofabric. This shouldn't happen.")
   }
-
   return(cstm_id)
 }
 
@@ -212,14 +252,111 @@ retr_hfab_id_coords <- function(path_gpkg, ntwk, epsg_domn,lon,lat,
 
   if(base::length(origin)==0){
     warning(glue::glue("This lon/lat does not exist in the hydrofabric!
-                             {paste0(lon,',',lat)} for gage_id {gage_id}"))
+                       {paste0(lon,',',lat)} for gage_id {gage_id}
+                       from {path_gpkg}"))
     hf_id <- NA
   } else {
     # Subset network based on the origin id:
-    sub_ntwk <- ntwk[ntwk$id == origin,]
+    sub_ntwk <- ntwk[ntwk$id == origin,] %>% unique()
     # Generate the customized unique identifier
     hf_id <- proc.attr.hydfab::custom_hfab_id(sub_ntwk)
   }
   return(hf_id)
+}
+
+
+retr_hfab_id_wrap <- function(dt_need_hf, hfab_srce_map, col_gpkg_path = "paths",
+                              col_usgsId = "usgsId",col_lon= 'longitude',
+                              col_lat= 'latitude',epsg_coords=4326){
+  #' @title Retrieve hydrofabric IDs wrapper
+  #' @details Intended for situations when comids unavailable, generally as OCONUS
+  #' @param dt_need_hf data.table of needed
+  #' @param hfab_srce_map A mapping of OCONUS hydrofabric locations, postal codes, and expected CRS
+  #' @param col_gpkg_path column name inside `dt_need_hf` for hydrofabric
+  #' geopackage filepaths
+  #' @param col_usgsId column name inside `dt_need_hf` for the USGS gage ID
+  #' @param col_lon column name inside `dt_need_hf` for longitude value
+  #' @param col_lat column name inside `dt_need_hf` for latitude value
+  #' @param epsg_coords The CRS for the lat/lon data insed `dt_need_hf
+  #' @export
+
+  # Check to ensure expected columns
+  need_colnames <- base::c(col_gpkg_path,col_usgsId, col_lat, col_lon)
+  if(!base::all(need_colnames %in% base::colnames(dt_need_hf))){
+    need_colnames <- need_colnames[base::which(!need_colnames %in%
+                                                 base::names(dt_need_hf))] %>%
+      base::paste0(collapse = "\n")
+    stop(glue::glue("dt_need_hf does not contain the expected column
+                    {need_colnames}. Check map_hfab_oconus_sources_wrap()."))
+  }
+
+
+  # Grouping by paths so we only read in each gpkg once:
+  uniq_paths <- base::unique(dt_need_hf[[col_gpkg_path]])[!is.na(unique(dt_need_hf[[col_gpkg_path]]))]
+  ls_sub_gpgk_need_hf <- list()
+  for (path_gpkg in uniq_paths){
+
+    if(!base::file.exists(path_gpkg)){
+      stop(glue::glue("The desired gpkg does not exist: {path_gpkg}.
+                      Revisit `hfab_srce_map` mappings."))
+    }
+
+    # Read in the geopackage layers to identify location/retrieve hydrofabric ID
+    ntwk <- proc.attr.hydfab::read_hfab_layer(path_gpkg=path_gpkg, layer="network")
+    flowpaths <- proc.attr.hydfab::read_hfab_layer(path_gpkg=path_gpkg,layer = "flowpaths")
+
+    sub_dt_need_gpkg <- dt_need_hf[dt_need_hf[[col_gpkg_path]] == path_gpkg,]
+    ############## Try to find hydrofabric ID via USGS gage_id ##############
+    hf_ids <- base::list()
+    for(i in 1:base::nrow(sub_dt_need_gpkg)){
+      gage_id <- sub_dt_need_gpkg[[col_usgsId]][[i]]
+
+      if(!base::is.na(sub_dt_need_gpkg[[col_lat]][[i]])){
+        # Try to find lat/lon
+        epsg_domn <- sf::st_crs(flowpaths$geom)$epsg # The CRS of this hydrofabric domain
+        if(base::is.na(epsg_domn)){ # Use the manual mapping CRS as plan B
+          epsg_domn <- hfab_srce_map$crs_epsg[hfab_srce_map$paths==path_gpkg] %>% unique()
+          if(base::length(epsg_domn)!=1){
+            stop(glue::glue("Need to define epsg for {path_gpkg}"))
+          }
+        }
+
+        # Define the point of interest
+        lon <- sub_dt_need_gpkg[[col_lon]][i]
+        lat <- sub_dt_need_gpkg[[col_lat]][i]
+
+        hf_id <- proc.attr.hydfab::retr_hfab_id_coords(path_gpkg = path_gpkg,
+                                                       ntwk=ntwk,
+                                                       epsg_domn = epsg_domn,
+                                                       lon=lon,lat=lat,
+                                                       epsg_coords =epsg_coords)
+
+      } else if(!base::is.na(gage_id)){
+        # PLACEHOLDER UNTIL gage_id retrieval is fixed
+        # Grab the hf_id
+        # hf_id <- proc.attr.hydfab::retr_hfab_id_usgs_gage(gage_id=gage_id,
+        #                                                   ntwk=ntwk)
+        warning(glue::glue("UNABLE TO DETERMINE HYDROFABRIC LOCATION FOR {sub_dt_need_gpkg$name[[i]]}"))
+        hf_id <- NA
+
+      } else {
+        warning(glue::glue("UNABLE TO DETERMINE HYDROFABRIC LOCATION FOR {sub_dt_need_gpkg$name[[i]]}"))
+        hf_id <- NA
+      }
+      hf_ids[[i]] <- hf_id
+    } # End for loop over each location
+    sub_dt_need_gpkg$hfab_uid <- hf_ids %>% base::unlist()
+
+    ls_sub_gpgk_need_hf[[path_gpkg]] <- sub_dt_need_gpkg
+  } # End for loop over unique gpkg paths
+
+  dt_need_hf_nomor <- data.table::rbindlist(ls_sub_gpgk_need_hf)
+
+  # Standardize the unique identifiers to the format used across formulation-selector
+  dt_need_hf_nomor <- proc.attr.hydfab::std_feat_id(df=df_need_hf_nomor,
+                                              name_featureSource ="custom_hfab",
+                                              col_featureID = "hfab_uid")
+
+  return(dt_need_hf_nomor)
 }
 
