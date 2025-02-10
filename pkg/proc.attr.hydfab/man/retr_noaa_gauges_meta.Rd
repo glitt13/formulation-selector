@@ -20,3 +20,6 @@ retr_noaa_gauges_meta(
 \description{
 Uses the NWPS api to retrieve gauge metadata
 }
+\seealso{
+\link[proc.attr.hydfab]{read_noaa_hads_sites}
+}
