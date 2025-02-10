@@ -132,7 +132,7 @@ retrieve_attr_exst <- function(comids, vars, dir_db_attrs, bucket_conn=NA){
   #' @param dir_db_attrs character class. The path where data
   #' @param bucket_conn Default NA. Placeholder in case a bucket connection is
   #' ever created
-  #' @seealso [proc_attr_wrap]
+  #' @seealso \link[proc.attr.hydfab]{proc_attr_wrap}
   #' @export
   # Changelog/Contributions
   #  2024-07-26 Originally created, GL
@@ -277,7 +277,7 @@ proc_attr_usgs_nhd <- function(comid,usgs_vars){
   #' @param comid character or numeric class. The common identifier USGS
   #' location code for a surface water feature. May be multiple comids.
   #' @param usgs_vars list class. The standardized names of NHDplus variables.
-  #' @seealso [nhdplusTools::get_characteristics_metadata]
+  #' @seealso \link[nhdplusTools]{get_characteristics_metadata}
   #' @export
   #'
   # Changelog/contributions
@@ -407,7 +407,7 @@ proc_attr_exst_wrap <- function(path_attrs,vars_ls,bucket_conn=NA){
   #' @param path_attrs character. Path to attribute file data storage location
   #' @param vars_ls list. Variable names
   #' @param bucket_conn TODO add cloud conn details in case data stored in s3
-  #' @seealso [proc_attr_wrap]
+  #' @seealso \link[proc.attr.hydfab]{proc_attr_wrap}
   #' @export
   #'
   # Changelog / Contributions
@@ -461,7 +461,7 @@ proc_attr_exst_wrap <- function(path_attrs,vars_ls,bucket_conn=NA){
 std_attr_data_fmt <- function(attr_data){
   #' @title Standardize the catchment attribute data to read/write in parquet files
   #' @param attr_data list of data.frame of attribute data
-  #' @seealso [retr_attr_new]
+  #' @seealso \link[proc.attr.hydfab]{retr_attr_new}
   #' @export
   # Changelog/Contributions
   #. 2024-12-23 Originally created, GL
@@ -496,8 +496,8 @@ retr_attr_new <- function(comids,need_vars,Retr_Params){
   #' @param comids The list of of the comid identifier
   #' @param need_vars The needed attributes that haven't been acquired yet
   #' @param Retr_Params list. List of list structure with parameters/paths needed to acquire variables of interest
-  #' @seealso [proc_attr_wrap]
-  #' @seealso [proc_attr_mlti_wrap]
+  #' @seealso \link[proc.attr.hydfab]{proc_attr_wrap}
+  #' @seealso \link[proc.attr.hydfab]{proc_attr_mlti_wrap}
   #' @export
   # -------------------------------------------------------------------------- #
   # --------------- dataset grabber ---------------- #
@@ -542,8 +542,8 @@ std_path_attrs <- function(comid, dir_db_attrs){
   #' @title standardized path to attribute parquet file
   #' @param comid character. USGS COMID value of interest
   #' @param dir_db_attrs character. Directory where attribute .parquet files live
-  #' @seealso [proc_attr_wrap]
-  #' @seealso fs_algo.fs_algo_train_eval.fs_read_attr_comid() python function
+  #' @seealso \link[proc.attr.hydfab]{proc_attr_wrap}
+  #' @seealso `fs_algo.fs_algo_train_eval.fs_read_attr_comid()` python function
   #' that reads these files
   #' @export
 
@@ -561,9 +561,9 @@ io_attr_dat <- function(dt_new_dat,path_attrs,
   #' @param dt_cmbo The standardized data.table of attributes
   #' @param path_attrs parquet filepath for attribute data
   #' @param distinct_cols The column names in dt_new_dat that must be distinct
-  #' @seealso [retrieve_attr_exst] for retrieving existing attributes
-  #' @seealso [std_attr_data_fmt]
-  #' @seealso [std_path_attrs]
+  #' @seealso \link[proc.attr.hydfab]{retrieve_attr_exst} for retrieving existing attributes
+  #' @seealso \link[proc.attr.hydfab]{std_attr_data_fmt}
+  #' @seealso \link[proc.attr.hydfab]{std_path_attrs}
   #' @export
   # TODO consider implementing the read existing/update/write all here.
 
@@ -626,7 +626,7 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
   #' @param Retr_Params list. List of list structure with parameters/paths needed to acquire variables of interest
   #' @param lyrs character. The layer names of interest from the hydrofabric gpkg. Default 'network'
   #' @param overwrite boolean. Should the hydrofabric cloud data acquisition be redone and overwrite any local files? Default FALSE.
-  #' @seealso [proc_attrs_gageids]
+  #' @seealso \link[proc.attr.hydfab]{proc_attrs_gageids}
   #' @export
 
   vars_ls <- Retr_Params$vars
@@ -739,8 +739,8 @@ check_miss_attrs_comid_io <- function(dt_all, attr_vars, dir_db_attrs){
   #' @param attr_vars List of the data source and expected attributes
   #' (e.g. list('usgs_vars' = c("TOT_BFI","TOT_TWI")) from Retr_Params$vars)
   #' @param dir_db_attrs Directory where attribute data are stored.
-  #' @seealso [proc_attr_mlti_wrap]
-  #' @seealso [retr_attr_new]
+  #' @seealso \link[proc.attr.hydfab]{proc_attr_mlti_wrap}
+  #' @seealso \link[proc.attr.hydfab]{retr_attr_new}
   #' @export
 
   # The standard path for recording missing attributes
@@ -817,8 +817,8 @@ proc_attr_wrap <- function(comid, Retr_Params, lyrs='network',overwrite=FALSE,hf
   #' @param lyrs character. The layer names of interest from the hydrofabric gpkg. Default 'network'
   #' @param overwrite boolean. Should the hydrofabric cloud data acquisition be redone and overwrite any local files? Default FALSE.
   #' @param hfab_retr boolean. Should the hydrofabric geopackage data be retrieved? Default FALSE.
-  #' @seealso [proc_attrs_gageids]
-  #' @seealso [proc_attr_mlti_wrap]
+  #' @seealso \link[proc.attr.hydfab]{proc_attrs_gageids}
+  #' @seealso \link[proc.attr.hydfab]{proc_attr_mlti_wrap}
   #' @export
 
   # Changelog / Contributions
@@ -1122,8 +1122,8 @@ read_loc_data <- function(loc_id_filepath, loc_id, fmt = 'csv'){
   #' @param loc_id The column name of the identifier column
   #' @param fmt The format passed to arrow::open_dataset() in the non-csv case.
   #' Default 'csv'. May also be 'parquet', 'arrow', 'feather', 'zarr', etc.
-  #' @seealso [proc_attr_read_gage_ids_fs]
-  #' @seealso [proc_attr_wrap]
+  #' @seealso \link[proc.attr.hydfab]{proc_attr_read_gage_ids_fs}
+  #' @seealso \link[proc.attr.hydfab]{proc_attr_wrap}
   #' @export
   # Changelog / contributions
   #  2024-08-09 Originally created
@@ -1164,7 +1164,7 @@ proc_attr_read_gage_ids_fs <- function(dir_dataset, ds_filenames=''){
   #' gage_ids: array of gage_id values
   #' featureSource: The type of nhdplus feature source corresponding to gage_id
   #' featureID: The method of converting gage_id into a standardized featureSource's featureID
-  #' @seealso [nhdplusTools::get_nldi_feature]
+  #' @seealso \link[nhdplusTools]{get_nldi_feature}
   #' @export
 
   # Changelog/contributions
@@ -1333,7 +1333,7 @@ write_meta_nldi_feat <- function(dt_site_feat, path_meta){
   #' @title Write metadata from NLDI retrieval
   #' @description
     #' A short description...
-  #' @seealso [proc_attr_gageids]
+  #' @seealso \link[proc.attr.hydfab]{proc_attr_gageids}
   #' @param dt_site_feat data.table or data.frame of NLDI site features
   #' retrieved using nhdplusTools::get_nldi_feature() and organized
   #' using proc.attr.hydfab::proc_attr_gageids
@@ -1574,7 +1574,7 @@ fs_attrs_miss_wrap <- function(path_attr_config){
   #'  `fs_algo.tfrm_attr.write_missing_attrs`
   #' @param path_attr_config The file path to the attribute config file
   #' @seealso `fs_algo.tfrm_attr.write_missing_attrs` python
-  #' @seealso [fs_attrs_miss_mlti_wrap]
+  #' @seealso \link[proc.attr.hydfab]{fs_attrs_miss_mlti_wrap}
   #' @export
   # Changelog / Contributions
   #. 2024-12-31 Deprecated, GL
@@ -1710,7 +1710,7 @@ fs_attrs_miss_wrap <- function(path_attr_config){
 
 uniq_id_loc_attr <- function(comids,attrs){
   #' @title define the unique identifier of comid-attribute pairings
-  #' @seealso [fs_attrs_miss_mlti_wrap]
+  #' @seealso \link[proc.attr.hydfab]{fs_attrs_miss_mlti_wrap}
   uniq_cmbo <- paste0(comids,"_",attrs)
   return(uniq_cmbo)
 }
@@ -1856,6 +1856,7 @@ retr_noaa_gauges_meta <- function(gauge_ids,
   #' @param gauge_ids list of NOAA gauge ids of interest
   #' @param gauge_url_base the base api url for NWPS
   #' @param retr_ids The desired data to retrieve from the api
+  #' @seealso \link[proc.attr.hydfab]{read_noaa_hads_sites}
   #' @export
   ls_all_resp <- list()
   for(gid in gauge_ids){
