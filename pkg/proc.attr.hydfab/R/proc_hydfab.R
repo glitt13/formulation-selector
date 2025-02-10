@@ -10,8 +10,8 @@ library(rnaturalearthdata)
 library(sf)
 library(data.table)
 library(yaml)
-
-
+library(dplyr)
+library(tidyr)
 
 
 
@@ -75,7 +75,7 @@ read_hfab_layers <- function(path_gpkg, layers=NULL){
   #' @param layers The hydrofabric layers of interest. Default NULL means all.
   #' Other options include any of the following inside
   #' `c("divides", "flowpaths", "network", "nexus")`
-  #' @seealso proc_attr_hf
+  #' @seealso \link[proc.attr.hydfab]{proc_attr_hf}
   #' @export
 
   hfab_ls <- list()
@@ -127,7 +127,7 @@ map_hfab_oconus_sources_wrap <- function( dt_need_hf, hfab_srce_map,
   #' @param hfab_srce_map OCONUS postal code ids (colname 'domain') mapped to paths to respective gpkg files
   #' @param col_lat The latitude column name inside `dt_need_hf`
   #' @param col_lon The longitude column name inside `dt_need_hf`
-  #' @seealso `retr_state_terr_postal()`
+  #' @seealso \link[proc.attr.hydfab]{retr_state_terr_postal}
   #' @export
 
   expected_colnames <- c(col_lat, col_lon)
@@ -290,7 +290,6 @@ retr_hfab_id_coords <- function(path_gpkg, ntwk, epsg_domn,lon,lat,
   return(hf_id)
 }
 
-
 retr_hfab_id_wrap <- function(dt_need_hf, path_oconus_hfab_config,
                               col_usgsId = "usgsId",col_lon= 'longitude',
                               col_lat= 'latitude',epsg_coords=4326){
@@ -386,12 +385,81 @@ retr_hfab_id_wrap <- function(dt_need_hf, path_oconus_hfab_config,
   } # End for loop over unique gpkg paths
 
   dt_need_hf_nomor <- data.table::rbindlist(ls_sub_gpgk_need_hf)
+  sub_need_hf_nomor <- dt_need_hf_nomor %>%
+    dplyr::select(base::c(col_usgsId,"hfab_uid"))
+  # Recombine
+  dt_need_hf_mrge <- base::merge(x=dt_need_hf,
+                                 y=sub_need_hf_nomor,
+                                 all.x = TRUE,all.y = FALSE,by = col_usgsId)
 
   # Standardize the unique identifiers to the format used across formulation-selector
-  dt_need_hf_nomor <- proc.attr.hydfab::std_feat_id(df=dt_need_hf_nomor,
+  dt_have_hf <- proc.attr.hydfab::std_feat_id(df=dt_need_hf_mrge,
                                               name_featureSource ="custom_hfab",
                                               col_featureID = "hfab_uid")
 
-  return(dt_need_hf_nomor)
+  return(dt_have_hf)
 }
 
+######## NOAA DATA SOURCES
+read_noaa_nwps_gauges <- function(
+    path_nwps_rpt ='https://water.noaa.gov/resources/downloads/reports/nwps_all_gauges_report.csv'
+){
+  #' @title Read & clean NOAA NWPS gauge metadata
+  #' @param path_nwps_rpt Path to the data source
+  #' @export
+  d <- readr::read_csv('https://water.noaa.gov/resources/downloads/reports/nwps_all_gauges_report.csv') |>
+    janitor::clean_names()
+  return(d)
+}
+
+# Function to convert DMS to Decimal Degrees
+dms_to_dd <- function(dms) {
+  #' @title Internal function to convert dms to decimal degrees
+  #' @seealso \link[proc.attr.hydfab]{read_noaa_hads_sites}
+  parts <- base::unlist(base::strsplit(dms, " "))  # Split by space
+  degrees <- base::as.numeric(parts[1])
+  minutes <- base::as.numeric(parts[2])
+  seconds <- base::as.numeric(parts[3])
+
+  dd <- degrees + minutes / 60 + seconds / 3600
+  return(dd)
+}
+
+read_noaa_hads_sites <- function(
+    path_hads_sites='https://hads.ncep.noaa.gov/USGS/ALL_USGS-HADS_SITES.txt',
+    name_map = data.frame(hads_row2 = c("5 CHR","STATION","GOES","NWS","LATITUDE","LONGITUDE","LOCATION"),
+                          std_name = c("lid","usgsId","GOES","NWS_HSA","latitude","longitude","name"))){
+  #' @title Read and parse NOAA HADS sites metadata
+  #' @param path_hads_sites The path to NCEP NOAA HADS site locations
+  #' @param name_map Mapping the default hads column names to desired names
+  #' consistent with those used by NWPS in the nwps_all_gauges_report.csv and
+  #' more importantly, the NWPS data retrieved via retr_noaa_gauges_meta
+  #' @seealso \link[proc.attr.hydfab]{retr_noaa_gauges_meta}
+  #' @export
+
+  # Parse HADS SITES for complete site list (e.g. CSNC2)
+  hads_all <- readr::read_delim(path_hads_sites,
+                                lazy = TRUE,delim = "|",skip=1) #|>
+  base::names(hads_all) <- base::names(hads_all) %>% base::trimws(which = 'both')
+  data_bgn <- base::grep("-----",hads_all$STATION) +1 # data begin after dashes
+
+  hads_data <- hads_all[data_bgn:nrow(hads_all),]
+  mat_hads_dat <- base::sapply(names(hads_data), function(j) hads_data[[j]] %>%
+                                 base::trimws(which = 'both'))
+
+  # Now perform custom renaming:
+  base::colnames(mat_hads_dat) <- name_map$std_name[match(colnames(mat_hads_dat), name_map$hads_row2)]
+
+  # Convert to decimal degrees (!! and note the hard-coded negative for lon!!)
+  dt <- mat_hads_dat %>% data.table::data.table() %>%
+    dplyr::mutate(lat_dd = base::sapply(latitude, proc.attr.hydfab:::dms_to_dd),
+                  lon_dd = -base::sapply(longitude, proc.attr.hydfab:::dms_to_dd))
+  dt$latitude <- dt$lat_dd
+  dt$longitude <- dt$lon_dd
+  dt$crs <- "EPSG:4326"
+
+  # Remove intermediate columns
+  dt_clean <- dt %>% dplyr::select(-dplyr::all_of(base::c("lat_dd","lon_dd")))
+
+  return(dt_clean)
+}
