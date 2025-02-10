@@ -41,23 +41,75 @@ gauge_ids <- c("JOPM7","RNDO2","CSNC2",
                "KLGT2","ATIT2","SDAT2",
                "COMP4","MOCP4","NGKP4",
                "HLEH1","WLUH1","WHSH1")
-# ----- grab comids using a method proposed by Mike Johnson
-d <- readr::read_csv('https://water.noaa.gov/resources/downloads/reports/nwps_all_gauges_report.csv') |>
-  janitor::clean_names()
 
-comids <- lapply(gauge_ids, function(gid) dplyr::filter(d, nws_shef_id == gid) |>
+# ----- grab comids using a method proposed by Mike Johnson
+
+
+
+# NOTE: NWPS gauges not comprehensive
+d_nwps <- proc.attr.hydfab::read_noaa_nwps_gauges(
+  path_nwps_rpt ='https://water.noaa.gov/resources/downloads/reports/nwps_all_gauges_report.csv')
+
+comids_nwps <- base::lapply(gauge_ids,
+                            function(gid) dplyr::filter(d_nwps, nws_shef_id == gid) |>
   sf::st_as_sf(coords = c('longitude', 'latitude'), crs = 4326) |>
   nhdplusTools::discover_nhdplus_id() )
 
-comids <- base::lapply(comids, function(x) ifelse(is.null(x),yes = NA,x)) %>% unlist()
+# NOTE: HADS data are comprehensive
+dt_hads <- proc.attr.hydfab::read_noaa_hads_sites(
+  path_hads_sites='https://hads.ncep.noaa.gov/USGS/ALL_USGS-HADS_SITES.txt')
 
-# TODO parse HADS SITES for complete site list (e.g. CSNC2)
-hads <- readr::read_csv('https://hads.ncep.noaa.gov/USGS/ALL_USGS-HADS_SITES.txt') |>
-  janitor::clean_names()
+comids_hads <- base::lapply(gauge_ids,
+            function(gid) dplyr::filter(dt_hads, lid == gid) |>
+              sf::st_as_sf(coords = c('longitude', 'latitude'), crs = 4326)  %>%
+              nhdplusTools::discover_nhdplus_id() )
+
+
+#
+comids <- base::lapply(comids_hads, function(x) base::ifelse(base::is.null(x),yes = NA,x)) %>%
+  base::unlist()
+  #data.table::rbindlist()
+
+
+
+# # TODO fix this somehow!!
+# nhdplusTools::discover_nhdplus_id(dt_hads_sub$geometry[1])
+#
+#
+#
+
+
+if(base::all(base::is.na(comids_hads))){
+  warning("POTENTIAL PROBLEM WITH nhdplusTools::discover_nhdplus_id():
+  No comids returned. This may relate to database connection limits.")
+}
+
+
+
+
+
 
 # -----
+
+
 dt_meta_noaa <- proc.attr.hydfab::retr_noaa_gauges_meta(gauge_ids =gauge_ids,
-                                                        retr_ids = c("lid","usgsId","name","latitude","longitude"))
+                     gauge_url_base = "https://api.water.noaa.gov/nwps/v1/gauges",
+                     retr_ids = c("lid","usgsId","name","latitude","longitude"))
+
+dt_meta_noaa_sub_no_coords <- dt_meta_noaa[base::which(is.na(dt_meta_noaa$latitude)),]
+
+
+dt_hads_has_sub <- base::lapply(dt_meta_noaa_sub_no_coords$lid,
+                            function(id) dt_hads %>% dplyr::filter(lid == id)) %>%
+                            data.table::rbindlist()
+
+names(dt_)
+
+
+if(base::any(base::is.na(dret_meta_noaa$latitude))){
+
+}
+
 # for some reason, CSNC2 is not detected in the database. USGS-07103700
 dt_meta_noaa[['usgsId']][dt_meta_noaa$lid == "CSNC2"] <- "07103700"
 dt_meta_noaa[['name']][dt_meta_noaa$lid == "CSNC2"] <- "Fountain Creek Near Colorado Springs CO"
@@ -86,10 +138,6 @@ dt_meta_noaa <- proc.attr.hydfab::std_feat_id(df=dt_meta_noaa,
 if (base::any(base::is.na(dt_meta_noaa$featureID))){
   dt_need_hf <- dt_meta_noaa[base::which(base::is.na(dt_meta_noaa$featureID)),]
 
-  # # Parse the OCONUS hydrofabric config file (metadata)
-  # hfab_srce_map <- proc.attr.hydfab::parse_hfab_oconus_config(path_oconus_config)
-  #
-
 
   # Retrieve the hydrofabric IDs wrapper for needed locations
   dt_have_hf <- proc.attr.hydfab::retr_hfab_id_wrap(dt_need_hf, path_oconus_config,
@@ -98,7 +146,9 @@ if (base::any(base::is.na(dt_meta_noaa$featureID))){
                                   col_lat= 'latitude',epsg_coords=4326)
 
   # TODO Reconcile the missing data
-
+  sub_dt_have_hf <- dt_have_hf %>% dplyr::select(c("usgsId",featureID, featureSource))
+  dt_meta_noaa1 <- base::merge(x=dt_meta_noaa,y=sub_dt_have_hf,
+                               by.x = "")
 }
 
 

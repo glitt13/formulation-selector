@@ -24,5 +24,5 @@ map_hfab_oconus_sources_wrap(
 Match the hydrofabric OCONUS geopackage locations to missing hydrofabric data
 }
 \seealso{
-\code{retr_state_terr_postal()}
+\link[proc.attr.hydfab]{retr_state_terr_postal}
 }
