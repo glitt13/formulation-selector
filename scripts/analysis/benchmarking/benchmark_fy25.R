@@ -25,6 +25,9 @@ library(mapdata)
 #
 # print(state_name)
 path_oconus_config <- "~/git/formulation-selector/scripts/eval_ingest/bm_test25/bm_oconus_config.yaml"
+path_nwps_rpt  <- 'https://water.noaa.gov/resources/downloads/reports/nwps_all_gauges_report.csv'
+path_hads_sites <- 'https://hads.ncep.noaa.gov/USGS/ALL_USGS-HADS_SITES.txt'
+path_nwps_api <- "https://api.water.noaa.gov/nwps/v1/gauges"
 
 gauge_ids <- c("JOPM7","RNDO2","CSNC2",
                "UCHA2","TYAA2","WLWA2",
@@ -42,83 +45,116 @@ gauge_ids <- c("JOPM7","RNDO2","CSNC2",
                "COMP4","MOCP4","NGKP4",
                "HLEH1","WLUH1","WHSH1")
 
+proc.attr.hydfab::retr_comids()
+proc.attr.hydfab::comid
 # ----- grab comids using a method proposed by Mike Johnson
 
 
-
+#### NWPS data
 # NOTE: NWPS gauges not comprehensive
 d_nwps <- proc.attr.hydfab::read_noaa_nwps_gauges(
-  path_nwps_rpt ='https://water.noaa.gov/resources/downloads/reports/nwps_all_gauges_report.csv')
+  path_nwps_rpt =path_nwps_rpt)
 
 comids_nwps <- base::lapply(gauge_ids,
                             function(gid) dplyr::filter(d_nwps, nws_shef_id == gid) |>
   sf::st_as_sf(coords = c('longitude', 'latitude'), crs = 4326) |>
   nhdplusTools::discover_nhdplus_id() )
 
-# NOTE: HADS data are comprehensive
+##### HADS DATA RETRIEVAL/FILTERING
+# NOTE: HADS data are comprehensive. Read all data.
 dt_hads <- proc.attr.hydfab::read_noaa_hads_sites(
-  path_hads_sites='https://hads.ncep.noaa.gov/USGS/ALL_USGS-HADS_SITES.txt')
+  path_hads_sites=path_hads_sites)
 
-comids_hads <- base::lapply(gauge_ids,
-            function(gid) dplyr::filter(dt_hads, lid == gid) |>
+# Subset HADS to NOAA gauge_ids of interest
+dt_hads_sub <- base::lapply(gauge_ids,
+                       function(gid) dt_hads %>% dplyr::filter(lid==gid)) %>%
+                        data.table::rbindlist()
+# # Create geometry from lat/lon
+# if(length(unique(dt_hads_noaa$crs))==1){
+#   dt_hads_noaa <- dt_hads_noaa %>%
+#     sf::st_as_sf(coords = c('longitude', 'latitude' ),crs=unique(dt_hads_noaa$crs))
+# } else {
+#   stop("Not expecting >1 crs")
+# }
+
+# comids_hads <- base::lapply(dt_hads_noaa, function(x)
+#   nhdplusTools::discover_nhdplus_id(point=sf::st_as_sf(x[[c("longitude","latitude")]],
+#                                                        crs=4326)) )
+
+
+# Retrieve comids based on the NOAA location id, `lid``
+comids_hads <- base::lapply(dt_hads_sub$lid,
+            function(gid) dplyr::filter(dt_hads_sub, lid == gid) |>
               sf::st_as_sf(coords = c('longitude', 'latitude'), crs = 4326)  %>%
               nhdplusTools::discover_nhdplus_id() )
-
-
-#
-comids <- base::lapply(comids_hads, function(x) base::ifelse(base::is.null(x),yes = NA,x)) %>%
-  base::unlist()
-  #data.table::rbindlist()
-
-
-
-# # TODO fix this somehow!!
-# nhdplusTools::discover_nhdplus_id(dt_hads_sub$geometry[1])
-#
-#
-#
-
-
 if(base::all(base::is.na(comids_hads))){
   warning("POTENTIAL PROBLEM WITH nhdplusTools::discover_nhdplus_id():
-  No comids returned. This may relate to database connection limits.")
+  No comids returned. This may relate to database connection limits or a bad connection.")
+
+  # Now try to acquire comids via USGS gage Ids
+  comids_hads <- base::lapply(dt_hads_sub$usgsId,function(gid)
+    nhdplusTools::discover_nhdplus_id(nldi_feature = c(featureSource='nwissite',featureID=paste0("USGS-",gid))) )
+  if(base::any(!base::is.na(comids_hads))){
+    base::message("comids successfully discovered using USGS gage IDs")
+  }
+} else if (base::any(base::is.na(comids_hads))){
+  # Now try to acquire comids via USGS gage Ids
+  comids_hads_redo <- base::lapply(dt_hads_sub$usgsId,function(gid)
+    nhdplusTools::discover_nhdplus_id(nldi_feature = c(featureSource='nwissite',featureID=paste0("USGS-",gid))) )
+  if(base::any(!base::is.na(comids_hads))){
+    base::message("comids successfully discovered using USGS gage IDs")
+  }
+  # TODO compare comids_hads and comids_hads_redo to see if any additional comids found
 }
 
 
+
+# organize the comids into NA-filled vector
+comids <- base::lapply(comids_hads, function(x) base::ifelse(base::is.null(x),yes = NA,x)) %>%
+  base::unlist()
+
+
+# Populate standardized featureID and featureSource unique identifiers
+dt_meta_noaa <- proc.attr.hydfab::std_feat_id(df=dt_hads_sub,
+                                              name_featureSource ="COMID",
+                                              vals_featureID = comids)
 
 
 
 
 # -----
+testing_nwps_api = FALSE
+if(testing_nwps_api){
+  dt_meta_noaa <- proc.attr.hydfab::retr_noaa_gauges_meta(gauge_ids =gauge_ids,
+                                                          gauge_url_base = path_nwps_api,
+                                                          retr_ids = c("lid","usgsId","name","latitude","longitude"))
+
+  dt_meta_noaa_sub_no_coords <- dt_meta_noaa[base::which(is.na(dt_meta_noaa$latitude)),]
 
 
-dt_meta_noaa <- proc.attr.hydfab::retr_noaa_gauges_meta(gauge_ids =gauge_ids,
-                     gauge_url_base = "https://api.water.noaa.gov/nwps/v1/gauges",
-                     retr_ids = c("lid","usgsId","name","latitude","longitude"))
+  dt_hads_has_sub <- base::lapply(dt_meta_noaa_sub_no_coords$lid,
+                                  function(id) dt_hads %>% dplyr::filter(lid == id)) %>%
+    data.table::rbindlist()
 
-dt_meta_noaa_sub_no_coords <- dt_meta_noaa[base::which(is.na(dt_meta_noaa$latitude)),]
-
-
-dt_hads_has_sub <- base::lapply(dt_meta_noaa_sub_no_coords$lid,
-                            function(id) dt_hads %>% dplyr::filter(lid == id)) %>%
-                            data.table::rbindlist()
-
-names(dt_)
+  names(dt_)
 
 
-if(base::any(base::is.na(dret_meta_noaa$latitude))){
+  if(base::any(base::is.na(dret_meta_noaa$latitude))){
+
+  }
+
+  # for some reason, CSNC2 is not detected in the database. USGS-07103700
+  dt_meta_noaa[['usgsId']][dt_meta_noaa$lid == "CSNC2"] <- "07103700"
+  dt_meta_noaa[['name']][dt_meta_noaa$lid == "CSNC2"] <- "Fountain Creek Near Colorado Springs CO"
+
+
+  # Populate standardized featureID and featureSource unique identifiers
+  dt_meta_noaa <- proc.attr.hydfab::std_feat_id(df=dt_meta_noaa,
+                                                name_featureSource ="COMID",
+                                                vals_featureID = comids)
 
 }
 
-# for some reason, CSNC2 is not detected in the database. USGS-07103700
-dt_meta_noaa[['usgsId']][dt_meta_noaa$lid == "CSNC2"] <- "07103700"
-dt_meta_noaa[['name']][dt_meta_noaa$lid == "CSNC2"] <- "Fountain Creek Near Colorado Springs CO"
-
-
-# Populate standardized featureID and featureSource unique identifiers
-dt_meta_noaa <- proc.attr.hydfab::std_feat_id(df=dt_meta_noaa,
-                                                  name_featureSource ="COMID",
-                                                  vals_featureID = comids)
 
 
 # -----
@@ -138,20 +174,24 @@ dt_meta_noaa <- proc.attr.hydfab::std_feat_id(df=dt_meta_noaa,
 if (base::any(base::is.na(dt_meta_noaa$featureID))){
   dt_need_hf <- dt_meta_noaa[base::which(base::is.na(dt_meta_noaa$featureID)),]
 
-
   # Retrieve the hydrofabric IDs wrapper for needed locations
   dt_have_hf <- proc.attr.hydfab::retr_hfab_id_wrap(dt_need_hf, path_oconus_config,
-                                  #col_gpkg_path = "path",
                                   col_usgsId = 'usgsId',col_lon= 'longitude',
                                   col_lat= 'latitude',epsg_coords=4326)
 
-  # TODO Reconcile the missing data
+  # Subset to the new columns of interest (plus the common ID column usgsId)
   sub_dt_have_hf <- dt_have_hf %>% dplyr::select(c("usgsId",featureID, featureSource))
-  dt_meta_noaa1 <- base::merge(x=dt_meta_noaa,y=sub_dt_have_hf,
-                               by.x = "")
+
+  # Fill in the missing NA values for featureID and featureSource columns
+  dt_meta_noaa <- dt_meta_noaa %>% dplyr::left_join(sub_dt_have_hf, by = "usgsId",
+                                               suffix=c("_df1","_df2")) %>%
+    dplyr::mutate(featureID = ifelse(is.na(featureID_df1),featureID_df2, featureID_df1),
+    featureSource = ifelse(is.na(featureSource_df1),featureID_df2, featureID_df1)
+    ) %>%
+    dplyr::select(-dplyr::all_of(
+      base::c("featureID_df1",'featureID_df2',
+              'featureSource_df1','featureSource_df2')))
 }
-
-
 
 # df <- arrow::read_parquet("~/noaa/regionalization/data/input/attributes/comid_10023916_attrs.parquet")
 
