@@ -53,6 +53,8 @@ std_feat_id <- function(df, name_featureSource = c("COMID","custom_hfab")[1],
 
 parse_hfab_oconus_config <- function(path_oconus_config){
   #' @title Parse the OCONUS hydrofabric metadata
+  #' @details Reads the hydrofabric OCONUS mappings of domain-id in postal_code
+  #' format and the expected CRS of each hydrofabric file as of v2.2
   #' @param path_oconus_config filepath to the yaml configuration file
   #' @export
   cfig <- yaml::read_yaml(path_oconus_config)
@@ -64,6 +66,30 @@ parse_hfab_oconus_config <- function(path_oconus_config){
                                     base::data.frame(cfig[[x]])))
   dt_hfab_map$path <- lapply(dt_hfab_map$path, function(x) glue::glue(x)) %>%
     base::unlist()
+
+  if (base::formals(hfsubsetR::get_subset)$hf_version != "2.2"){
+    warning("The hydrofabric has been updated.
+            Check proc.attr.hydfab package file hfab_oconus_map.yaml to see if
+            its mappings are still valid for the new hydrofabric version.
+            Modify this if statement once confirmed.")
+  }
+
+  # Read in the 'standard' domain name and crs for oconus hydrofabric
+  dir_base <- system.file("extdata",package="proc.attr.hydfab")
+  path_cfig_oconus_std <- file.path(dir_base,"hfab_oconus_map.yaml")
+  cfig_std <- yaml::read_yaml(path_cfig_oconus_std)
+  # Process in the same order as 'sources'
+  df_std_oconus_meta <- data.table::rbindlist(base::lapply(srces, function(x)
+    base::data.frame(cfig_std[[x]])))
+
+  dt_hfab_map <- base::cbind(dt_hfab_map,df_std_oconus_meta)
+
+  if(base::any(names(dt_hfab_map) == 'crs')){
+    # the `crs` column can conflict with dataframes returned by
+    # proc.attr.hydfab::read_noaa_hads_sites
+    dt_hfab_map <- dt_hfab_map %>% dplyr::rename(crs_hfab='crs')
+  }
+
   return(dt_hfab_map)
 }
 
@@ -323,8 +349,6 @@ retr_hfab_id_wrap <- function(dt_need_hf, path_oconus_hfab_config,
                     {need_colnames}. Check map_hfab_oconus_sources_wrap()."))
   }
 
-
-
   # Grouping by paths so we only read in each gpkg once:
   uniq_paths <- base::unique(dt_need_hf[[col_gpkg_path]])[!is.na(unique(dt_need_hf[[col_gpkg_path]]))]
   ls_sub_gpgk_need_hf <- list()
@@ -349,7 +373,7 @@ retr_hfab_id_wrap <- function(dt_need_hf, path_oconus_hfab_config,
         # Try to find lat/lon
         epsg_domn <- sf::st_crs(flowpaths$geom)$epsg # The CRS of this hydrofabric domain
         if(base::is.na(epsg_domn)){ # Use the manual mapping CRS as plan B
-          epsg_domn <- hfab_srce_map$crs[hfab_srce_map$path==path_gpkg] %>% unique()
+          epsg_domn <- hfab_srce_map$crs_hfab[hfab_srce_map$path==path_gpkg] %>% unique()
           if(base::length(epsg_domn)!=1){
             stop(glue::glue("Need to define epsg for {path_gpkg}"))
           }
