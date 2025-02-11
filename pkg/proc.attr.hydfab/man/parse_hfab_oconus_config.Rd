@@ -12,3 +12,7 @@ parse_hfab_oconus_config(path_oconus_config)
 \description{
 Parse the OCONUS hydrofabric metadata
 }
+\details{
+Reads the hydrofabric OCONUS mappings of domain-id in postal_code
+format and the expected CRS of each hydrofabric file as of v2.2
+}
