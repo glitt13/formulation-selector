@@ -64,7 +64,7 @@ parse_hfab_oconus_config <- function(path_oconus_config){
 
   dt_hfab_map <- data.table::rbindlist(base::lapply(srces, function(x)
                                     base::data.frame(cfig[[x]])))
-  dt_hfab_map$path <- lapply(dt_hfab_map$path, function(x) glue::glue(x)) %>%
+  dt_hfab_map$path <- base::lapply(dt_hfab_map$path, function(x) glue::glue(x)) %>%
     base::unlist()
 
   if (base::formals(hfsubsetR::get_subset)$hf_version != "2.2"){
@@ -209,16 +209,16 @@ retr_state_terr_postal <- function(lat, lon) {
   state_or_territory <- us_states[sf::st_intersects(point, us_states, sparse = FALSE),]
 
   # Double check with a buffer (e.g. 21.48203, -157.84589 in HI but not recognized )
-  if(nrow(state_or_territory) == 0){
-    buffer <- st_buffer(point, dist = 1000)
+  if(base::nrow(state_or_territory) == 0){
+    buffer <- sf::st_buffer(point, dist = 1000)
     state_or_territory <- us_states[sf::st_intersects(buffer, us_states, sparse = FALSE),]
   }
 
   # Otherwise check to see if this is a US territory
-  if(nrow(state_or_territory)==0){
+  if(base::nrow(state_or_territory)==0){
     world <- rnaturalearth::ne_countries(scale='medium', returnclass = "sf")
-    point <- st_sfc(st_point(c(lon, lat)), crs = st_crs(world))
-    state_or_territory <- world[st_intersects(point, world, sparse = FALSE),]
+    point <- sf::st_sfc(sf::st_point(c(lon, lat)), crs = sf::st_crs(world))
+    state_or_territory <- world[sf::st_intersects(point, world, sparse = FALSE),]
   }
   # Retrieve the postal ID that we use in mapping to gpkg files
   postal_id <- state_or_territory$postal
@@ -332,7 +332,7 @@ retr_hfab_id_wrap <- function(dt_need_hf, path_oconus_hfab_config,
   #' @export
 
   # Parse the hydrofabric config file
-  hfab_srce_map <- proc.attr.hydfab::parse_hfab_oconus_config(path_oconus_config)
+  hfab_srce_map <- proc.attr.hydfab::parse_hfab_oconus_config(path_oconus_hfab_config)
 
   # Identify postal code and gpkg mappings:
   dt_need_hf <- proc.attr.hydfab::map_hfab_oconus_sources_wrap(dt_need_hf,
