@@ -2235,34 +2235,3 @@ fs_attrs_miss_mlti_wrap <- function(path_attr_config){
     message("No missing comid-attribute pairings.")
   }
 }
-
-retr_noaa_gauges_meta <- function(gauge_ids,
-                             gauge_url_base = "https://api.water.noaa.gov/nwps/v1/gauges",
-                             retr_ids = c("lid","usgsId","name","latitude","longitude")){
-  #' @title Retrieve metadata based on a NOAA RFC gauge ID, aka lid
-  #' @description Uses the NWPS api to retrieve gauge metadata
-  #' @param gauge_ids list of NOAA gauge ids of interest
-  #' @param gauge_url_base the base api url for NWPS
-  #' @param retr_ids The desired data to retrieve from the api
-  #' @seealso \link[proc.attr.hydfab]{read_noaa_hads_sites}
-  #' @export
-  ls_all_resp <- list()
-  for(gid in gauge_ids){
-    url <- file.path(gauge_url_base,gid)
-    resp <- curl::curl_fetch_memory(url)
-
-    if (resp$status_code == 200) {
-      # Parse the JSON data
-      data <- jsonlite::fromJSON(rawToChar(resp$content))
-      dt_resp <- data.table::data.table(data.frame(data[retr_ids]))
-      ls_all_resp[[url]] <- dt_resp
-    } else {
-      ls_all_resp[[url]] <- data.table::data.table(lid=gid)
-      cat(glue::glue("Request for {gid} failed with status code:",
-                     resp$status_code, "\n"))
-    }
-  }
-  dt_all <- data.table::rbindlist(ls_all_resp,fill=TRUE)
-  return(dt_all)
-}
-
