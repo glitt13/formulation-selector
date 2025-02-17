@@ -316,6 +316,44 @@ retr_hfab_id_coords <- function(path_gpkg, ntwk, epsg_domn,lon,lat,
   return(hf_id)
 }
 
+retr_comids_coords <- function(df, col_lat = "latitude",
+                                   col_lon="longitude",col_crs = NULL,
+                                   crs=4326){
+  #' @title Iterate over each coordinate in a dataframe to retrieve comid
+  #' @param df Dataframe containing lat/lon columns
+  #' @param col_lat The column name for the latitude data
+  #' @param col_lon The column name for the longitude data
+  #' @param col_crs Default NULL, column name for the CRS. If NULL, `crs` arg
+  #' will be used.
+  #' @param crs The CRS to use when `col_crs` is NULL. Default 4326.
+  #' @export
+  # TODO update once discover_nhdplus_id() can handle batch processing
+  # https://github.com/DOI-USGS/nhdplusTools/issues/417
+  # The limit is 400 hits per hour for a single IP address
+
+  ls_comids <- list()
+  for(idx in 1:base::nrow(df)){
+    if(!base::is.null(col_crs)){
+      crs_val <- df[[col_crs]][idx]
+    } else {
+      crs_val <- crs
+    }
+
+    # Create the sfc object with CRS
+    geom_pt <- sf::st_as_sf(df[idx,], coords = c('longitude', 'latitude'),
+                            crs = crs_val)
+
+    ls_comids[[idx]] <- nhdplusTools::discover_nhdplus_id(geom_pt)
+
+    if(base::length(ls_comids[[idx]])==0){
+      # Assign NA to keep dimensionality consistent
+      ls_comids[[idx]] <- NA
+    }
+  }
+  comids <- base::unlist(ls_comids)
+  return(comids)
+}
+
 retr_hfab_id_wrap <- function(dt_need_hf, path_oconus_hfab_config,
                               col_usgsId = "usgsId",col_lon= 'longitude',
                               col_lat= 'latitude',epsg_coords=4326){
@@ -330,6 +368,7 @@ retr_hfab_id_wrap <- function(dt_need_hf, path_oconus_hfab_config,
   #' @param col_lat column name inside `dt_need_hf` for latitude value
   #' @param epsg_coords The CRS for the lat/lon data inside `dt_need_hf`
   #' @export
+  # TODO  modify this given the updated hydrofabric per https://github.com/owp-spatial/hfsubsetR/issues/6
 
   # Parse the hydrofabric config file
   hfab_srce_map <- proc.attr.hydfab::parse_hfab_oconus_config(path_oconus_hfab_config)
