@@ -235,6 +235,21 @@ testthat::test_that("retr_hfab_id_wrap correctly retrieves hydrofabric IDs", {
   testthat::expect_true(base::all(base::names(dt_need_hf) %in% base::names(result)))
 })
 
+testthat::test_that("retr_comid_coord",{
+
+  df <- base::data.frame(latitude = c(37.02058,64.90197), #Joplin MO, Fairbanks AK
+                   longitude = c(-94.51375,-146.3613),
+                   name=c("Joplin,MO","Fairbanks,AK"),
+                   crs=c(4326,4326))
+  rslt <- proc.attr.hydfab::retr_comids_coords(df=df,col_lat = 'latitude',col_lon='longitude',
+                                               col_crs = 'crs')
+  # Don't expect comid for Fairbanks, AK
+  testthat::expect_true(is.na(rslt[2]))
+  testthat::expect_equal(rslt[1],7590701)
+  testthat::expect_equal(base::length(rslt),base::nrow(df))
+})
+
+
 # Delete the temp files
 rm(test_yaml)
 rm(temp_gpkg)
