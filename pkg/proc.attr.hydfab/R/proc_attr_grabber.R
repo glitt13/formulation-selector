@@ -1967,7 +1967,6 @@ grab_attrs_datasets_fs_wrap <- function(Retr_Params,lyrs="network",overwrite=FAL
     dt_site_feat$dataset_name <- dataset_name
     ls_sitefeat_all[[dataset_name]] <- dt_site_feat
 
-    # TODO write the featureID/featureSource to input data
   }
   # -------------------------------------------------------------------------- #
   # ------------ Grab attributes from a separate loc_id file ----------------- #
