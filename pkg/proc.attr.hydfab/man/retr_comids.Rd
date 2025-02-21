@@ -33,6 +33,8 @@ comid-gage_id will be stored as a .csv}
 comid-gageid-geometry mappings are saved. Default NULL, but strongly recommended
 to use!}
 
+Refer to ?dataRetrieval::get_nldi_sources() for options to use with nldi_featre}
+
 }
 \description{
 Retrieve comids based on provided gage_ids and expected NLDI format
