@@ -277,6 +277,107 @@ map_attrs_to_dataset <- function(vars){
   return(ls_attrs_name)
 }
 
+retrieve_attr_exst <- function(comids, vars, dir_db_attrs, bucket_conn=NA){
+  #' @title Grab previously-aggregated attributes from locations of interest
+  #' @description Retrieves existing attribute data already stored in the
+  #' dir_db_attrs directory as .parquet files & return tbl of all comids and
+  #' attributes of interest.
+  #' @details Only considers data already generated inside dir_db_attrs. If
+  #' more data are needed, acquire attribute data acquisition using proc_attr_wrap().
+  #' Runs checks on input arguments and retrieved contents, generating warnings
+  #' if requested comids and/or variables were completely absent from the dataset
+  #' @param comids character class. The comids of interest.
+  #' @param vars character class. The attribute variables of interest.
+  #' @param dir_db_attrs character class. The path where data
+  #' @param bucket_conn Default NA. Placeholder in case a bucket connection is
+  #' ever created
+  #' @seealso \link[proc.attr.hydfab]{proc_attr_wrap}
+  #' @export
+  # Changelog/Contributions
+  #  2024-07-26 Originally created, GL
+
+  # Run checks on input args
+  if(!'character' %in% base::class(comids) ){
+    # Let's try unlisting and unnaming just-in-case
+    comids <- comids %>% base::unlist() %>% base::unname()
+    if(!'character' %in% base::class(comids) ){
+      warning("comids expected to be character class. converting")
+      comids <- base::as.character(comids)
+    }
+  }
+  if(!'character' %in% base::class(vars)){
+    # Let's try unlisting and unnaming just-in-case
+    vars <- vars %>% base::unlist() %>% base::unname()
+    if(!'character' %in% base::class(vars)){
+      stop("vars expected to be character class")
+    }
+  }
+  if(!base::dir.exists(dir_db_attrs)){
+    stop(glue::glue("The attribute database path does not exist:
+                      {dir_db_attrs}"))
+  }
+  if(!any(base::grepl(".parquet", base::list.files(dir_db_attrs)))){
+    warning(glue::glue("The following path does not contain expected
+                          .parquet files: {dir_db_attrs}"))
+  }
+
+  if(base::is.na(bucket_conn)){
+    # Query based on COMID & variables, then retrieve data
+    dat_all_attrs <- try(arrow::open_dataset(dir_db_attrs) %>%
+                           dplyr::mutate(across(where(is.factor), as.character)) %>% # factors are a pain!!
+                           dplyr::filter(featureID %in% !!comids) %>%
+                           dplyr::filter(attribute %in% !!vars) %>%
+                           dplyr::distinct() %>%
+                           dplyr::collect())
+
+    if('try-error' %in% base::class(dat_all_attrs)){
+      stop(glue::glue("Could not acquire attribute data from {dir_db_attrs}"))
+    }
+  } else {# TODO add bucket connection here if it ever becomes a thing
+    stop("Need to accommodate a different type of source here, e.g. s3")
+  }
+
+  # Run simple checks on retrieved data
+  if (base::any(!comids %in% dat_all_attrs$featureID)){
+    missing_comids <- comids[base::which(!comids %in% dat_all_attrs$featureID)]
+    if (length(missing_comids) > 0){
+      warning(base::paste0("Datasets missing the following comids: ",
+                           base::paste(missing_comids,collapse=","),
+                           "\nConsider running proc.attr.hydfab::proc_attr_wrap()"))
+    } else {
+      message("There's a logic issue on missing_comids inside retrieve_attr_exst")
+    }
+
+
+  }
+
+  if (base::any(!vars %in% dat_all_attrs$attribute)){
+    missing_vars <- vars[base::which(!vars %in% dat_all_attrs$attribute)]
+    if(length(missing_vars) >0 ){
+      warning(base::paste0("Datasets entirely missing the following vars: ",
+                           base::paste(missing_vars,collapse=","),
+                           "\nConsider running proc.attr.hydfab::proc_attr_wrap()"))
+    } else {
+      message("There's a logic issue on missing_vars inside retrieve_attr_exst")
+    }
+
+  }
+
+  # Run check on all comid-attribute pairings by counting comid-var pairings
+  sum_var_df <- dat_all_attrs %>%
+    dplyr::group_by(featureID) %>%
+    dplyr::summarise(dplyr::n_distinct(attribute))
+  idxs_miss_vars <- base::which(sum_var_df$`n_distinct(attribute)` != length(vars))
+  if(base::length(idxs_miss_vars)>0){
+    warning(glue::glue("The following comids are missing desired variables:
+              {paste(sum_var_df$featureID[idxs_miss_vars],collapse='\n')}
+                       \nConsider running proc.attr.hydfab::proc_attr_wrap()"))
+  }
+
+  return(dat_all_attrs)
+}
+
+
 proc_attr_std_hfsub_name <- function(comid,custom_name='', fileext='gpkg'){
   #' @title Standardidze hydrofabric subsetter's local filename
   #' @description Internal function that ensures consistent filename
@@ -1472,33 +1573,12 @@ retr_comids <- function(gage_ids,featureSource,featureID,dir_db_attrs,
   #'  featureID="{gage_id}". In other instances, conversions may be necessary,
   #'  e.g. featureID="USGS-{gage_id}". When defining featureID, it's expected
   #'  that the term 'gage_id' is used as a variable in glue syntax to create featureID
-  #'  Refer to ?dataRetrieval::get_nldi_sources() for options to use with nldi_feature
-  #' @param dir_db_attrs Attribute directory path, where the standardized
-  #' comid-gage_id will be stored as a .csv
-  #' @param path_save_gpkg The filepath where the geopackage containing
-  #' comid-gageid-geometry mappings are saved. Default NULL, but strongly recommended
-  #' to use!
-  #' @note 2025-03-07 This needs a deeper refactoring
+  #'  Refer to ?dataRetrieval::get_nldi_sources() for options to use with nldi_featre
   #' @export
-  #'
-  # Changelog/Contributions
-  #  2025-03-07 Refactor: add in the geometry retrieval & return nested list
-  #   with sf_comid from fs_retr_nhdp_comids_geom_wrap, GL
-  # ---------------- COMID & COORDINATE RETRIEVAL ---------------- #
-  # Populate the comids & coordinates for each gage_id
-  if(base::is.null(path_save_gpkg)){
-    warning("Strongly recommended to provide a path_save_gpkg to proc.attr.hydfab::retr_comids!!")
-    sf_comid <- data.table::data.table()
-  } else {
-    sf_comid <- proc.attr.hydfab::fs_retr_nhdp_comids_geom_wrap(
-      path_save_gpkg=path_save_gpkg,
-      gage_ids=gage_ids,featureSource=featureSource,
-      featureID=featureID)
-  }
-  # ---------------- COMID RETRIEVAL: DOUBLE CHECK ------------------- #
-  # Use std function that makes the path_meta_loc
+  # ---------------- COMID RETRIEVAL ------------------- #
+  # TODO create a std function that makes the path_meta_loc
   path_meta_loc <- proc.attr.hydfab:::std_path_map_loc_ids(dir_db_attrs)
-  if(base::file.exists(path_meta_loc)){
+  if(file.exists(path_meta_loc)){
     if(!base::grepl('csv',path_meta_loc)){
       stop(glue::glue("Expecting the file path to metadata to be a csv:
                       \n{path_meta_loc}"))
@@ -1745,7 +1825,6 @@ std_path_dataset <- function(dir_dataset, ds_filenames = ''){
   # Changelog/contributions
   #. 2025-02-21 Refactored from proc_attr_read_gage_ids_fs
   # ----  Read in a standard format filename and file type from fs_proc ---- #
-  # TODO make this more adaptable so that it doesn't depend on running python fs_proc beforehand
   dir_ds <- base::file.path(dir_dataset)
   files_ds <- base::list.files(dir_ds)
   fns <- base::lapply(ds_filenames,
@@ -1785,9 +1864,9 @@ proc_attr_read_gage_ids_fs <- function(dir_dataset, ds_filenames=''){
   # Changelog/contributions
   #  2024-07-29 Originally created, GL
   #. 2025-02-21 Refactor with std_path_dataset
-  #. 2025-03-07 Add path_dat_in as additional return object
+
   # ----  Read in a standard format filename and file type from fs_proc ---- #
-  path_dat_in <- proc.attr.hydfab:::std_path_dataset(dir_dataset, ds_filenames)
+  path_dat_in <- std_path_dataset(dir_dataset, ds_filenames)
   # Read the netcdf
   nc <- ncdf4::nc_open(path_dat_in)
 
@@ -1797,11 +1876,9 @@ proc_attr_read_gage_ids_fs <- function(dir_dataset, ds_filenames=''){
   # Extract attributes of interest that describe what gage_id represents
   attrs <- ncdf4::ncatt_get(nc,varid=0)
   featureSource <- attrs$featureSource
-  featureID <- attrs$featureID # intended to reformat gage_id into the
-  # appropriate nldi format using glue(e.g. glue('USGS-{gage_id}')
+  featureID <- attrs$featureID # intended to reformat gage_id into the appropriate nldi format using glue(e.g. glue('USGS-{gage_id}')
 
-  return(base::list(gage_ids=gage_ids, featureSource=featureSource,
-                    featureID=featureID, path_dat_in=path_dat_in))
+  return(base::list(gage_ids=gage_ids, featureSource=featureSource, featureID=featureID))
 }
 
 grab_attrs_datasets_fs_wrap <- function(Retr_Params,lyrs="network",overwrite=FALSE,
@@ -1882,14 +1959,15 @@ grab_attrs_datasets_fs_wrap <- function(Retr_Params,lyrs="network",overwrite=FAL
 
     # ---------------------- Grab all needed attributes ---------------------- #
     dt_site_feat <- proc.attr.hydfab::proc_attr_gageids(gage_ids,
-                                                 featureSource,
-                                                 featureID,
-                                                 Retr_Params,
-                                                 path_save_gpkg=path_save_gpkg,
-                                                 lyrs=lyrs,
-                                                 overwrite=overwrite)
-    dt_site_feat$dataset_name <- ds
-    ls_sitefeat_all[[ds]] <- dt_site_feat
+                                                     featureSource,
+                                                     featureID,
+                                                     Retr_Params,
+                                                     lyrs=lyrs,
+                                                     overwrite=overwrite)
+    dt_site_feat$dataset_name <- dataset_name
+    ls_sitefeat_all[[dataset_name]] <- dt_site_feat
+
+    # TODO write the featureID/featureSource to input data
   }
   # -------------------------------------------------------------------------- #
   # ------------ Grab attributes from a separate loc_id file ----------------- #
