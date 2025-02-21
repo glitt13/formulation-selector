@@ -884,7 +884,7 @@ proc_attr_wrap <- function(comid, Retr_Params, lyrs='network',overwrite=FALSE,hf
   ########## May add more data sources here and append to attr_data ###########
   # ----------- dataset standardization ------------ #
   # if (!base::all(base::unlist(( # A qa/qc check
-  #         base::lapply(attr_data, function(x)
+  #         base::lapply(attr_data, fu <- tion(x)
   #                 base::any(base::grepl("COMID", colnames(x)))))))){
   #   stop("Expecting 'COMID' as a column name identifier in every dataset")
   # }
@@ -1289,7 +1289,6 @@ grab_attrs_datasets_fs_wrap <- function(Retr_Params,lyrs="network",overwrite=FAL
     dt_site_feat$dataset_name <- dataset_name
     ls_sitefeat_all[[dataset_name]] <- dt_site_feat
 
-    # TODO write the featureID/featureSource to input data
   }
   # -------------------------------------------------------------------------- #
   # ------------ Grab attributes from a separate loc_id file ----------------- #
