@@ -972,7 +972,7 @@ class AlgoTrainEval:
         ci = fci.random_forest_error(
             forest=forest,
             X_train_shape=X_train.shape,
-            X_test=X_test,
+            X_test=np.array(X_test),
             inbag=None, 
             calibrate=True, 
             memory_constrained=False, 
@@ -1802,7 +1802,7 @@ def plot_pred_vs_obs_regr(y_pred: np.ndarray, y_obs: np.ndarray, ds:str, metr:st
     min_vals = (min_val_rnd,min_val_rnd)
     max_vals = (max_val_rnd,max_val_rnd)
 
-    # compute r^2
+    # compute R^2
     r2_val =r2_score(y_obs, y_pred)
     # Adapted from plot in bolotinl's fs_perf_viz.py
     plt.scatter(x=y_obs,y=y_pred,alpha=0.3)
