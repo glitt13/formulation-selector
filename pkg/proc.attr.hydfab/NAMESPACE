@@ -3,19 +3,7 @@
 export(attr_cfig_parse)
 export(check_attr_selection)
 export(check_miss_attrs_comid_io)
-<<<<<<< HEAD
-<<<<<<< HEAD
 export(custom_hf_id)
-=======
-export(dl_nhdplus_geoms_wrap)
-<<<<<<< HEAD
->>>>>>> 833dcff (Refactor to only perform comid/geometry retrieval in proc.attr.hydfab (#51))
-=======
-export(custom_hfab_id)
->>>>>>> addf482 (feat: building an approach to generate custom ids for OCONUS stream locations)
-=======
-export(custom_hf_id)
->>>>>>> 882d552 (refactor: rename hfab to hf)
 export(fs_attrs_miss_mlti_wrap)
 export(fs_attrs_miss_wrap)
 export(fs_retr_nhdp_comids_geom)
@@ -24,10 +12,7 @@ export(grab_attrs_datasets_fs_wrap)
 export(hfab_config_opt)
 export(io_attr_dat)
 export(map_hfab_oconus_sources_wrap)
-<<<<<<< HEAD
 export(parse_hfab_oconus_config)
-=======
->>>>>>> addf482 (feat: building an approach to generate custom ids for OCONUS stream locations)
 export(proc_attr_exst_wrap)
 export(proc_attr_gageids)
 export(proc_attr_hf)
