@@ -7,7 +7,7 @@
 #' This assumes that the coarser-scale hydroatlas data may be downscaled to
 #'. the smaller-scaled hydrofabric divides.
 #' @details Intended for OCONUS processing of AK and PRVI, NWMv4.
-#' Based on hydrofabric v2.2 and hydroatlas v1, but updates may be
+#' Based on hydrofabric v2.2 and hydroatlas v1.
 #' 1) MUST download the `prvi` and `ak` hydrofabric datasets from:
 #' https://www.lynker-spatial.com/data?path=hydrofabric%2Fv2.2%2F
 #' 2) MUST download the hydroBASINS datasets for North America and Arctic
