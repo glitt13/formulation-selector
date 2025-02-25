@@ -230,20 +230,22 @@ retr_state_terr_postal <- function(lat, lon) {
   return(postal_id)
 }
 
-custom_hfab_id <- function(df){
+custom_hfab_id <- function(df, col_vpu = "vpu",col_id = "id"){
   #' @title Build a custom hydrofabric id that is unique to place
   #' @param df The dataframe for a specific location corresponding to the
+  #' @param col_vpu The column in df representing the vpu
+  #' @param col_id The column in df representing the hydrofabric id
   #' hydrofabric 'network'
   #' @export
 
   # Remove NA values
-  idxs_na <- base::c(base::which(base::is.na(df$vpu)),
-                     base::which(base::is.na(df$id)) ) %>% base::unique()
+  idxs_na <- base::c(base::which(base::is.na(df[[col_vpu]])),
+                     base::which(base::is.na(df[[col_id]])) ) %>% base::unique()
   if(base::length(idxs_na)>0){
     df <- df[-idxs_na,]
   }
 
-  cstm_id <- paste0(df$vpu,"-",df$id) %>% unique()
+  cstm_id <- paste0(df[[col_vpu]],"-",df[[col_id]]) %>% unique()
   if(length(cstm_id)>1){
     stop("More than one custom id for hydrofabric. This shouldn't happen.")
   }
@@ -360,13 +362,13 @@ retr_hfab_id_wrap <- function(dt_need_hf, path_oconus_hfab_config,
   #' @title Retrieve hydrofabric IDs wrapper
   #' @details Intended for situations when comids unavailable, generally as OCONUS
   #' @param dt_need_hf data.table of needed
-  #' @param path_oconus_config File path to yaml config mapping of OCONUS hydrofabric locations, postal codes, and expected CRS
-  #'
-  #' geopackage filepaths
+  #' @param path_oconus_config File path to yaml config mapping of OCONUS
+  #' hydrofabric locations, postal codes, and expected CRS geopackage filepaths
   #' @param col_usgsId column name inside `dt_need_hf` for the USGS gage ID
   #' @param col_lon column name inside `dt_need_hf` for longitude value
   #' @param col_lat column name inside `dt_need_hf` for latitude value
   #' @param epsg_coords The CRS for the lat/lon data inside `dt_need_hf`
+  #' @seealso prep_oconus_hydroatlas.R also createas the hfab_uid using custom_hfab_id()
   #' @export
   # TODO  modify this given the updated hydrofabric per https://github.com/owp-spatial/hfsubsetR/issues/6
 
