@@ -401,7 +401,7 @@ retr_hfab_id_wrap <- function(dt_need_hf, path_oconus_hfab_config,
   #' @param col_lon column name inside `dt_need_hf` for longitude value
   #' @param col_lat column name inside `dt_need_hf` for latitude value
   #' @param epsg_coords The CRS for the lat/lon data inside `dt_need_hf`
-  #' @seealso prep_oconus_hydroatlas.R also createas the hf_uid using custom_hf_id()
+  #' @seealso prep_oconus_hydroatlas.R also creates the hf_uid using custom_hf_id()
   #' @export
   # TODO  modify this given the updated hydrofabric per https://github.com/owp-spatial/hfsubsetR/issues/6
 
