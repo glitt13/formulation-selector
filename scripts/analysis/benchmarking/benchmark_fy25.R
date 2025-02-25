@@ -141,6 +141,15 @@ hydatl <- arrow::read_parquet("~/Downloads/hydroatlas_vars.parquet")
 
 
 
+# tabular data:
+dir_hfab_tab_dat <- "~/noaa/hydrofabric/tabular-data/" # Save the parquet file here
+path_attrs_all_oconus <- proc.attr.hydfab:::std_path_attrs_all_parq(dir_hfab_tab_dat, ls_vpus=c("ak","prvi"))
+path_attrs_conus <- file.path(dir_hfab_tab_dat,"hydroatlas_vars.parquet")
+path_attrs_all_oconus <- "~/noaa/hydrofabric/tabular-data//hydroatlas_attributes_ak_prvi.parquet"
+
+proc.attr.hydfab::proc_attr_hydatl(hf_id = ,path_ha = "~/noaa/")
+
+
 # Now grab attributes for these watersheds
 path_attr_config <- "~/git/formulation-selector/scripts/analysis/benchmarking/oconus_attrs.yaml"
 Retr_Params <- proc.attr.hydfab::attr_cfig_parse(path_attr_config)
