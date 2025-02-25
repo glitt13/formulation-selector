@@ -1,4 +1,3 @@
-
 #' @title Script to work through FY25 NWM v4 benchmarking (first stage, small # of catchments)
 #' @seealso prep_oconus_hydroatlas.R for preparation of hydroatlas attributes
 #' corresponding to AK and PRVI hydrofabric VPU domains.
@@ -175,7 +174,6 @@ ha <- arrow::open_dataset(path_attrs_all_oconus) %>%
   dplyr::select(hf_id_col, dplyr::all_of(ha_vars)) %>%
   dplyr::collect()
 
-# TODO retrieve hydroatlas catchment attributes
 # Now grab attributes for these watersheds
 path_attr_config <- "~/git/formulation-selector/scripts/analysis/benchmarking/oconus_attrs.yaml"
 Retr_Params <- proc.attr.hydfab::attr_cfig_parse(path_attr_config)
