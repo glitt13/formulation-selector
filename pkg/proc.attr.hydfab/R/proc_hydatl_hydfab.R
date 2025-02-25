@@ -69,12 +69,26 @@ std_paths_attrs <- function(dir_base_hfab, vpu){
   return(path_attrs_new)
 }
 
+std_path_attrs_all_parq <- function(dir_base_hfab,ls_vpus=c("ak","prvi")){
+  #' @title standardize path to they hydroatlas attributes for all OCONUS
+  #' hydrofabric domains
+  #' @details Intended for just ak and prvi
+  #' @param dir_base_hfab Base directory where hydrofabric data stored
+  #' @param ls_vpu the hydrofabric vpus of interest (e.g. `c('ak','prvi')`)
+  #' @export
+  all_vpus <- base::paste0(base::sort(ls_vpus),collapse = "_")
+  path_attrs <- base::file.path(dir_base_hfab,
+                                glue::glue("hydroatlas_attributes_{all_vpus}.parquet"))
+  return(path_attrs)
+}
+
+
 read_hfab_lyr_val <- function(path_hfab, lyr = 'divides'){
   #' @title Read the hydrofabric layer, convert to WGS 84, and make valid
   #' @param path_hfab filepath to the hydrofabric geopackage of interest
   #' @param lyr The layer to read from the geopackage, default `'divides'`
   print(glue::glue("Reading, transforming, & make valid {path_hfab}"))
-  div_hfab <- sf::st_read(path_hfab,layer = lyr) # EPSG: 3338
+  div_hfab <- sf::st_read(path_hfab,layer = lyr) # e.g. EPSG: 3338
   div_hfab_tfrm <- sf::st_transform(div_hfab, crs = 4326) # convert to 4326
   div_hfab_val <- sf::st_make_valid(div_hfab_tfrm)
   return(div_hfab_val)
