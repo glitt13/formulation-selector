@@ -24,13 +24,15 @@ retr_hfab_id_wrap(
 
 \item{epsg_coords}{The CRS for the lat/lon data inside \code{dt_need_hf}}
 
-\item{path_oconus_config}{File path to yaml config mapping of OCONUS hydrofabric locations, postal codes, and expected CRS
-
-geopackage filepaths}
+\item{path_oconus_config}{File path to yaml config mapping of OCONUS
+hydrofabric locations, postal codes, and expected CRS geopackage filepaths}
 }
 \description{
 Retrieve hydrofabric IDs wrapper
 }
 \details{
 Intended for situations when comids unavailable, generally as OCONUS
+}
+\seealso{
+prep_oconus_hydroatlas.R also createas the hfab_uid using custom_hfab_id()
 }
