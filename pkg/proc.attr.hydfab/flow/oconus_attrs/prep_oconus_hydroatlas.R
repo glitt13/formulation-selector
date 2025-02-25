@@ -42,7 +42,6 @@ redo_intersection_analysis <- FALSE # Should we re-run hydroatlas/hydrofabric in
 dir_base_hydatl <- "~/noaa/data/hydroatlas/"
 path_haa_global <-  file.path(dir_base_hydatl,"BasinATLAS_Data_v10.gdb","BasinATLAS_v10.gdb")
 
-
 #------ END USER INPUT HERE
 if(!base::dir.exists(dir_save_base)){
   base::dir.create(dir_save_base,recursive=TRUE)
