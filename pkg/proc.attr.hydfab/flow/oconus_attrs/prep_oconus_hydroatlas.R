@@ -12,7 +12,9 @@
 #' https://www.lynker-spatial.com/data?path=hydrofabric%2Fv2.2%2F
 #' 2) MUST download the hydroBASINS datasets for North America and Arctic
 #' from https://www.hydrosheds.org/products/hydrobasins
-#'
+#' @note Relevant internal proc.attr.hydfab functions stored inside
+#'  `proc.attr.hydfab/R/proc_hydatl_hydfab.R`
+#'  Transforms each hydrofabric into CRS 4326 for areal weighting calculations.
 # Changelog / Contributions
 #. 2025-02-24 Originally created, GL
 
@@ -35,7 +37,7 @@ paths_hfab <- base::c(path_hfab_ak,path_hfab_prvi) # Define the paths to the hyd
 redo_intersection_analysis <- FALSE # Should we re-run hydroatlas/hydrofabric intersection analysis if it hasn't already been run? (may take ~18 hours)
 # Directory containing hydrotlas basins manually downloaded from https://www.hydrosheds.org/products/hydrobasins
 dir_base_hydatl <- "~/noaa/data/hydroatlas/"
-
+path_haa_global <-  file.path(dir_base_hydatl,"BasinATLAS_Data_v10.gdb","BasinATLAS_v10.gdb")
 #------ END USER INPUT HERE
 if(!base::dir.exists(dir_save_base)){
   base::dir.create(dir_save_base,recursive=TRUE)
@@ -74,7 +76,7 @@ for(path_hfab in paths_hfab){
     print(glue::glue("Problem with {path_hfab}. Skipping!"))
   }
   # Read hydroatlas data, convert to 4326, make geoms valid
-  hab_shp <- proc.attr.hydfab:::read_hydatl_by_vpu_val(vpu)
+  hab_shp <- proc.attr.hydfab:::read_hydatl_by_vpu_val(vpu,dir_base_hydatl)
 
   # Read in the hydrofabric data
   div_hfab_val <- proc.attr.hydfab:::read_hfab_lyr_val(path_hfab,lyr='divides')
@@ -134,9 +136,9 @@ for(path_hfab in paths_hfab){
   # Split the data by the different geometry types so we can write it as a gpkg
   ls_ntr <- list()
   ls_mlti <- list()
-  for(i in 1:nrow(st_ntr)){
+  for(i in 1:base::nrow(st_ntr)){
     st_smp <- try(sf::st_simplify(st_ntr[i,]))
-    if("sfc_POLYGON" %in% class(st_smp$geom)){
+    if("sfc_POLYGON" %in% base::class(st_smp$geom)){
       ls_ntr[[i]] <- st_smp
     } else {
       ls_mlti[[i]] <- st_smp
@@ -162,13 +164,13 @@ for(path_hfab in paths_hfab){
   } else if (base::grepl("prvi", path_hfab)){
     vpu <- "prvi"
   }
-  hab_shp <- proc.attr.hydfab:::read_hydatl_by_vpu_val(vpu)
+  hab_shp <- proc.attr.hydfab:::read_hydatl_by_vpu_val(vpu,dir_base_hydatl)
 
   # Read in the hydrofabric data
   div_hfab_val <- proc.attr.hydfab:::read_hfab_lyr_val(path_hfab,lyr='divides')
 
   path_ntrsct_rds <- proc.attr.hydfab:::std_paths_ntrsct(path_hfab)$rds
-  ls_ntr <- readRDS(path_save_ls_ntrsct)
+  ls_ntr <- base::readRDS(path_save_ls_ntrsct)
 
   # Which divide ids have not been accounted for with hydroatlas downscaling?:
   need_divs <- div_hfab_val$divide_id[which(!div_hfab_val$divide_id %in% names(ls_ntr))]
@@ -189,18 +191,31 @@ for(path_hfab in paths_hfab){
 # ---------------------------------------------------------------------------- #
 ######################## 3. HYDROATLAS ATTRIBUTES  #############################
 # ---------------------------------------------------------------------------- #
+message("Downscaling/areal averaging hydroatlas attributes to hydrofabric divides")
 # Proportionally scale hydroatlas attributes by fractional hf coverage
 #.  and write scaled attributes to hydrofabric gpkg (& a separate .csv)
 weighted_mean <- function(x, w) {
   sum(x * w) / sum(w)
 }
 # Read the global hydroatlas attributes
-path_haa_global <-  file.path(dir_base_hydatl,"BasinATLAS_Data_v10.gdb","BasinATLAS_v10.gdb")
+
 layrs_global_attrs <- sf::st_layers(path_haa_global)
 high_res_lyr <- layrs_global_attrs$name[base::grep("lev12",layrs_global_attrs$name)]
 df_haa_global <- sf::read_sf(path_haa_global,layer=high_res_lyr)
 
 # Subset hydroatlas attributes to catchments of interest (e.g. AK domain)
+for(path_hfab in paths_hfab){
+  # hydroatlas basins shapefiles
+  if(base::grepl("ak_nextgen",path_hfab)){
+    vpu <- "ak"
+    ak_hab_shp <- proc.attr.hydfab:::read_hydatl_by_vpu_val(vpu,dir_base_hydatl)
+  } else if(base::grepl("prvi_nextgen",path_hfab)){
+    vpu <- "prvi"
+    na_hab_shp <- proc.attr.hydfab:::read_hydatl_by_vpu_val(vpu,dir_base_hydatl)
+  } else {
+    print(glue::glue("Problem with {path_hfab}. Skipping!"))
+  }
+}
 df_haa_ak <- df_haa_global %>% dplyr::filter(HYBAS_ID %in% ak_hab_shp$HYBAS_ID)
 df_haa_na <- df_haa_global %>% dplyr::filter(HYBAS_ID %in% na_hab_shp$HYBAS_ID)
 rm(df_haa_global) # Remove the large global dataset from memory
@@ -208,6 +223,7 @@ rm(df_haa_global) # Remove the large global dataset from memory
 # Read in the hydroatlas categories, to identify which cols to aggregate by averaging!
 hydatl_catg <- yaml::read_yaml(path_hydatl_catg)
 
+ls_all_attrs <- list()
 for(path_hfab in paths_hfab){
 
   if(base::grepl("ak",path_hfab)){
@@ -251,6 +267,10 @@ for(path_hfab in paths_hfab){
       dplyr::summarize_at(dplyr::vars(cols_to_average),
                           list(~ weighted_mean(., frac_overlaps)/totl_coverage))
     df_wt_mean$divide_id <- divid
+    df_wt_mean$vpu <- vpu
+    df_wt_mean$id <- base::unique(sub_ntrsct$id)
+    # Refer to proc.attr.hydfab::retr_hfab_id_wrap()
+    df_wt_mean$hfab_uid <- proc.attr.hydfab::custom_hfab_id(df_wt_mean, col_vpu = "vpu",col_id = "id")
     df_wt_mean$totl_hydatl_locs <- nrow(sub_ntrsct)
     df_wt_mean$total_coverage <- totl_coverage
     df_wt_mean$area_ntrsct_covered_sqkm <- base::sum(sub_ntrsct$area_intersect)/1E6
@@ -267,7 +287,7 @@ for(path_hfab in paths_hfab){
   # Compile weighted mean attributes
   dt_wt_mean <- data.table::rbindlist(ls_wt_mean)
   # Reorder the column names
-  new_cols <- c("divide_id","totl_hydatl_locs","total_coverage",
+  new_cols <- c("hfab_uid","divide_id","id","vpu","totl_hydatl_locs","total_coverage",
                 "area_ntrsct_covered_sqkm","area_estimated_tot_sqkm")
   dt_wt_mean <- data.table::setcolorder(dt_wt_mean,
                  base::c(new_cols, base::setdiff(names(dt_wt_mean),new_cols)))
@@ -279,4 +299,14 @@ for(path_hfab in paths_hfab){
   # Update hydrofabric geopackage with the downscaled hydroatlas attributes as a new layer
   sf::st_write(dt_wt_mean,dsn=path_hfab,layer="hydroatlas_attributes",append=FALSE)
   base::message(glue::glue("Updated {path_hfab} with hydroatlas attributes"))
+
+  ls_all_attrs[[vpu]] <- dt_wt_mean
 }
+
+dt_all_attrs <- data.table::rbindlist(ls_all_attrs)
+
+# Write combined OCONUS attributes as parquet:
+ls_vpus <- base::unique(dt_all_attrs$vpu)
+path_attrs_all_oconus <- proc.attr.hydfab:::std_path_attrs_all_parq(dir_base_hfab, ls_vpus)
+arrow::write_parquet(dt_all_attrs,path_attrs_all_oconus)
+

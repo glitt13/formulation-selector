@@ -4,10 +4,14 @@
 \alias{custom_hfab_id}
 \title{Build a custom hydrofabric id that is unique to place}
 \usage{
-custom_hfab_id(df)
+custom_hfab_id(df, col_vpu = "vpu", col_id = "id")
 }
 \arguments{
-\item{df}{The dataframe for a specific location corresponding to the
+\item{df}{The dataframe for a specific location corresponding to the}
+
+\item{col_vpu}{The column in df representing the vpu}
+
+\item{col_id}{The column in df representing the hydrofabric id
 hydrofabric 'network'}
 }
 \description{

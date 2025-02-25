@@ -1,3 +1,7 @@
+#' @title Script to work through FY25 NWM v4 benchmarking (first stage, small # of catchments)
+#' @seealso prep_oconus_hydroatlas.R for preparation of hydroatlas attributes
+#' corresponding to AK and PRVI hydrofabric VPU domains.
+
 # Benchmarking exercises:
 library(proc.attr.hydfab)
 library(janitor)
@@ -133,12 +137,16 @@ if (base::any(base::is.na(dt_meta$featureID))){
 
 library(arrow)
 hydatl <- arrow::read_parquet("~/Downloads/hydroatlas_vars.parquet")
+# TODO retrieve hydroatlas catchment attributes (make them a parquet format)
 
-# TODO retrieve hydroatlas catchment attributes
+
+
 # Now grab attributes for these watersheds
 path_attr_config <- "~/git/formulation-selector/scripts/analysis/benchmarking/oconus_attrs.yaml"
 Retr_Params <- proc.attr.hydfab::attr_cfig_parse(path_attr_config)
 
+
+# TODO determine vpu to map to appropriate hydrofabric geopackage created by
 
 # TODO add
 
