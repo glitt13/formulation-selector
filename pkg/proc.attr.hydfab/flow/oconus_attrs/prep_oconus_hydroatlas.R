@@ -7,7 +7,7 @@
 #' This assumes that the coarser-scale hydroatlas data may be downscaled to
 #'. the smaller-scaled hydrofabric divides.
 #' @details Intended for OCONUS processing of AK and PRVI, NWMv4.
-#' Based on hydrofabric v2.2 and hydroatlas v1.
+#' Based on hydrofabric v2.2 and hydroatlas v1, but updates may be
 #' 1) MUST download the `prvi` and `ak` hydrofabric datasets from:
 #' https://www.lynker-spatial.com/data?path=hydrofabric%2Fv2.2%2F
 #' 2) MUST download the hydroBASINS datasets for North America and Arctic
@@ -15,8 +15,10 @@
 #' @note Relevant internal proc.attr.hydfab functions stored inside
 #'  `proc.attr.hydfab/R/proc_hydatl_hydfab.R`
 #'  Transforms each hydrofabric into CRS 4326 for areal weighting calculations.
+#' @note Internal to the Regionalization team, outputs shared in NOAA google drive:
+#' https://drive.google.com/drive/folders/1RpmXevXvhKR-DGmf_lY8nHzwkghK8LOO?usp=drive_link
 # Changelog / Contributions
-#. 2025-02-24 Originally created, GL
+#. 2025-02-25 Originally created, GL
 
 library(sf)
 library(dplyr)
@@ -30,6 +32,7 @@ dir_save_base <- "~/noaa/analysis/oconus_hydatl/"
 
 # Hydrofabric data downloaded from Lynker-spatial
 dir_base_hfab <- "~/noaa/hydrofabric/v2.2/"
+dir_hfab_tab_dat <- "~/noaa/hydrofabric/tabular-data/" # Save the parquet file here
 path_hfab_ak <- base::file.path(dir_base_hfab,"ak_nextgen.gpkg")
 path_hfab_prvi <- base::file.path(dir_base_hfab,"prvi_nextgen.gpkg")
 paths_hfab <- base::c(path_hfab_ak,path_hfab_prvi) # Define the paths to the hydrofabric geopackages of interest
@@ -38,6 +41,8 @@ redo_intersection_analysis <- FALSE # Should we re-run hydroatlas/hydrofabric in
 # Directory containing hydrotlas basins manually downloaded from https://www.hydrosheds.org/products/hydrobasins
 dir_base_hydatl <- "~/noaa/data/hydroatlas/"
 path_haa_global <-  file.path(dir_base_hydatl,"BasinATLAS_Data_v10.gdb","BasinATLAS_v10.gdb")
+
+
 #------ END USER INPUT HERE
 if(!base::dir.exists(dir_save_base)){
   base::dir.create(dir_save_base,recursive=TRUE)
@@ -307,6 +312,6 @@ dt_all_attrs <- data.table::rbindlist(ls_all_attrs)
 
 # Write combined OCONUS attributes as parquet:
 ls_vpus <- base::unique(dt_all_attrs$vpu)
-path_attrs_all_oconus <- proc.attr.hydfab:::std_path_attrs_all_parq(dir_base_hfab, ls_vpus)
+path_attrs_all_oconus <- proc.attr.hydfab:::std_path_attrs_all_parq(dir_hfab_tab_dat, ls_vpus)
 arrow::write_parquet(dt_all_attrs,path_attrs_all_oconus)
 
