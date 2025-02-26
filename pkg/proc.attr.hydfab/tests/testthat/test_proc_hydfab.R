@@ -74,7 +74,7 @@ testthat::test_that("std_feat_id",{
 #
 #   # columns using wb ids:
 #   idxs_cstm_hfab <- grep("-wb-",dt_have_hf$featureID)
-#   testthat::expect_true(all(dt_have_hf$featureSource[idxs_cstm_hfab] == "custom_hfab"))
+#   testthat::expect_true(all(dt_have_hf$featureSource[idxs_cstm_hfab] == "custom_hf"))
 #
 #   testthat::expect_true(all(names(dt_need_hf) %in% names(dt_have_hf)))
 #
@@ -230,7 +230,7 @@ testthat::test_that("retr_hfab_id_wrap correctly retrieves hydrofabric IDs", {
 
   # columns using wb ids:
   idxs_cstm_hfab <- base::grep("-wb-",result$featureID)
-  testthat::expect_true(base::all(result$featureSource[idxs_cstm_hfab] == "custom_hfab"))
+  testthat::expect_true(base::all(result$featureSource[idxs_cstm_hfab] == "custom_hf"))
 
   testthat::expect_true(base::all(base::names(dt_need_hf) %in% base::names(result)))
 })
