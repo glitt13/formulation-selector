@@ -8,6 +8,7 @@ proc_attr_hydatl(
   hf_id,
   path_ha,
   ha_vars,
+  hf_id_col = c("id", "hf_id")[2],
   s3_ha = "s3://lynker-spatial/tabular-resources/hydroATLAS/hydroatlas_vars.parquet"
 )
 }
@@ -19,9 +20,11 @@ parquet holding the hydroatlas data as formatted for the hydrofabric.}
 
 \item{ha_vars}{list of characters. The variables of interest in the hydroatlas v1}
 
+\item{hf_id_col}{Custom column name for hydrofabric id unique identifier}
+
 \item{s3_ha}{character. The s3 path containing original
 hydroatlas-hydrofabric dataset.}
 }
 \description{
-retrieves hydrofabric variables from s3 bucket
+retrieves hydrofabric variables from s3 bucket or a local file
 }
