@@ -34,5 +34,5 @@ Retrieve hydrofabric IDs wrapper
 Intended for situations when comids unavailable, generally as OCONUS
 }
 \seealso{
-prep_oconus_hydroatlas.R also createas the hfab_uid using custom_hfab_id()
+prep_oconus_hydroatlas.R also createas the hf_uid using custom_hf_id()
 }

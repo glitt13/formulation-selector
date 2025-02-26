@@ -16,17 +16,17 @@ library(tidyr)
 
 
 # Standardize data to featureID & featureSource
-std_feat_id <- function(df, name_featureSource = c("COMID","custom_hfab")[1],
+std_feat_id <- function(df, name_featureSource = c("COMID","custom_hf")[1],
                         col_featureID = NULL, vals_featureID = NULL){
   #' @title Generate the standardized format of featureID and featureSource
   #' @param df The data.frame of interest containing an identifier
-  #' @param name_featureSource The expected name of the feature source. Default "COMID" expected for CONUS, but OCONUS will use "custom_hfab"
+  #' @param name_featureSource The expected name of the feature source. Default "COMID" expected for CONUS, but OCONUS will use "custom_hf"
   #' @param col_featureID The column name inside `df` containing featureID of interest. Must provide if `vals_featureID` empty.
   #' @param vals_featureID The unique identifiers to populate featureID of interest. Must provide if `col_featureID` empty.
   #' @export
 
   # Check expected featureSource names
-  allowed_names <- c("COMID","custom_hfab")
+  allowed_names <- c("COMID","custom_hf")
   if(!name_featureSource %in% allowed_names){
     warning(glue::glue("The name_featureSource {name_featureSource} is not in
                        the list of expected featureSource names:
@@ -230,7 +230,7 @@ retr_state_terr_postal <- function(lat, lon) {
   return(postal_id)
 }
 
-custom_hfab_id <- function(df, col_vpu = "vpu",col_id = "id"){
+custom_hf_id <- function(df, col_vpu = "vpu",col_id = "id"){
   #' @title Build a custom hydrofabric id that is unique to place
   #' @param df The dataframe for a specific location corresponding to the
   #' @param col_vpu The column in df representing the vpu
@@ -273,7 +273,7 @@ retr_hfab_id_usgs_gage <- function(gage_id,ntwk){
   hf_simple_ids <- hfsubsetR::find_origin(network=ntwk, id = gid_char,type = "hl_uri")
   sub_loc <- ntwk[ntwk$id==hf_simple_ids$id,] %>% unique()
 
-  hf_id <- proc.attr.hydfab::custom_hfab_id(sub_loc)
+  hf_id <- proc.attr.hydfab::custom_hf_id(sub_loc)
 
   return(hf_id)
 }
@@ -313,7 +313,7 @@ retr_hfab_id_coords <- function(path_gpkg, ntwk, epsg_domn,lon,lat,
     # Subset network based on the origin id:
     sub_ntwk <- ntwk[ntwk$id == origin,] %>% unique()
     # Generate the customized unique identifier
-    hf_id <- proc.attr.hydfab::custom_hfab_id(sub_ntwk)
+    hf_id <- proc.attr.hydfab::custom_hf_id(sub_ntwk)
   }
   return(hf_id)
 }
@@ -368,7 +368,7 @@ retr_hfab_id_wrap <- function(dt_need_hf, path_oconus_hfab_config,
   #' @param col_lon column name inside `dt_need_hf` for longitude value
   #' @param col_lat column name inside `dt_need_hf` for latitude value
   #' @param epsg_coords The CRS for the lat/lon data inside `dt_need_hf`
-  #' @seealso prep_oconus_hydroatlas.R also createas the hfab_uid using custom_hfab_id()
+  #' @seealso prep_oconus_hydroatlas.R also createas the hf_uid using custom_hf_id()
   #' @export
   # TODO  modify this given the updated hydrofabric per https://github.com/owp-spatial/hfsubsetR/issues/6
 
@@ -444,14 +444,14 @@ retr_hfab_id_wrap <- function(dt_need_hf, path_oconus_hfab_config,
       }
       hf_ids[[i]] <- hf_id
     } # End for loop over each location
-    sub_dt_need_gpkg$hfab_uid <- hf_ids %>% base::unlist()
+    sub_dt_need_gpkg$hf_uid <- hf_ids %>% base::unlist()
 
     ls_sub_gpgk_need_hf[[path_gpkg]] <- sub_dt_need_gpkg
   } # End for loop over unique gpkg paths
 
   dt_need_hf_nomor <- data.table::rbindlist(ls_sub_gpgk_need_hf)
   sub_need_hf_nomor <- dt_need_hf_nomor %>%
-    dplyr::select(base::c(col_usgsId,"hfab_uid"))
+    dplyr::select(base::c(col_usgsId,"hf_uid"))
   # Recombine
   dt_need_hf_mrge <- base::merge(x=dt_need_hf,
                                  y=sub_need_hf_nomor,
@@ -459,8 +459,8 @@ retr_hfab_id_wrap <- function(dt_need_hf, path_oconus_hfab_config,
 
   # Standardize the unique identifiers to the format used across formulation-selector
   dt_have_hf <- proc.attr.hydfab::std_feat_id(df=dt_need_hf_mrge,
-                                              name_featureSource ="custom_hfab",
-                                              col_featureID = "hfab_uid")
+                                              name_featureSource ="custom_hf",
+                                              col_featureID = "hf_uid")
 
   return(dt_have_hf)
 }
