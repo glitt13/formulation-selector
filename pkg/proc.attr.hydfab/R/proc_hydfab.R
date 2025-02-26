@@ -246,7 +246,7 @@ custom_hf_id <- function(df, col_vpu = "vpu",col_id = "id"){
   }
 
   cstm_id <- paste0(df[[col_vpu]],"-",df[[col_id]]) %>% unique()
-  if(length(cstm_id)>1){
+  if(base::any(base::duplicated(cstm_id))){
     stop("More than one custom id for hydrofabric. This shouldn't happen.")
   }
   return(cstm_id)
