@@ -52,7 +52,6 @@ gauge_ids <- c("JOPM7","RNDO2","CSNC2",
 data_source <- c("nwps","hads")[2] # Recommended to use HADS over NWPS
 # ----- grab comids using a method proposed by Mike Johnson
 
-
 #### NWPS data
 # NOTE: NWPS gauges not comprehensive
 if(data_source == "nwps"){
@@ -140,8 +139,6 @@ hydatl <- arrow::read_parquet("~/Downloads/hydroatlas_vars.parquet")
 # TODO retrieve hydroatlas catchment attributes (make them a parquet format)
 
 
-<<<<<<< HEAD
-
 # tabular data:
 dir_hfab_tab_dat <- "~/noaa/hydrofabric/tabular-data/" # Save the parquet file here
 path_attrs_all_oconus <- proc.attr.hydfab:::std_path_attrs_all_parq(dir_hfab_tab_dat, ls_vpus=c("ak","prvi"))
@@ -178,8 +175,6 @@ ha <- arrow::open_dataset(path_attrs_all_oconus) %>%
   dplyr::select(hf_id_col, dplyr::all_of(ha_vars)) %>%
   dplyr::collect()
 
-=======
->>>>>>> 26e8464 (feat: add parquet file write for all oconus hydroatlas attributes corresponding to the hydrofabric)
 
 # Now grab attributes for these watersheds
 path_attr_config <- "~/git/formulation-selector/scripts/analysis/benchmarking/oconus_attrs.yaml"
