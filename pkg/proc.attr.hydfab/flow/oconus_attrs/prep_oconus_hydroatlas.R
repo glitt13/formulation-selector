@@ -275,7 +275,7 @@ for(path_hfab in paths_hfab){
     df_wt_mean$vpu <- vpu
     df_wt_mean$id <- base::unique(sub_ntrsct$id)
     # Refer to proc.attr.hydfab::retr_hfab_id_wrap()
-    df_wt_mean$hfab_uid <- proc.attr.hydfab::custom_hfab_id(df_wt_mean, col_vpu = "vpu",col_id = "id")
+    df_wt_mean$hf_uid <- proc.attr.hydfab::custom_hf_id(df_wt_mean, col_vpu = "vpu",col_id = "id")
     df_wt_mean$totl_hydatl_locs <- nrow(sub_ntrsct)
     df_wt_mean$total_coverage <- totl_coverage
     df_wt_mean$area_ntrsct_covered_sqkm <- base::sum(sub_ntrsct$area_intersect)/1E6
@@ -292,7 +292,7 @@ for(path_hfab in paths_hfab){
   # Compile weighted mean attributes
   dt_wt_mean <- data.table::rbindlist(ls_wt_mean)
   # Reorder the column names
-  new_cols <- c("hfab_uid","divide_id","id","vpu","totl_hydatl_locs","total_coverage",
+  new_cols <- c("hf_uid","divide_id","id","vpu","totl_hydatl_locs","total_coverage",
                 "area_ntrsct_covered_sqkm","area_estimated_tot_sqkm")
   dt_wt_mean <- data.table::setcolorder(dt_wt_mean,
                  base::c(new_cols, base::setdiff(names(dt_wt_mean),new_cols)))
