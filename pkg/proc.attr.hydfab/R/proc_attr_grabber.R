@@ -290,42 +290,116 @@ proc_attr_std_hfsub_name <- function(comid,custom_name='', fileext='gpkg'){
   return(hfsub_fn)
 }
 
-proc_attr_hydatl <- function(hf_id, path_ha, ha_vars,
+# TODO accommodate multiple id locations:
+ha_vars <- c("ari_ix_sav","cly_pc_sav","snw_pc_uyr")
+hf_ids <- base::c("ak-wb-15164", NA,"hi-wb-2629","hi-wb-1365","prvi-wb-752",9250320)
+hf_ids <- c(1022566, 1702414)
+proc_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
+                                  hf_id_cols = c("hf_uid","hf_id","id")){
+  #' @param hf_id_cols Possible hydrofabric id columns, *listed in priority*, meaning
+  #' the `'hf_uid'` is the most important column to find, and if that is not
+  #' present, move on to the `'hf_id'` and finally to `'id'`
+  #' @details The hf_ids may contain 1) a COMID, corresponding to CONUS, &/or
+  #' 2) a hydrofabric id for OCONUS
+  # We want to make sure the hydrofabric id is a unique id
+  ls_dat_ha <- list()
+  for(path_ha in paths_ha){
+
+    # TODO how do we split the hf_ids into COMIDs and non-COMIDs??
+    #.  - attempt proc_attr_hydatl() for each path_ha,generate NA empties, then merge back into the appropriate order?
+
+    colnames_ha <- arrow::open_dataset(path_ha) %>% base::colnames()
+    # Identify which hydrofabric id is present in this dataset
+    bool_ids <- base::lapply(
+      hf_id_cols, function(i) i %in% colnames_ha) %>%
+      base::unlist()
+    hf_id_col <- hf_id_cols[bool_ids][1] # Use the highest priority id detected
+
+    if (hf_id_col == "hf_uid"){ # Expected to be OCONUS
+      # The uid is already created - use it
+      dat_ha <- proc_attr_hydatl(hf_ids, path_ha, ha_vars,hf_id_col=hf_id_col)
+        # TODO consider identifying an s3_ha path specific for this one
+
+    } else if(hf_id_col == "hf_id"){ # Expected to be CONUS
+      # The case used for the CONUS hydrofabric ids, which are actually COMIDs
+      # DO NOT need to create a custom hydrofabric uid
+      hf_id_num <- as.numeric(hf_ids)[6]
+      dat_ha <- proc_attr_hydatl(hf_id=hf_id_num, path_ha, ha_vars,hf_id_col=hf_id_col)
+
+    } else if(hf_id_col == "id"){
+      # TODO add in the standardization hf_uid approach here
+      stop("TODO: Add standardization for hf_uid")
+      # TODO should we allow 'hf_id' for col_id
+      # TODO
+
+      proc.attr.hydfab::custom_hf_id(df, col_vpu = "vpu",col_id = "id")
+      hf_id_col <- "hf_uid"
+    } else if (base::is.na(hf_id_col)){
+      stop(glue::glue("None of the expected column names present:
+        {paste0(hf_id_cols,collapse=', ')}"))
+    }
+
+
+
+
+
+  }
+
+
+}
+
+
+proc_attr_hydatl <- function(hf_ids, path_ha, ha_vars,hf_id_col=c("hf_uid","hf_id")[2],
                              s3_ha='s3://lynker-spatial/tabular-resources/hydroATLAS/hydroatlas_vars.parquet'){
   #' @title Retrieve hydroatlas variables
-  #' @description retrieves hydrofabric variables from s3 bucket
-  #' @param hf_id character or numeric. the hydrofabric id, usually the COMID, may be vector
+  #' @description retrieves hydrofabric variables from s3 bucket or a local file
+  #' @param hf_ids character or numeric, vector or atomic. The hydrofabric ids
   #' @param path_ha character. full path to the local parquet or s3 bucket's
   #'  parquet holding the hydroatlas data as formatted for the hydrofabric.
   #' @param ha_vars list of characters. The variables of interest in the hydroatlas v1
+  #' @param hf_id_col Custom column name for hydrofabric id unique identifier
   #' @param s3_ha character. The s3 path containing original
   #' hydroatlas-hydrofabric dataset.
   #' @export
+  #'
+  #'
   # Reads hydroatlas variables https://data.hydrosheds.org/file/technical-documentation/HydroATLAS_TechDoc_v10_1.pdf
   #  in a form adapted to the hydrofabric
-
+  # Changelog / contributions
+  #. 2024 Originally created, GL
+  #. 2025-02-25 fix: don't force numeric hf_ids, allow custom hf_id column name
   if(base::grepl("s3",path_ha)){ # Run a check that the bucket connection works
     bucket <- try(arrow::s3_bucket(path_ha),silent=TRUE)
     if('try-error' %in% base::class(bucket)){
       stop(glue::glue("Could not connect to an s3 bucket path for hydroatlas
                       data retrieval. Reconsider the path_ha of {path_ha}"))
     }
-  } else { # presumed to be local path location
-    if(!file.exists(path_ha)){
+  } else if(!file.exists(path_ha)){
       warning(glue::glue(
        "Local filepath does not exist for hydroatlas parquet file:\n{path_ha}
        \nAssigning lynker-spatial s3 path:\n{s3_ha}"))
-      path_ha <- s3_ha
-    }
+      if(domain == 'conus'){
+        path_ha <- s3_ha
+      }
+
+  } # presumed to be local path location
+
+  # Determine whether id should be numeric or character class
+  check_first_val <- arrow::open_dataset(path_ha) %>% select(hf_id_col) %>%
+    head(n=1) %>% collect()
+  if(base::is.numeric(check_first_val[[hf_id_col]])){
+    hf_ids <- base::as.numeric(hf_ids)
+  } else {
+    hf_ids <- base::as.character(hf_ids)
   }
 
-  # Ensure hf_id is numeric
-  hf_id <- base::as.numeric(hf_id)
-
   ha <- arrow::open_dataset(path_ha) %>%
-    dplyr::filter(hf_id %in% !!hf_id) %>%
-    dplyr::select("hf_id", dplyr::any_of(ha_vars)) %>%
-    dplyr::collect()
+      dplyr::filter(!!dplyr::sym(hf_id_col) %in% hf_ids) %>%
+      dplyr::select(hf_id_col, dplyr::all_of(ha_vars)) %>%
+      dplyr::collect()
+
+  # TODO fill in the full tibble based on the provided hf_ids
+  hf_ids
 
   return(ha)
 }
@@ -710,7 +784,7 @@ proc_attr_hf <- function(comid, dir_db_hydfab,custom_name="{lyrs}_",fileext = 'g
   }
 
   # Generate the nldi feature listing ?dataRetrieval::get_nldi_sources()
-  nldi_feat <- base::list(featureSource ="comid",
+  nldi_feat <- base::list(featureSource ="COMID",
                          featureID = as.character(comid))
 
   # Download hydrofabric file if it doesn't exist already
@@ -858,22 +932,35 @@ retr_attr_new <- function(comids,need_vars,path_ha){
     attr_data[['hydroatlas__v1']] <- proc.attr.hydfab::proc_attr_hydatl(
         path_ha=path_ha,
         hf_id=comids,
-        ha_vars=need_vars$ha_vars) %>%
+        ha_vars=need_vars$ha_vars)
+
+    # TODO handle the COMID thing
       # ensures 'COMID' exists as colname
-      dplyr::rename("COMID" = "hf_id")
+      #dplyr::rename("COMID" = "hf_id")
+    # Standardize into featureSource and featureID columns
+    df_hydatl_std <- proc.attr.hydfab::std_feat_id(df=df_hydatl,
+                                  name_featureSource)
+
+    attr_data[['hydroatlas__v1']] <- df_hydatl_std
+
   }
 
   # --------------- USGS NHD Plus attributes ---------------
   if( (base::any(base::grepl("usgs_vars", base::names(need_vars)))) &&
       (base::all(!base::is.na(need_vars$usgs_vars))) ){
     # USGS nhdplusv2 query; list name formatted as {dataset_name}__v{ver_number}
-    attr_data[['usgs_nhdplus__v2']] <- proc.attr.hydfab::proc_attr_usgs_nhd(comid=comids,
-                                                                            usgs_vars=need_vars$usgs_vars)
+    df_nhd <- proc.attr.hydfab::proc_attr_usgs_nhd(comid=comids,
+                              usgs_vars=need_vars$usgs_vars)
+    # Standardize into featureSource and featureID columns
+    df_nhd_std <- proc.attr.hydfab::std_feat_id(df=df_nhd,col_featureID="COMID")
+    attr_data[['usgs_nhdplus__v2']] <- df_nhd_std
+
   }
 
   ########## May add more data sources here and append to attr_data ###########
 
   # ----------- dataset standardization ------------ #
+  # TODO mar25 CHANGE THIS!!! We don't want COMID as a column
   if (!base::all(base::unlist(( # A qa/qc check
     base::lapply(attr_data, function(x)
       base::any(base::grepl("COMID", base::colnames(x)))))))){
@@ -1187,6 +1274,7 @@ proc_attr_wrap <- function(comid, Retr_Params, lyrs='network',overwrite=FALSE,hf
 
   if(hfab_retr){ # Retreive the hydrofabric data, downloading to dir_db_hydfab
     # Retrieve the hydrofabric id
+    # TODO proc_attr_hf doesn't work as expected. Consider overhaul
     net <- try(proc.attr.hydfab::proc_attr_hf(comid=comid,
                                               dir_db_hydfab=Retr_Params$paths$dir_db_hydfab,
                                               custom_name ="{lyrs}_",
