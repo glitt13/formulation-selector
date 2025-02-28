@@ -147,7 +147,35 @@ path_attrs_all_oconus <- proc.attr.hydfab:::std_path_attrs_all_parq(dir_hfab_tab
 path_attrs_conus <- file.path(dir_hfab_tab_dat,"hydroatlas_vars.parquet")
 path_attrs_all_oconus <- "~/noaa/hydrofabric/tabular-data//hydroatlas_attributes_ak_prvi.parquet"
 
-proc.attr.hydfab::proc_attr_hydatl(hf_id = ,path_ha = "~/noaa/")
+proc.attr.hydfab::proc_attr_hydatl(hf_id = 899,path_ha = path_attrs_conus,ha_vars =c("ari_ix_sav","cly_pc_sav","snw_pc_uyr"))
+proc.attr.hydfab::proc_attr_hydatl(hf_id =, path_ha = path_attrs_all_oconus,ha_vars =c("ari_ix_sav","cly_pc_sav","snw_pc_uyr"))
+
+paths_ha <- c(path_attrs_conus, path_attrs_all_oconus)
+
+hf_id_col <- "id"
+
+dt_ha_oc <- arrow::read_parquet(path_attrs_all_oconus)
+
+# TODO perform clean up on oconus NA values and remake hf_uid.
+idxs_na_id <- which(is.na(dt_ha_oc$id))
+dt_ha_oc$id[idxs_na_id] <- base::gsub(pattern = "cat-",replacement= "wb-",
+                                      x = dt_ha_oc$divide_id[idxs_na_id])
+dt_ha_oc$hf_uid <- proc.attr.hydfab::custom_hf_id(dt_ha_oc, col_vpu = "vpu",col_id = "id")
+
+length(which(is.na(dt_ha_oc$id)))
+
+length(unique(dt_ha_oc$hfab_uid))
+
+head(dt_ha_oc$id)
+hf_id <- "wb-16439"
+hf_id <- c("wb-8982","wb-16439", "wb-10272")
+ha_vars <- c("ari_ix_sav","cly_pc_sav","snw_pc_uyr")
+
+
+ha <- arrow::open_dataset(path_attrs_all_oconus) %>%
+  dplyr::filter(!!dplyr::sym(hf_id_col) %in% hf_id) %>%#
+  dplyr::select(hf_id_col, dplyr::all_of(ha_vars)) %>%
+  dplyr::collect()
 
 
 # Now grab attributes for these watersheds
