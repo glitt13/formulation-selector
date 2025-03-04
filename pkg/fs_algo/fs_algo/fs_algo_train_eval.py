@@ -58,7 +58,8 @@ class AttrConfigAndVars:
 
         # identify attribute data of interest from attr_config
         attrs_all = [v for x in self.attr_config['attr_select'] for k,v in x.items() if '_vars' in k]
-        attrs_sel = [x for x in list(itertools.chain(*attrs_all)) if x is not None]
+        attrs_all_filtered = [attr for attr in attrs_all if attr is not None]
+        attrs_sel = [x for x in list(itertools.chain(*attrs_all_filtered)) if x is not None]
 
         if len(attrs_sel) == None: # If no attributes generated, assume all attributes are of interest
             attrs_sel = 'all'
