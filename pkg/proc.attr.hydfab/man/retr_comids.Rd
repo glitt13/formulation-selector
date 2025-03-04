@@ -18,7 +18,7 @@ represents exactly what the nldi_feature$featureID should be, then
 featureID="{gage_id}". In other instances, conversions may be necessary,
 e.g. featureID="USGS-{gage_id}". When defining featureID, it's expected
 that the term 'gage_id' is used as a variable in glue syntax to create featureID
-Refer to ?dataRetrieval::get_nldi_sources() for options to use with nldi_featre}
+Refer to ?dataRetrieval::get_nldi_sources() for options to use with nldi_feature}
 }
 \description{
 Retrieve comids based on provided gage_ids and expected NLDI format
