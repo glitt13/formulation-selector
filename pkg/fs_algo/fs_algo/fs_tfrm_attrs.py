@@ -65,11 +65,12 @@ if __name__ == "__main__":
 
     #%% READ COMIDS FROM CUSTOM FILE (IF path_comid present in tfrm config)
     # Extract location of custom file containing comids:
-    path_comid = eval(f"f'{fio.get('path_comid', None)}'")
+    path_comid = fio.get('path_comid', None)
 
     ls_comid = list()
     # Read in comid from custom file (e.g. predictions)
     if path_comid:
+        path_comid = eval(f"f'{fio.get('path_comid', None)}'")
         path_comid = Path(path_comid)
         colname_comid = fio.get('colname_comid') 
         df_comids = fta.read_df_ext(path_comid)
