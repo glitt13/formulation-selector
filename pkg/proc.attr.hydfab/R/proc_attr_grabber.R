@@ -34,11 +34,13 @@ attr_cfig_parse <- function(path_attr_config){
 
   # Define directory paths from the config file
   # Determine if home_dir. Either defined in attribute config file or assumed to be system default.
-
-  home_dir_read <- try(glue::glue(base::unlist(raw_config$file_io)[['home_dir']]))
-  if ("try-error" %in% class(home_dir_read)){
+  home_dir_read <- tryCatch({glue::glue(
+    base::unlist(raw_config$file_io)[['home_dir']])},
+    error = function(e) {NULL})
+  if (is.null(home_dir_read)){
     home_dir <- Sys.getenv("HOME")
   } else if (!dir.exists(home_dir_read)){
+    warning(glue::glue("The user-defined home_dir does not exist. Assigning system default."))
     home_dir <- Sys.getenv("HOME")
   } else {
     home_dir <- home_dir_read
@@ -273,6 +275,22 @@ proc_attr_hydatl <- function(hf_id, path_ha, ha_vars,
 
   return(ha)
 }
+
+fs_retr_nhdp_comids_geom <- function(gage_ids,realization='flowline'){
+  #' @param gage_ids vector of USGS gage_ids
+  #' @seealso \link[proc.attr.hydfab]{proc_attr_read_gage_ids_fs}
+  #' @return data.frame of comid and geometric point in epsg 4326
+
+  df_gage_ids <- try(nhdplusTools::get_nhdplus(nwis  = gage_ids,
+                                               realization=realization))
+  if("try-error" %in% class(df_gage_ids)){
+    stop("Something isn't right. Maybe try to provide something ")
+  }
+
+
+  return(df_gage_ids)
+}
+
 
 proc_attr_usgs_nhd <- function(comid,usgs_vars){
   #' @title Retrieve USGS variables based on comid
