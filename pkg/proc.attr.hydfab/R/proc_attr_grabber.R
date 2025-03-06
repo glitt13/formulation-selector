@@ -249,8 +249,6 @@ proc_attr_hydatl <- function(hf_ids, path_ha, ha_vars,hf_id_col=c("hf_uid","hf_i
   return(ha)
 }
 
-<<<<<<< HEAD
-
 std_dir_dataset <- function(dir_std_base, ds){
   #' @title Generate the standardized dataset directory
   #' @param dir_std_base The standardized base directory
