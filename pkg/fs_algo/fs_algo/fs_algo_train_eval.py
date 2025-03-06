@@ -494,7 +494,7 @@ def fs_save_algo_dir_struct(dir_base: str | os.PathLike ) -> dict:
 
     return out_dirs
 
-def _std_fs_proc_ds_companion_gpkg_path(path_fs_proc:str|os.PathLike)->os.PathLike:
+def _std_fs_proc_ds_companion_gpkg_path(path_fs_proc:str|os.PathLike,rm_ext:str=".nc")->os.PathLike:
     """Create the standardized gpkg path for coordinate data & id mapping
       corresponding to the standardized input data
 
@@ -743,8 +743,7 @@ def fs_retr_nhdp_comids_geom_wrap(path_save_gpkg:str|os.PathLike,
     :return: Geodataframe with the columns 'comid', 'geometry', 'gage_id'
     :rtype: gpd.GeoDataFrame
     :seealso: :func:`combine_resp_gdf_comid_wrap` A wrapper function that calls this function
-    :seealso: :func:`_std_fs_proc_ds_companion_gpkg_path` The standardized path to use for path_save_gpkg
-    :seealso: :mod:`proc.attr.hydfab`:func:`fs_retr_nhdp_comids_geom_wrap` The corresponding R function
+    :seealso: :func:`_std_fs_proc_ds_paths` The standardized path to use for path_save_gpkg
     """
     path_save_gpkg = Path(path_save_gpkg)
     if path_save_gpkg.exists(): # Maybe we can skip the database connection!
@@ -765,14 +764,16 @@ def fs_retr_nhdp_comids_geom_wrap(path_save_gpkg:str|os.PathLike,
             gdf_comid = fs_retr_nhdp_comids_geom(featureSource=featureSource,
                                                         featureID=featureID,
                                                         gage_ids=gage_ids)
-            # Write to file
+            # Ensure the original identifier gage_id matches up to the coords
+            gdf_comid['gage_id'] = gage_ids
             gdf_comid.to_file(path_save_gpkg, layer = 'outlet',driver='GPKG')
     else:
         # Grab the comid and associated coords/geodataframe 
         gdf_comid = fs_retr_nhdp_comids_geom(featureSource=featureSource,
                                                     featureID=featureID,
                                                     gage_ids=gage_ids)
-        # Write to file
+        # Ensure the original identifier gage_id matches up to the coords
+        gdf_comid['gage_id'] = gage_ids
         gdf_comid.to_file(path_save_gpkg, layer = 'outlet',driver='GPKG')
     return(gdf_comid)
 
@@ -879,6 +880,7 @@ def split_train_test_comid_wrap(dir_std_base:str|os.PathLike,
     """
     dict_gdf_comids = dict()
     for ds in datasets:
+    
         # Generate the geodataframe in a standard format
         dict_resp_gdf = combine_resp_gdf_comid_wrap(dir_std_base,ds,attr_config )
     
