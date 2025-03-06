@@ -35,9 +35,10 @@ attr_cfig_parse <- function(path_attr_config){
 
   # Define directory paths from the config file
   # Determine if home_dir. Either defined in attribute config file or assumed to be system default.
-
-  home_dir_read <- try(glue::glue(base::unlist(raw_config$file_io)[['home_dir']]))
-  if ("try-error" %in% class(home_dir_read)){
+  home_dir_read <- tryCatch({glue::glue(
+    base::unlist(raw_config$file_io)[['home_dir']])},
+    error = function(e) {NULL})
+  if (is.null(home_dir_read)){
     home_dir <- Sys.getenv("HOME")
   } else if (!dir.exists(home_dir_read)){
     warning(glue::glue("The user-defined home_dir does not exist. Assigning system default."))
@@ -870,61 +871,17 @@ fs_retr_nhdp_comids_geom <- function(gage_ids,featureSource='nwissite',
                                      featureID="USGS-{gage_id}"){
   #' @title Retrieve comids & point geometry based on nldi_feature identifiers
   #' @param gage_ids vector of USGS gage_ids
-  #' @param featureSource The [nhdplusTools::get_nldi_feature] feature
-  #' featureSource, default 'nwissite'
-  #' @param featureID a glue-configured conversion of gage_id into a recognized
-  #' featureID for [nhdplusTools::get_nldi_feature]. E.g. if gage_id
-  #' represents exactly what the nldi_feature$featureID should be, then
-  #'  featureID="{gage_id}". In other instances, conversions may be necessary,
-  #'  e.g. featureID="USGS-{gage_id}". When defining featureID, it's expected
-  #'  that the term 'gage_id' is used as a variable in glue syntax to create featureID
-  #'  Refer to ?dataRetrieval::get_nldi_sources() for options to use with nldi_feature
   #' @seealso \link[proc.attr.hydfab]{proc_attr_read_gage_ids_fs}
-  #' @seealso \link[proc.attr.hydfab]{fs_retr_nhdp_comids_geom_wrap}
-  #' @seealso `fs_algo.fs_algo_train_eval.fs_retr_nhdp_comids_geom`
-  #' @return data.table of comid and geometric point in epsg 4326
-  #' @export
-  # Changelog/Contributions
-  #. 2025-03-07 Originally created, GL
+  #' @return data.frame of comid and geometric point in epsg 4326
 
-  ls_featid <- base::list()
-  ls_sitefeat <- base::list()
-  for (gage_id in gage_ids){ #
-    if(!base::exists("gage_id")){
-      stop("MUST use 'gage_id' as the object name!!! \n
-      Expected when defining nldi_feat$featureID")
-    }
-
-    # Retrieve the COMID
-    # Reference: https://doi-usgs.github.io/nhdplusTools/articles/get_data_overview.html
-    nldi_feat <- base::list(featureSource =featureSource,
-              # NOTE: featureID string should expect {'gage_id'} as a variable!
-                            featureID = as.character(glue::glue(featureID))
-
-    )
-    ls_featid[[gage_id]] <- nldi_feat
-    site_feature <- try(nhdplusTools::get_nldi_feature(nldi_feature = nldi_feat))
-    if('try-error' %in% base::class(site_feature)){
-      stop(glue::glue("The following nldi features didn't work. You may need to
-                 revisit the configuration yaml file that processes this dataset in
-                fs_proc: \n {featureSource}, and featureID={featureID}"))
-    } else if (!is.null(site_feature)){ # Try again with discover_nhdplus_id
-      warning(glue::glue("Could not retrieve geometry for {nldi_feat$featureID}."))
-      comid <- nhdplusTools::discover_nhdplus_id(point=site_feature$geometry)
-      site_feature <- tibble::tibble(featureID=nldi_feat$featureID,comid=comid)
-    } else {
-      all_names_site <- base::names(site_feature)
-    }
-    ls_sitefeat[[gage_id]] <- site_feature
+  df_gage_ids <- try(nhdplusTools::get_nhdplus(nwis  = gage_ids,
+                                               realization=realization))
+  if("try-error" %in% class(df_gage_ids)){
+    stop("Something isn't right. Maybe try to provide something ")
   }
 
-  dt_all_geom <- data.table::rbindlist(ls_sitefeat,fill = TRUE,use.names = TRUE)
-  # Rename columns
-  dt_comid_geom <- dt_all_geom %>%
-    dplyr::rename(featureID = identifier)
-  dt_comid_geom$featureSource = 'nwissite'
-  dt_comid_geom$gage_id <- gage_ids
-  return(dt_comid_geom)
+
+  return(df_gage_ids)
 }
 
 
