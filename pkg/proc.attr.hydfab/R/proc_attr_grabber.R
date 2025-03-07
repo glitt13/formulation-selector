@@ -134,7 +134,7 @@ retrieve_attr_exst <- function(comids, vars, dir_db_attrs, bucket_conn=NA){
   #' @param dir_db_attrs character class. The path where data
   #' @param bucket_conn Default NA. Placeholder in case a bucket connection is
   #' ever created
-  #' @seealso [proc_attr_wrap]
+  #' @seealso \link[proc.attr.hydfab]{proc_attr_wrap}
   #' @export
   # Changelog/Contributions
   #  2024-07-26 Originally created, GL
@@ -279,7 +279,7 @@ proc_attr_usgs_nhd <- function(comid,usgs_vars){
   #' @param comid character or numeric class. The common identifier USGS
   #' location code for a surface water feature. May be multiple comids.
   #' @param usgs_vars list class. The standardized names of NHDplus variables.
-  #' @seealso [nhdplusTools::get_characteristics_metadata]
+  #' @seealso \link[nhdplusTools]{get_characteristics_metadata}
   #' @export
   #'
   # Changelog/contributions
@@ -382,16 +382,8 @@ proc_attr_hf <- function(comid, dir_db_hydfab,custom_name="{lyrs}_",fileext = 'g
                         overwrite=overwrite),pattern="exists and overwrite is FALSE")
 
   # Read the hydrofabric file gpkg for each layer
-  hfab_ls <- list()
-  if (fileext == 'gpkg') {
-    # Define layers
-    layers <- sf::st_layers(dsn = fp_cat)
-    for (lyr in layers$name){
-      hfab_ls[[lyr]] <- sf::read_sf(fp_cat,layer=lyr)
-    }
-  } else {
-    stop("# TODO add in the type of hydrofabric file to read based on extension")
-  }
+  hfab_ls <- proc.attr.hydfab(path_gpkg=fp_cat,layers=NULL)
+
   net <- hfab_ls[[lyrs]] %>%
     dplyr::select(divide_id, hf_id) %>%
     dplyr::filter(complete.cases(.)) %>%
@@ -417,7 +409,7 @@ proc_attr_exst_wrap <- function(path_attrs,vars_ls,bucket_conn=NA){
   #' @param path_attrs character. Path to attribute file data storage location
   #' @param vars_ls list. Variable names
   #' @param bucket_conn TODO add cloud conn details in case data stored in s3
-  #' @seealso [proc_attr_wrap]
+  #' @seealso \link[proc.attr.hydfab]{proc_attr_wrap}
   #' @export
   #'
   # Changelog / Contributions
@@ -471,7 +463,7 @@ proc_attr_exst_wrap <- function(path_attrs,vars_ls,bucket_conn=NA){
 std_attr_data_fmt <- function(attr_data){
   #' @title Standardize the catchment attribute data to read/write in parquet files
   #' @param attr_data list of data.frame of attribute data
-  #' @seealso [retr_attr_new]
+  #' @seealso \link[proc.attr.hydfab]{retr_attr_new}
   #' @export
   # Changelog/Contributions
   #. 2024-12-23 Originally created, GL
@@ -506,8 +498,8 @@ retr_attr_new <- function(comids,need_vars,Retr_Params){
   #' @param comids The list of of the comid identifier
   #' @param need_vars The needed attributes that haven't been acquired yet
   #' @param Retr_Params list. List of list structure with parameters/paths needed to acquire variables of interest
-  #' @seealso [proc_attr_wrap]
-  #' @seealso [proc_attr_mlti_wrap]
+  #' @seealso \link[proc.attr.hydfab]{proc_attr_wrap}
+  #' @seealso \link[proc.attr.hydfab]{proc_attr_mlti_wrap}
   #' @export
   # -------------------------------------------------------------------------- #
   # --------------- dataset grabber ---------------- #
@@ -552,8 +544,8 @@ std_path_attrs <- function(comid, dir_db_attrs){
   #' @title standardized path to attribute parquet file
   #' @param comid character. USGS COMID value of interest
   #' @param dir_db_attrs character. Directory where attribute .parquet files live
-  #' @seealso [proc_attr_wrap]
-  #' @seealso fs_algo.fs_algo_train_eval.fs_read_attr_comid() python function
+  #' @seealso \link[proc.attr.hydfab]{proc_attr_wrap}
+  #' @seealso `fs_algo.fs_algo_train_eval.fs_read_attr_comid()` python function
   #' that reads these files
   #' @export
 
@@ -571,9 +563,9 @@ io_attr_dat <- function(dt_new_dat,path_attrs,
   #' @param dt_cmbo The standardized data.table of attributes
   #' @param path_attrs parquet filepath for attribute data
   #' @param distinct_cols The column names in dt_new_dat that must be distinct
-  #' @seealso [retrieve_attr_exst] for retrieving existing attributes
-  #' @seealso [std_attr_data_fmt]
-  #' @seealso [std_path_attrs]
+  #' @seealso \link[proc.attr.hydfab]{retrieve_attr_exst} for retrieving existing attributes
+  #' @seealso \link[proc.attr.hydfab]{std_attr_data_fmt}
+  #' @seealso \link[proc.attr.hydfab]{std_path_attrs}
   #' @export
   # TODO consider implementing the read existing/update/write all here.
 
@@ -636,7 +628,7 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
   #' @param Retr_Params list. List of list structure with parameters/paths needed to acquire variables of interest
   #' @param lyrs character. The layer names of interest from the hydrofabric gpkg. Default 'network'
   #' @param overwrite boolean. Should the hydrofabric cloud data acquisition be redone and overwrite any local files? Default FALSE.
-  #' @seealso [proc_attrs_gageids]
+  #' @seealso \link[proc.attr.hydfab]{proc_attrs_gageids}
   #' @export
 
   vars_ls <- Retr_Params$vars
@@ -749,8 +741,8 @@ check_miss_attrs_comid_io <- function(dt_all, attr_vars, dir_db_attrs){
   #' @param attr_vars List of the data source and expected attributes
   #' (e.g. list('usgs_vars' = c("TOT_BFI","TOT_TWI")) from Retr_Params$vars)
   #' @param dir_db_attrs Directory where attribute data are stored.
-  #' @seealso [proc_attr_mlti_wrap]
-  #' @seealso [retr_attr_new]
+  #' @seealso \link[proc.attr.hydfab]{proc_attr_mlti_wrap}
+  #' @seealso \link[proc.attr.hydfab]{retr_attr_new}
   #' @export
 
   # The standard path for recording missing attributes
@@ -827,8 +819,8 @@ proc_attr_wrap <- function(comid, Retr_Params, lyrs='network',overwrite=FALSE,hf
   #' @param lyrs character. The layer names of interest from the hydrofabric gpkg. Default 'network'
   #' @param overwrite boolean. Should the hydrofabric cloud data acquisition be redone and overwrite any local files? Default FALSE.
   #' @param hfab_retr boolean. Should the hydrofabric geopackage data be retrieved? Default FALSE.
-  #' @seealso [proc_attrs_gageids]
-  #' @seealso [proc_attr_mlti_wrap]
+  #' @seealso \link[proc.attr.hydfab]{proc_attrs_gageids}
+  #' @seealso \link[proc.attr.hydfab]{proc_attr_mlti_wrap}
   #' @export
 
   # Changelog / Contributions
@@ -893,7 +885,7 @@ proc_attr_wrap <- function(comid, Retr_Params, lyrs='network',overwrite=FALSE,hf
   ########## May add more data sources here and append to attr_data ###########
   # ----------- dataset standardization ------------ #
   # if (!base::all(base::unlist(( # A qa/qc check
-  #         base::lapply(attr_data, function(x)
+  #         base::lapply(attr_data, fu <- tion(x)
   #                 base::any(base::grepl("COMID", colnames(x)))))))){
   #   stop("Expecting 'COMID' as a column name identifier in every dataset")
   # }
@@ -941,7 +933,7 @@ std_path_map_loc_ids <- function(dir_db_attrs){
   #' @title Standardize the path of the csv file that maps NLDI IDs to comids
   #' @description Uses a sub-directory in the dir_db_attrs to place data
   #' @param dir_db_attrs The attributes database path
-  dir_meta_loc <- file.path(Retr_Params$paths$dir_db_attrs,'meta_loc')
+  dir_meta_loc <- file.path(dir_db_attrs,'meta_loc')
   path_meta_loc <- file.path(dir_meta_loc,"comid_featID_map.csv")
   if(!dir.exists(dir_meta_loc)){
     base::dir.create(base::dirname(path_meta_loc),showWarnings = FALSE)
@@ -962,11 +954,11 @@ retr_comids <- function(gage_ids,featureSource,featureID,dir_db_attrs){
   #'  featureID="{gage_id}". In other instances, conversions may be necessary,
   #'  e.g. featureID="USGS-{gage_id}". When defining featureID, it's expected
   #'  that the term 'gage_id' is used as a variable in glue syntax to create featureID
-  #'  Refer to ?dataRetrieval::get_nldi_sources() for options to use with nldi_feature
+  #'  Refer to ?dataRetrieval::get_nldi_sources() for options to use with nldi_featre
   #' @export
   # ---------------- COMID RETRIEVAL ------------------- #
   # TODO create a std function that makes the path_meta_loc
-  path_meta_loc <- proc.attr.hydfab:::std_path_map_loc_ids(Retr_Params$paths$dir_db_attrs)
+  path_meta_loc <- proc.attr.hydfab:::std_path_map_loc_ids(dir_db_attrs)
   if(file.exists(path_meta_loc)){
     if(!base::grepl('csv',path_meta_loc)){
       stop(glue::glue("Expecting the file path to metadata to be a csv:
@@ -1132,8 +1124,8 @@ read_loc_data <- function(loc_id_filepath, loc_id, fmt = 'csv'){
   #' @param loc_id The column name of the identifier column
   #' @param fmt The format passed to arrow::open_dataset() in the non-csv case.
   #' Default 'csv'. May also be 'parquet', 'arrow', 'feather', 'zarr', etc.
-  #' @seealso [proc_attr_read_gage_ids_fs]
-  #' @seealso [proc_attr_wrap]
+  #' @seealso \link[proc.attr.hydfab]{proc_attr_read_gage_ids_fs}
+  #' @seealso \link[proc.attr.hydfab]{proc_attr_wrap}
   #' @export
   # Changelog / contributions
   #  2024-08-09 Originally created
@@ -1162,6 +1154,38 @@ read_loc_data <- function(loc_id_filepath, loc_id, fmt = 'csv'){
   return(dat_loc)
 }
 
+std_path_dataset <- function(dir_dataset, ds_filenames = ''){
+  #' @title Return filepath of standardized formulation-selector gage_id
+  #' location identifiers
+  #' @param dir_dataset directory path containing the dataset
+  #' @param ds_filenames a matching string specific to dataset(s) of interest
+  #' inside \code{dir_dataset}
+  #' @export
+  # Changelog/contributions
+  #. 2025-02-21 Refactored from proc_attr_read_gage_ids_fs
+  # ----  Read in a standard format filename and file type from fs_proc ---- #
+  dir_ds <- base::file.path(dir_dataset)
+  files_ds <- base::list.files(dir_ds)
+  fns <- base::lapply(ds_filenames,
+                      function(x) files_ds[base::grep(x,files_ds)]) %>% unlist()
+
+  if (base::any(base::grepl(".nc",fns))){ # Read in a netcdf file
+    fn_nc <- fns[base::grep(".nc",fns)]
+    if(length(fn_nc)!=1){
+      stop(glue::glue("Expected that only one netcdf file exists in dir:\n{dir_ds}"))
+    }
+    path_dataset_in <- file.path(dir_dataset,fn_nc)
+  } else {
+    print(paste0("The following contents inside \n",dir_ds,
+                 "\n do not match expected format:\n", paste0(fns, collapse = ", ")))
+    stop("Create a different file format reader here that generates everything in the return list.")
+    # TODO make this more adaptable so that it doesn't depend on running python fs_proc beforehand
+    # Idea: e.g. read in user-defined gage_id data as a .csv
+    # Idea: read in gage_id data inside a non-standard netcdf file, then define featureSource and featureID from a separate yaml file
+  }
+  return(path_dataset_in)
+}
+
 proc_attr_read_gage_ids_fs <- function(dir_dataset, ds_filenames=''){
   #' @title Read in standardized formulation-selector gage_id location identifiers
   #' @description Reads output generated using \pkg{fs_proc} python package and
@@ -1174,41 +1198,26 @@ proc_attr_read_gage_ids_fs <- function(dir_dataset, ds_filenames=''){
   #' gage_ids: array of gage_id values
   #' featureSource: The type of nhdplus feature source corresponding to gage_id
   #' featureID: The method of converting gage_id into a standardized featureSource's featureID
-  #' @seealso [nhdplusTools::get_nldi_feature]
+  #' @seealso \link[nhdplusTools]{get_nldi_feature}
   #' @export
 
   # Changelog/contributions
   #  2024-07-29 Originally created, GL
+  #. 2025-02-21 Refactor with std_path_dataset
 
   # ----  Read in a standard format filename and file type from fs_proc ---- #
-  dir_ds <- base::file.path(dir_dataset)
-  files_ds <- base::list.files(dir_ds)
-  fns <- base::lapply(ds_filenames,
-                      function(x) files_ds[base::grep(x,files_ds)]) %>% unlist()
+  path_dat_in <- std_path_dataset(dir_dataset, ds_filenames)
+  # Read the netcdf
+  nc <- ncdf4::nc_open(path_dat_in)
 
-  if (base::any(base::grepl(".nc",fns))){ # Read in a netcdf file
-    fn_nc <- fns[base::grep(".nc",fns)]
-    if(length(fn_nc)!=1){
-      stop(glue::glue("Expected that only one netcdf file exists in dir:\n{dir_ds}"))
-    }
-    dat_in <- file.path(dir_dataset,fn_nc)
-    nc <- ncdf4::nc_open(dat_in)
+  # Grab the gage_id identifier:
+  gage_ids <- nc$dim$gage_id$vals
 
-    # Grab the gage_id identifier:
-    gage_ids <- nc$dim$gage_id$vals
+  # Extract attributes of interest that describe what gage_id represents
+  attrs <- ncdf4::ncatt_get(nc,varid=0)
+  featureSource <- attrs$featureSource
+  featureID <- attrs$featureID # intended to reformat gage_id into the appropriate nldi format using glue(e.g. glue('USGS-{gage_id}')
 
-    # Extract attributes of interest that describe what gage_id represents
-    attrs <- ncdf4::ncatt_get(nc,varid=0)
-    featureSource <- attrs$featureSource
-    featureID <- attrs$featureID # intended to reformat gage_id into the appropriate nldi format using glue(e.g. glue('USGS-{gage_id}')
-  } else {
-    print(paste0("The following contents inside \n",dir_ds,
-                 "\n do not match expected format:\n", paste0(fns, collapse = ", ")))
-    stop("Create a different file format reader here that generates everything in the return list.")
-    # TODO make this more adaptable so that it doesn't depend on running python fs_proc beforehand
-    # Idea: e.g. read in user-defined gage_id data as a .csv
-    # Idea: read in gage_id data inside a non-standard netcdf file, then define featureSource and featureID from a separate yaml file
-  }
   return(base::list(gage_ids=gage_ids, featureSource=featureSource, featureID=featureID))
 }
 
@@ -1280,6 +1289,7 @@ grab_attrs_datasets_fs_wrap <- function(Retr_Params,lyrs="network",overwrite=FAL
                                                      overwrite=overwrite)
     dt_site_feat$dataset_name <- dataset_name
     ls_sitefeat_all[[dataset_name]] <- dt_site_feat
+
   }
   # -------------------------------------------------------------------------- #
   # ------------ Grab attributes from a separate loc_id file ----------------- #
@@ -1343,7 +1353,7 @@ write_meta_nldi_feat <- function(dt_site_feat, path_meta){
   #' @title Write metadata from NLDI retrieval
   #' @description
     #' A short description...
-  #' @seealso [proc_attr_gageids]
+  #' @seealso \link[proc.attr.hydfab]{proc_attr_gageids}
   #' @param dt_site_feat data.table or data.frame of NLDI site features
   #' retrieved using nhdplusTools::get_nldi_feature() and organized
   #' using proc.attr.hydfab::proc_attr_gageids
@@ -1584,7 +1594,7 @@ fs_attrs_miss_wrap <- function(path_attr_config){
   #'  `fs_algo.tfrm_attr.write_missing_attrs`
   #' @param path_attr_config The file path to the attribute config file
   #' @seealso `fs_algo.tfrm_attr.write_missing_attrs` python
-  #' @seealso [fs_attrs_miss_mlti_wrap]
+  #' @seealso \link[proc.attr.hydfab]{fs_attrs_miss_mlti_wrap}
   #' @export
   # Changelog / Contributions
   #. 2024-12-31 Deprecated, GL
@@ -1720,7 +1730,7 @@ fs_attrs_miss_wrap <- function(path_attr_config){
 
 uniq_id_loc_attr <- function(comids,attrs){
   #' @title define the unique identifier of comid-attribute pairings
-  #' @seealso [fs_attrs_miss_mlti_wrap]
+  #' @seealso \link[proc.attr.hydfab]{fs_attrs_miss_mlti_wrap}
   uniq_cmbo <- paste0(comids,"_",attrs)
   return(uniq_cmbo)
 }
@@ -1856,33 +1866,4 @@ fs_attrs_miss_mlti_wrap <- function(path_attr_config){
 }
 
 
-######################### NOAA-specific functions #############################
 
-retr_noaa_gauges_meta <- function(gauge_ids,
-                             gauge_url_base = "https://api.water.noaa.gov/nwps/v1/gauges",
-                             retr_ids = c("lid","usgsId","name","latitude","longitude")){
-  #' @title Retrieve metadata based on a NOAA RFC gauge ID, aka lid
-  #' @description Uses the NWPS api to retrieve gauge metadata
-  #' @param gauge_ids list of NOAA gauge ids of interest
-  #' @param gauge_url_base the base api url for NWPS
-  #' @param retr_ids The desired data to retrieve from the api
-  #' @export
-  ls_all_resp <- list()
-  for(gid in gauge_ids){
-    url <- file.path(gauge_url_base,gid)
-    resp <- curl::curl_fetch_memory(url)
-
-    if (resp$status_code == 200) {
-      # Parse the JSON data
-      data <- jsonlite::fromJSON(rawToChar(resp$content))
-      dt_resp <- data.table::data.table(data.frame(data[retr_ids]))
-      ls_all_resp[[url]] <- dt_resp
-    } else {
-      ls_all_resp[[url]] <- data.table::data.table(lid=gid)
-      cat(glue::glue("Request for {gid} failed with status code:",
-                     resp$status_code, "\n"))
-    }
-  }
-  dt_all <- data.table::rbindlist(ls_all_resp,fill=TRUE)
-  return(dt_all)
-}
