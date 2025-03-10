@@ -43,7 +43,7 @@ if __name__ == "__main__":
     # BEGIN CUSTOMIZED DATASET MUNGING
 
     # list files from xssa analysis:
-    dir_xssa = Path('/Users/guylitt/noaa/regionalization/data/julemai-xSSA/scripts/data/xSSA_analysis')
+    dir_xssa = Path('/Users/laurenbolotin/noaa/regionalization/data/julemai-xSSA/scripts/data/xSSA_analysis')
     names_xssa = [x.name for x in dir_xssa.iterdir()]
     def _select_numeric_prefix(strings):
         selected_strings = []
