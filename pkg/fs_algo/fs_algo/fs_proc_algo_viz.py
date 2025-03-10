@@ -54,8 +54,6 @@ if __name__ == "__main__":
     attr_cfig = fsate.AttrConfigAndVars(path_attr_config)
     attr_cfig._read_attr_config()
 
-
-
     # Grab the attributes of interest from the attribute config file,
     #  OR a .csv file if specified in the algo config file.
     name_attr_csv = algo_cfg.get('name_attr_csv')
