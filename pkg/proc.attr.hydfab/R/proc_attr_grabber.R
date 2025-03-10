@@ -778,14 +778,154 @@ fs_retr_nhdp_comids_geom <- function(gage_ids,featureSource='nwissite',
   #' @seealso \link[proc.attr.hydfab]{proc_attr_read_gage_ids_fs}
   #' @return data.frame of comid and geometric point in epsg 4326
 
-  df_gage_ids <- try(nhdplusTools::get_nhdplus(nwis  = gage_ids,
-                                               realization=realization))
-  if("try-error" %in% class(df_gage_ids)){
-    stop("Something isn't right. Maybe try to provide something ")
+read_fs_retr_gpkg <- function(path_save_gpkg){
+  #' @title Read geopackage containing identifers and point locations
+  #' @description Reads in a geopackage whose filepath is
+  #'  standardized by \link[proc.attr.hydfab]{std_path_retr_gpkg}
+  #'  and created by \link[proc.attr.hydfab]{fs_retr_nhdp_comids_geom_wrap}
+  #' @details The renaming may be a temporary solution just-in case file
+  #' originated in python fs_algo
+  #' @param path_save_gpkg filepath to the geopackage
+  #' @seealso \link[proc.attr.hydfab]{fs_retr_nhdp_comids_geom_wrap}
+  #' @seealso \link[proc.attr.hydfab]{std_path_retr_gpkg}
+  #' @seealso \link[proc.attr.hydfab]{fs_retr_nhdp_comids_geom_wrap}
+  #' @export
+  if(!base::file.exists(path_save_gpkg)){
+    warning(glue::glue("The gpkg doesn't exist: {path_save_gpkg}"))
+    sf_comid_in <- NULL
+  } else {
+    sf_comid_in <- sf::read_sf(path_save_gpkg)
+    if("geom" %in% base::colnames(sf_comid_in)){
+      sf_comid_in <- sf_comid_in %>% dplyr::rename(geometry=geom)
+    }
+  }
+  return(sf_comid_in)
+}
+
+fs_retr_nhdp_comids_geom_wrap <- function(path_save_gpkg,
+                                          gage_ids,featureSource='nwissite',
+                                          featureID='USGS-{gage_id}'){
+  #' @title Read or generate a sf object from NHDplus queries for comid, and
+  #'.  update file with any newly retrieved locations
+  #' @description Try reading geopackage file, if it doesn't exist or is missing
+  #' locations based on the gage_ids of interest, grab them & update the
+  #' geopackage file
+  #' @param path_save_gpkg The filepath where the geopackage file should live
+  #' @param gage_ids array of gage_id values to be queried for catchment attributes
+  #' @param featureSource The [nhdplusTools::get_nldi_feature]feature featureSource,
+  #' e.g. 'nwissite'
+  #' @param featureID a glue-configured conversion of gage_id into a recognized
+  #' featureID for [nhdplusTools::get_nldi_feature]. E.g. if gage_id
+  #' represents exactly what the nldi_feature$featureID should be, then
+  #'  featureID="{gage_id}". In other instances, conversions may be necessary,
+  #'  e.g. featureID="USGS-{gage_id}". When defining featureID, it's expected
+  #'  that the term 'gage_id' is used as a variable in glue syntax to create featureID
+  #' @seealso \link[proc.attr.hydfab]{proc_attr_read_gage_ids_fs}
+  #' @seealso \link[proc.attr.hydfab]{fs_retr_nhdp_comids_geom}
+  #' @seealso `fs_algo.fs_algo_train_eval.fs_retr_nhdp_comids_geom_wrap`
+  #' @export
+
+  # Changelog/Contributions
+  #. 2025-03-07 Originally created, GL
+
+  sf_comid_in <- proc.attr.hydfab::read_fs_retr_gpkg(path_save_gpkg)
+
+  if(!base::is.null(sf_comid_in)){
+    idxs_gage_ids <- base::which(gage_ids %in% sf_comid_in$gage_id)
+    if(base::length(idxs_gage_ids) == base::length(gage_ids)){
+      # All gage ids present, subset to the gage_ids of interest
+      sf_comid <- sf_comid_in[idxs_gage_ids,] %>% sf::st_as_sf()
+    } else { # Need comids for additional locations
+      need_gids <- gage_ids[which(!gage_ids %in% sf_comid_in$gage_id)]
+
+      # Grab the needed gage_ids:
+      sf_comid_need <- proc.attr.hydfab::fs_retr_nhdp_comids_geom(
+                                               gage_ids=need_gids,
+                                               featureSource=featureSource,
+                                               featureID=featureID)
+
+      sf_cmbo <- data.table::rbindlist(base::list(sf_comid_need,
+                                        sf_comid_in),use.names=TRUE,fill=TRUE)
+      # Count total NA, pick least-NA rows when duplicates exist
+      sf_cmbo$tot_na <- base::rowSums(is.na(sf_cmbo))
+      sf_cmbo_ordr <- sf_cmbo[base::order(sf_cmbo$gage_id,sf_cmbo$tot_na),]
+      sf_cmbo_no_dupe <- sf_cmbo_ordr[!base::duplicated(sf_cmbo_ordr$gage_id),]
+      # Update geopackage with new data!
+      sf::write_sf(sf_cmbo_no_dupe,path_save_gpkg)
+
+      # Re-order to original gage_ids
+      sf_comid <- sf_cmbo_no_dupe %>%
+        dplyr::filter(gage_id %in% gage_ids) %>% sf::st_as_sf()
+    }
+  } else {
+    sf_comid <- proc.attr.hydfab::fs_retr_nhdp_comids_geom(gage_ids = gage_ids,
+                                                featureSource=featureSource,
+                                                featureID=featureID) %>%
+                sf::st_as_sf()
+  }
+  return(sf_comid)
+}
+
+
+fs_retr_nhdp_comids_geom <- function(gage_ids,featureSource='nwissite',
+                                     featureID="USGS-{gage_id}"){
+  #' @title Retrieve comids & point geometry based on nldi_feature identifiers
+  #' @param gage_ids vector of USGS gage_ids
+  #' @param featureSource The [nhdplusTools::get_nldi_feature] feature
+  #' featureSource, default 'nwissite'
+  #' @param featureID a glue-configured conversion of gage_id into a recognized
+  #' featureID for [nhdplusTools::get_nldi_feature]. E.g. if gage_id
+  #' represents exactly what the nldi_feature$featureID should be, then
+  #'  featureID="{gage_id}". In other instances, conversions may be necessary,
+  #'  e.g. featureID="USGS-{gage_id}". When defining featureID, it's expected
+  #'  that the term 'gage_id' is used as a variable in glue syntax to create featureID
+  #'  Refer to ?dataRetrieval::get_nldi_sources() for options to use with nldi_feature
+  #' @seealso \link[proc.attr.hydfab]{proc_attr_read_gage_ids_fs}
+  #' @seealso \link[proc.attr.hydfab]{fs_retr_nhdp_comids_geom_wrap}
+  #' @seealso `fs_algo.fs_algo_train_eval.fs_retr_nhdp_comids_geom`
+  #' @return data.table of comid and geometric point in epsg 4326
+  #' @export
+  # Changelog/Contributions
+  #. 2025-03-07 Originally created, GL
+
+  ls_featid <- base::list()
+  ls_sitefeat <- base::list()
+  for (gage_id in gage_ids){ #
+    if(!base::exists("gage_id")){
+      stop("MUST use 'gage_id' as the object name!!! \n
+      Expected when defining nldi_feat$featureID")
+    }
+
+    # Retrieve the COMID
+    # Reference: https://doi-usgs.github.io/nhdplusTools/articles/get_data_overview.html
+    nldi_feat <- base::list(featureSource =featureSource,
+              # NOTE: featureID string should expect {'gage_id'} as a variable!
+                            featureID = as.character(glue::glue(featureID))
+
+    )
+    ls_featid[[gage_id]] <- nldi_feat
+    site_feature <- try(nhdplusTools::get_nldi_feature(nldi_feature = nldi_feat))
+    if('try-error' %in% base::class(site_feature)){
+      stop(glue::glue("The following nldi features didn't work. You may need to
+                 revisit the configuration yaml file that processes this dataset in
+                fs_proc: \n {featureSource}, and featureID={featureID}"))
+    } else if (!is.null(site_feature)){ # Try again with discover_nhdplus_id
+      warning(glue::glue("Could not retrieve geometry for {nldi_feat$featureID}."))
+      comid <- nhdplusTools::discover_nhdplus_id(point=site_feature$geometry)
+      site_feature <- tibble::tibble(featureID=nldi_feat$featureID,comid=comid)
+    } else {
+      all_names_site <- base::names(site_feature)
+    }
+    ls_sitefeat[[gage_id]] <- site_feature
   }
 
-
-  return(df_gage_ids)
+  dt_all_geom <- data.table::rbindlist(ls_sitefeat,fill = TRUE,use.names = TRUE)
+  # Rename columns
+  dt_comid_geom <- dt_all_geom %>%
+    dplyr::rename(featureID = identifier)
+  dt_comid_geom$featureSource = 'nwissite'
+  dt_comid_geom$gage_id <- gage_ids
+  return(dt_comid_geom)
 }
 
 
@@ -1511,12 +1651,33 @@ retr_comids <- function(gage_ids,featureSource,featureID,dir_db_attrs,
   #'  featureID="{gage_id}". In other instances, conversions may be necessary,
   #'  e.g. featureID="USGS-{gage_id}". When defining featureID, it's expected
   #'  that the term 'gage_id' is used as a variable in glue syntax to create featureID
-  #'  Refer to ?dataRetrieval::get_nldi_sources() for options to use with nldi_featre
+  #'  Refer to ?dataRetrieval::get_nldi_sources() for options to use with nldi_feature
+  #' @param dir_db_attrs Attribute directory path, where the standardized
+  #' comid-gage_id will be stored as a .csv
+  #' @param path_save_gpkg The filepath where the geopackage containing
+  #' comid-gageid-geometry mappings are saved. Default NULL, but strongly recommended
+  #' to use!
+  #' @note 2025-03-07 This needs a deeper refactoring
   #' @export
-  # ---------------- COMID RETRIEVAL ------------------- #
-  # TODO create a std function that makes the path_meta_loc
+  #'
+  # Changelog/Contributions
+  #  2025-03-07 Refactor: add in the geometry retrieval & return nested list
+  #   with sf_comid from fs_retr_nhdp_comids_geom_wrap, GL
+  # ---------------- COMID & COORDINATE RETRIEVAL ---------------- #
+  # Populate the comids & coordinates for each gage_id
+  if(base::is.null(path_save_gpkg)){
+    warning("Strongly recommended to provide a path_save_gpkg to proc.attr.hydfab::retr_comids()!!")
+    sf_comid <- data.table::data.table()
+  } else {
+    sf_comid <- proc.attr.hydfab::fs_retr_nhdp_comids_geom_wrap(
+      path_save_gpkg=path_save_gpkg,
+      gage_ids=gage_ids,featureSource=featureSource,
+      featureID=featureID)
+  }
+  # ---------------- COMID RETRIEVAL: DOUBLE CHECK ------------------- #
+  # Use std function that makes the path_meta_loc
   path_meta_loc <- proc.attr.hydfab:::std_path_map_loc_ids(dir_db_attrs)
-  if(file.exists(path_meta_loc)){
+  if(base::file.exists(path_meta_loc)){
     if(!base::grepl('csv',path_meta_loc)){
       stop(glue::glue("Expecting the file path to metadata to be a csv:
                       \n{path_meta_loc}"))
@@ -1551,15 +1712,13 @@ retr_comids <- function(gage_ids,featureSource,featureID,dir_db_attrs,
     } else if (base::any(sf_comid$gage_id == gage_id)){
       # Then check the geopackage database
       comid <- sf_comid$comid[sf_comid$gage_id == gage_id]
-      if(base::length(comid)!=1){
+      if(base::length((comid))!=1){
         stop(glue::glue("Problem with geopackage logic. Look at how many
         entries exist for comid {comid} in {path_save_gpkg}"))
       }
-    } else if (base::is.na(gage_id) || base::is.null(gage_id)) {
-      comid <- NA # Hand NA/NULL values for gage_id
     } else {
       # TODO 2025-03-07: This section could be simplified now that
-      #. fs_retr_nhdp_comids_geom_wrap() exists. For now it serves a double-check.
+      #. fs_retr_nhdp_comids_geom_wrap exists. For now it serves a double-check.
       comid <- try(nhdplusTools::discover_nhdplus_id(nldi_feature = nldi_feat))
       if('try-error' %in% base::class(comid)||length(comid)==0){
         site_feature <- try(nhdplusTools::get_nldi_feature(nldi_feature = nldi_feat))
@@ -1675,13 +1834,15 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
     hfab_retr <- base::formals(proc.attr.hydfab::proc_attr_wrap)$hfab_retr
   }
 
-  ls_retr_comid <- proc.attr.hydfab::retr_comids(gage_ids=gage_ids,
+  ls_comid <- proc.attr.hydfab::retr_comids(gage_ids=gage_ids,
                           featureSource=featureSource,
                           featureID=featureID,
                           path_save_gpkg=path_save_gpkg,
                           dir_db_attrs=Retr_Params$paths$dir_db_attrs)
   base::names(ls_retr_comid$ls_comid) <- gage_ids
   just_comids <- ls_retr_comid$ls_comid %>% base::unname() %>% base::unlist()
+
+  just_comids <- ls_comid %>% base::unname() %>% base::unlist()
 
   # ---------- RETRIEVE DESIRED ATTRIBUTE DATA FOR EACH LOCATION ------------- #
   dt_site_feat_retr <- proc.attr.hydfab::proc_attr_mlti_wrap(
@@ -1763,6 +1924,7 @@ std_path_dataset <- function(dir_dataset, ds_filenames = ''){
   # Changelog/contributions
   #. 2025-02-21 Refactored from proc_attr_read_gage_ids_fs
   # ----  Read in a standard format filename and file type from fs_proc ---- #
+  # TODO make this more adaptable so that it doesn't depend on running python fs_proc beforehand
   dir_ds <- base::file.path(dir_dataset)
   files_ds <- base::list.files(dir_ds)
   fns <- base::lapply(ds_filenames,
@@ -1802,9 +1964,9 @@ proc_attr_read_gage_ids_fs <- function(dir_dataset, ds_filenames=''){
   # Changelog/contributions
   #  2024-07-29 Originally created, GL
   #. 2025-02-21 Refactor with std_path_dataset
-
+  #. 2025-03-07 Add path_dat_in as additional return object
   # ----  Read in a standard format filename and file type from fs_proc ---- #
-  path_dat_in <- std_path_dataset(dir_dataset, ds_filenames)
+  path_dat_in <- proc.attr.hydfab:::std_path_dataset(dir_dataset, ds_filenames)
   # Read the netcdf
   nc <- ncdf4::nc_open(path_dat_in)
 
@@ -1814,9 +1976,11 @@ proc_attr_read_gage_ids_fs <- function(dir_dataset, ds_filenames=''){
   # Extract attributes of interest that describe what gage_id represents
   attrs <- ncdf4::ncatt_get(nc,varid=0)
   featureSource <- attrs$featureSource
-  featureID <- attrs$featureID # intended to reformat gage_id into the appropriate nldi format using glue(e.g. glue('USGS-{gage_id}')
+  featureID <- attrs$featureID # intended to reformat gage_id into the
+  # appropriate nldi format using glue(e.g. glue('USGS-{gage_id}')
 
-  return(base::list(gage_ids=gage_ids, featureSource=featureSource, featureID=featureID))
+  return(base::list(gage_ids=gage_ids, featureSource=featureSource,
+                    featureID=featureID, path_dat_in=path_dat_in))
 }
 
 grab_attrs_datasets_fs_wrap <- function(Retr_Params,lyrs="network",overwrite=FALSE,
@@ -1874,6 +2038,7 @@ grab_attrs_datasets_fs_wrap <- function(Retr_Params,lyrs="network",overwrite=FAL
   ls_sitefeat_all <- base::list()
   for(ds in datasets){ # Looping by dataset
     message(glue::glue("--- PROCESSING {ds} DATASET ---"))
+    dir_dataset <- base::file.path(Retr_Params$paths$dir_std_base,ds)
 
     dir_dataset <- proc.attr.hydfab::std_dir_dataset(Retr_Params$paths$dir_std_base,ds)
 
@@ -1887,24 +2052,18 @@ grab_attrs_datasets_fs_wrap <- function(Retr_Params,lyrs="network",overwrite=FAL
     featureSource <- ls_fs_std$featureSource
     featureID <- ls_fs_std$featureID
     fs_path <- ls_fs_std$path_dat_in
-    if(base::is.null(path_save_gpkg_cstm)){
-      # The standardized geopackage filepath
-      path_save_gpkg <- proc.attr.hydfab:::std_path_retr_gpkg(fs_path)
-    } else {
-      path_save_gpkg <- path_save_gpkg_cstm
-    }
-
+    path_save_gpkg <- proc.attr.hydfab:::std_path_retr_gpkg(fs_path)
 
     # ---------------------- Grab all needed attributes ---------------------- #
     dt_site_feat <- proc.attr.hydfab::proc_attr_gageids(gage_ids,
-                                                     featureSource,
-                                                     featureID,
-                                                     Retr_Params,
-                                                     lyrs=lyrs,
-                                                     overwrite=overwrite)
-    dt_site_feat$dataset_name <- dataset_name
-    ls_sitefeat_all[[dataset_name]] <- dt_site_feat
-
+                                                 featureSource,
+                                                 featureID,
+                                                 Retr_Params,
+                                                 path_save_gpkg=path_save_gpkg,
+                                                 lyrs=lyrs,
+                                                 overwrite=overwrite)
+    dt_site_feat$dataset_name <- ds
+    ls_sitefeat_all[[ds]] <- dt_site_feat
   }
   # -------------------------------------------------------------------------- #
   # ------------ Grab attributes from a separate loc_id file ----------------- #
