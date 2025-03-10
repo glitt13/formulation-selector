@@ -39,7 +39,7 @@ attr_cfig_parse <- function(path_attr_config){
   home_dir_read <- tryCatch({glue::glue(
     base::unlist(raw_config$file_io)[['home_dir']])},
     error = function(e) {NULL})
-  if (is.null(home_dir_read)){
+  if (base::is.null(home_dir_read)){
     home_dir <- Sys.getenv("HOME")
   } else if (!dir.exists(home_dir_read)){
     warning(glue::glue("The user-defined home_dir does not exist. Assigning system default."))
