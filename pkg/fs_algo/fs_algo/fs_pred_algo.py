@@ -83,7 +83,7 @@ if __name__ == "__main__":
                                            read_type = 'filename',
                                         _s3 = None,storage_options=None)
         df_attr = df_attr.drop(columns='dl_timestamp')
-        # Constrain the values in the value column to two digits after the decimal point (to help ID duplicates)
+        # Constrain the values in the value column to two digits after the decimal point
         df_attr['value'] = df_attr['value'].apply(lambda x: round(x, 2))
 
         # Drop any duplicate rows
@@ -153,15 +153,11 @@ if __name__ == "__main__":
                     "If prediction uncertainty desired, re-run the algorithm training fs_proc_algo_viz.py, " \
                     "with mapie specified in the Uncertainty section of the algo config file.")
 
-                # Calculate confidence intervals for the predictions using forestci
-                path_Xtrain = fsate.std_Xtrain_path(dir_out_alg_ds,  dataset_id=ds) 
-                X_train = pd.read_csv(path_Xtrain)                  
-                pred_ci = fci.random_forest_error(forest=rf_model, X_train_shape=X_train.shape, X_test=df_attr_sub.to_numpy())
 
                 # compile prediction results:
                 df_pred =pd.DataFrame({'comid':comids_pred,
                              'prediction':resp_pred,
-                             'ci': pred_ci,
+                            #  'ci': pred_ci,
                              'metric':metric,
                              'dataset':ds,
                              'algo':algo,
