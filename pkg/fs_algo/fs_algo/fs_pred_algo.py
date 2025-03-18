@@ -69,8 +69,23 @@ if __name__ == "__main__":
         df_attr = fsate.fs_read_attr_comid(dir_db_attrs, comids_pred, attrs_sel = attrs_sel,
                                            read_type = 'filename',
                                         _s3 = None,storage_options=None)
+        df_attr = df_attr.drop(columns='dl_timestamp')
+        # Constrain the values in the value column to two digits after the decimal point
+        df_attr['value'] = df_attr['value'].apply(lambda x: round(x, 2))
+
+        # Drop any duplicate rows
+        df_attr.drop_duplicates(inplace=True)
+
+        # Reset the index the dataframe
+        df_attr.reset_index(inplace=True)
+
+        # Remove the old index column
+        df_attr.drop(columns=['index'], inplace=True)
+
+        new_df_attr = df_attr[['featureID', 'attribute', 'value']]
         # Convert into wide format for model training
-        df_attr_wide = df_attr.pivot(index='featureID', columns = 'attribute', values = 'value')
+        df_attr_wide = new_df_attr.pivot(index='featureID', columns = 'attribute', values = 'value')
+        # df_attr_wide = df_attr.pivot(index='featureID', columns = 'attribute', values = 'value')
 
         # Run predictions & save output
         dir_out_alg_ds = Path(dir_out_alg_base/Path(ds))
@@ -85,7 +100,7 @@ if __name__ == "__main__":
                 # Read in the algorithm's pipeline
                 # pipe = joblib.load(path_algo)
                 pipeline_with_ci = joblib.load(path_algo)
-                pipe = pipeline_with_ci  # Assign the actual pipeline (pipe) to 'pipe'
+                pipe = pipeline_with_ci['pipe']  # Assign the actual pipeline (pipe) to 'pipe'
                 rf_model = pipe.named_steps['randomforestregressor']  # Use the correct step name
                 feat_names = list(pipe.feature_names_in_)
                 df_attr_sub = df_attr_wide[feat_names]
@@ -93,16 +108,12 @@ if __name__ == "__main__":
                 # Perform prediction
                 resp_pred = pipe.predict(df_attr_sub)
 
-                # Calculate confidence intervals for the predictions using forestci
-                path_Xtrain = fsate.std_Xtrain_path(dir_out_alg_ds,  dataset_id=ds) 
-                X_train = pd.read_csv(path_Xtrain)                  
-                pred_ci = fci.random_forest_error(forest=rf_model, X_train_shape=X_train.shape, X_test=df_attr_sub.to_numpy())
 
                 # compile prediction results:
                 comids_pred = list(set(comids_pred)) # Make sure there are no duplicates
                 df_pred =pd.DataFrame({'comid':comids_pred,
                              'prediction':resp_pred,
-                             'ci': pred_ci,
+                            #  'ci': pred_ci,
                              'metric':metric,
                              'dataset':ds,
                              'algo':algo,
