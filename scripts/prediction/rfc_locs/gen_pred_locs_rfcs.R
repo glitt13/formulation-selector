@@ -26,7 +26,6 @@ main <- function(){
   if(!base::file.exists(path_cfig_pred)){
     stop(glue::glue("The provided path_cfig_pred does not exist: {path_cfig_pred}"))
   }
-
   cfig_pred <- yaml::read_yaml(path_cfig_pred)
   ds_type <- base::unlist(cfig_pred)[['ds_type']]
   write_type <- base::unlist(cfig_pred)[['write_type']]
