@@ -164,7 +164,7 @@ class TestFsRetrNhdpComids(unittest.TestCase):
         # Assertions
         self.assertListEqual(result['comid'].tolist(), ['1722317', '1520007'])
         self.assertEqual(result.columns.tolist(), ['comid','gage_id', 'geometry'])
-        print("✅ test_fs_retr_nhdp_comids test passed.")
+
 class TestFindFeatSrceId(unittest.TestCase):
 
     def test_find_feat_srce_id(self):
