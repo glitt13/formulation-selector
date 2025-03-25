@@ -494,9 +494,24 @@ def fs_save_algo_dir_struct(dir_base: str | os.PathLike ) -> dict:
 
     return out_dirs
 
-def _std_fs_prep_ds_companion_gpkg_path(path_fs_prep:str|os.PathLike)->os.PathLike:
+def _std_fs_proc_ds_companion_gpkg_path(path_fs_proc:str|os.PathLike)->os.PathLike:
     """Create the standardized gpkg path for coordinate data & id mapping
       corresponding to the standardized input data
+
+    :param path_fs_proc: Path used for the standardized dataset created using fs_proc.proc_eval_metrics.proc_col_schema()
+    :type path_fs_proc: str | os.PathLike
+    :return: Path storing the coordinates and id-mapping of each location of interest
+    :rtype: os.PathLike
+    """
+    path_fs_proc =Path(path_fs_proc)
+    sub_name_loc = path_fs_proc.with_suffix('')
+    new_name_loc = str(sub_name_loc.name) + '_loc'
+    new_name_gpkg = str(Path(new_name_loc).with_suffix('.gpkg'))
+    path_gpkg_fs_proc = path_fs_proc.with_name(new_name_gpkg)
+    return path_gpkg_fs_proc
+
+def _std_fs_proc_ds_paths(dir_std_base: str|os.PathLike,ds:str,mtch_str='*.nc') -> list:
+    """The standard .nc paths for standardized dataset created using fs_proc.proc_eval_metrics.proc_col_schema()
 
     :param path_fs_prep: Path used for the standardized dataset created using fs_prep.proc_eval_metrics.proc_col_schema()
     :type path_fs_prep: str | os.PathLike
@@ -722,13 +737,13 @@ def fs_retr_nhdp_comids_geom_wrap(path_save_gpkg:str|os.PathLike,
         :mod:`nhdplusTools` :func:`get_nldi_features()`,defaults to 'nwissite'
     :type featureSource: str
     :param featureID: The conversion format of `gage_ids` into a recognizable string for
-        :mod:`nhdplusTools`, which is an f-string configured conversion of `gage_id`
-        defaults to 'USGS-{gage_id}'. Expected to contain the string `"{gage_id}"`
+      :mod:`nhdplusTools`, which is an f-string configured conversion of `gage_id`
+       defaults to 'USGS-{gage_id}'. Expected to contain the string `"{gage_id}"`
     :type featureID: str
     :return: Geodataframe with the columns 'comid', 'geometry', 'gage_id'
     :rtype: gpd.GeoDataFrame
     :seealso: :func:`combine_resp_gdf_comid_wrap` A wrapper function that calls this function
-    :seealso: :func:`_std_fs_prep_ds_companion_gpkg_path` The standardized path to use for path_save_gpkg
+    :seealso: :func:`_std_fs_proc_ds_companion_gpkg_path` The standardized path to use for path_save_gpkg
     :seealso: :mod:`proc.attr.hydfab`:func:`fs_retr_nhdp_comids_geom_wrap` The corresponding R function
     """
     path_save_gpkg = Path(path_save_gpkg)
@@ -783,14 +798,14 @@ def combine_resp_gdf_comid_wrap(dir_std_base:str|os.PathLike,ds:str,
     # %% COMID & coord retrieval and assignment to response variable's coordinate
     [featureSource,featureID] = _find_feat_srce_id(dat_resp,attr_config) # e.g. ['nwissite','USGS-{gage_id}']
     
-    path_fs_dat_resp =  _std_fs_prep_ds_paths(dir_std_base=dir_std_base,ds=ds,mtch_str='*.nc')
+    path_fs_dat_resp =  _std_fs_proc_ds_paths(dir_std_base=dir_std_base,ds=ds,mtch_str='*.nc')
     if len(path_fs_dat_resp) > 1:
         error_str = f"The following directory contains too many .nc files: {path_fs_dat_resp}"
         raise ValueError(error_str)
-    path_gpkg_fs_prep = _std_fs_prep_ds_companion_gpkg_path(path_fs_dat_resp[0])
+    path_gpkg_fs_proc = _std_fs_proc_ds_companion_gpkg_path(path_fs_dat_resp[0])
 
     # Retrieve the geodataframe of comids
-    gdf_comid = fs_retr_nhdp_comids_geom_wrap(path_save_gpkg=path_gpkg_fs_prep,
+    gdf_comid = fs_retr_nhdp_comids_geom_wrap(path_save_gpkg=path_gpkg_fs_proc,
                                   gage_ids=dat_resp['gage_id'].values,
                                 featureSource=featureSource, featureID=featureID)
    
@@ -828,7 +843,7 @@ def combine_resp_gdf_comid_wrap(dir_std_base:str|os.PathLike,ds:str,
     sub_gdf_comid = sub_gdf_comid.drop_duplicates().dropna()
     if any(sub_gdf_comid['comid'].duplicated()):
         print("Note that some duplicated comids found in dataset based on initial location identifier, gage_id")
-    sub_gdf_comid['dataset'] = ds 
+    gdf_comid['dataset'] = ds 
 
     dict_resp_gdf = dict({'dat_resp':dat_resp,
                         'gdf_comid': sub_gdf_comid})
@@ -864,7 +879,6 @@ def split_train_test_comid_wrap(dir_std_base:str|os.PathLike,
     """
     dict_gdf_comids = dict()
     for ds in datasets:
-
         # Generate the geodataframe in a standard format
         dict_resp_gdf = combine_resp_gdf_comid_wrap(dir_std_base,ds,attr_config )
     
