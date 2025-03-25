@@ -5,11 +5,11 @@
 \title{Create the standardized gpkg path for coordinate data & id mapping
 . corresponding to the standardized input data}
 \usage{
-std_path_retr_gpkg(path_fs_prep)
+std_path_retr_gpkg(path_fs_proc)
 }
 \arguments{
-\item{path_fs_prep}{Path used for the standardized dataset created using
-\code{\link{fs_prep.proc_eval_metrics.proc_col_schema}}}
+\item{path_fs_proc}{Path used for the standardized dataset created using
+\code{\link{fs_proc.proc_eval_metrics.proc_col_schema}}}
 }
 \description{
 Create the standardized gpkg path for coordinate data & id mapping
@@ -17,10 +17,10 @@ Create the standardized gpkg path for coordinate data & id mapping
 }
 \details{
 The python companion function is
-. \code{fs_algo.fs_algo_train_eval._std_fs_prep_ds_companion_gpkg_path}
+. \code{fs_algo.fs_algo_train_eval._std_fs_proc_ds_companion_gpkg_path}
 }
 \seealso{
-\verb{fs_algo.fs_algo_train_eval._std_fs_pre[_ds_companion_gpkg_path}
+\code{fs_algo.fs_algo_train_eval._std_fs_proc_ds_companion_gpkg_path}
 
 \link[proc.attr.hydfab]{read_fs_retr_gpkg}
 

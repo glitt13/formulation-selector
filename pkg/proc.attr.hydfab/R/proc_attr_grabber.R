@@ -20,7 +20,9 @@ library(tidyr)
 library(tools)
 library(curl)
 library(jsonlite)
-
+library(tibble)
+library(stringr)
+library(fs)
 
 attr_cfig_parse <- function(path_attr_config){
   #' @title Read and parse the attribute config yaml file to create parameter
@@ -33,10 +35,13 @@ attr_cfig_parse <- function(path_attr_config){
 
   # Define directory paths from the config file
   # Determine if home_dir. Either defined in attribute config file or assumed to be system default.
-  home_dir_read <- glue::glue(base::unlist(raw_config$file_io)[['home_dir']])
-  if (length(home_dir_read)==0){
+  home_dir_read <- tryCatch({glue::glue(
+    base::unlist(raw_config$file_io)[['home_dir']])},
+    error = function(e) {NULL})
+  if (base::is.null(home_dir_read)){
     home_dir <- Sys.getenv("HOME")
   } else if (!dir.exists(home_dir_read)){
+    warning(glue::glue("The user-defined home_dir does not exist. Assigning system default."))
     home_dir <- Sys.getenv("HOME")
   } else {
     home_dir <- home_dir_read
@@ -488,30 +493,30 @@ std_dir_dataset <- function(dir_std_base, ds,mkdir=FALSE){
   }
   return(dir_dataset)
 }
-std_path_retr_gpkg <- function(path_fs_prep){
+std_path_retr_gpkg <- function(path_fs_proc){
   #' @title Create the standardized gpkg path for coordinate data & id mapping
   #'. corresponding to the standardized input data
   #' @details The python companion function is
-  #'. `fs_algo.fs_algo_train_eval._std_fs_prep_ds_companion_gpkg_path`
-  #' @param path_fs_prep Path used for the standardized dataset created using
-  #' [`fs_prep.proc_eval_metrics.proc_col_schema`]
-  #' @seealso `fs_algo.fs_algo_train_eval._std_fs_pre[_ds_companion_gpkg_path`
+  #'. `fs_algo.fs_algo_train_eval._std_fs_proc_ds_companion_gpkg_path`
+  #' @param path_fs_proc Path used for the standardized dataset created using
+  #' [`fs_proc.proc_eval_metrics.proc_col_schema`]
+  #' @seealso `fs_algo.fs_algo_train_eval._std_fs_proc_ds_companion_gpkg_path`
   #' @seealso  \link[proc.attr.hydfab]{read_fs_retr_gpkg}
   #' @seealso \link[proc.attr.hydfab]{std_dir_dataset}
   #' @export
-  path_fs_prep <- fs::path(path_fs_prep)
-  sub_name_loc <- fs::path_ext_remove(path_fs_prep)
+  path_fs_proc <- fs::path(path_fs_proc)
+  sub_name_loc <- fs::path_ext_remove(path_fs_proc)
   new_name_loc <- base::paste0(fs::path_file(sub_name_loc), "_loc")
   new_name_gpkg <- fs::path_ext_set(new_name_loc, "gpkg")
   # Create the new path with the updated name
-  path_gpkg_fs_prep <- fs::path(fs::path_dir(path_fs_prep), new_name_gpkg)
-  return(path_gpkg_fs_prep)
+  path_gpkg_fs_proc <- fs::path(fs::path_dir(path_fs_proc), new_name_gpkg)
+  return(path_gpkg_fs_proc)
 }
 
 std_path_retr_gpkg_wrap <- function(dir_std_base,ds){
   #' @title Wrapper to create the standardized geopackage path for coordinate
   #'. data and id mapping corresponding to the standardized input data from
-  #' the `fs_prep` python processing steps
+  #' the `fs_proc` python processing steps
   #' @description Given the standardized base directory and the dataset name,
   #' generate the standardized geopackage
   #' @details These same steps happen inside \code{grab_attrs_datasets_fs_wrap}
@@ -520,7 +525,7 @@ std_path_retr_gpkg_wrap <- function(dir_std_base,ds){
   #' @export
 
   dir_dataset <- proc.attr.hydfab::std_dir_dataset(dir_std_base,ds)
-  # Retrieve path_dat_in from fs_prep standardized output
+  # Retrieve path_dat_in from fs_proc standardized output
   fs_path <- proc.attr.hydfab::proc_attr_read_gage_ids_fs(dir_dataset)$path_dat_in
   path_save_gpkg <- proc.attr.hydfab:::std_path_retr_gpkg(fs_path)
   return(path_save_gpkg)
@@ -709,31 +714,16 @@ fs_retr_nhdp_comids_geom <- function(gage_ids,featureSource='nwissite',
     if('try-error' %in% base::class(site_feature)){
       stop(glue::glue("The following nldi features didn't work. You may need to
                  revisit the configuration yaml file that processes this dataset in
-                fs_prep: \n {featureSource}, and featureID={featureID}"))
-    } else if (base::is.null(site_feature)){
-      if(nldi_feat$featureSource=="nwissite"){
-        # Try manual api retrieval specific for nwissite (USGS-{gage_id})
-        message(glue::glue("Attempting manual connection to api for {nldi_feat$featureID}"))
-        url_build <- base::paste0("https://api.water.usgs.gov/nldi/linked-data/nwissite/",
-                                  nldi_feat$featureID,"?f=json")
-        json_file <- jsonlite::read_json(url_build)
-        site_feature <- tibble::tibble(identifier=nldi_feat$featureID,
-              comid=json_file$features[[1]]$properties$comid,
-              geometry=sf::st_sfc(sf::st_point(
-                base::c(json_file$features[[1]]$geometry$coordinates[[2]],
-                  json_file$features[[1]]$geometry$coordinates[[1]])),crs=epsg)
-              )
-      } else {
-        # Try again with discover_nhdplus_id
-        warning(glue::glue("^^ Could not retrieve geometry for {nldi_feat$featureID}."))
-        comid <- try(nhdplusTools::discover_nhdplus_id(point=site_feature$geometry))
-        if("try-error" %in% base::class(comid)){ # Assign NA values for everything
-          site_feature <- tibble::tibble(identifier=nldi_feat$featureID,comid=NA,
-                                   geometry=sf::st_sfc(sf::st_point(),crs=epsg))
-        } else { # Assign NA values for geometry
-          site_feature <- tibble::tibble(identifier=nldi_feat$featureID,comid=comid,
-                                   geometry = sf::st_sfc(sf::st_point(),crs=epsg))
-        }
+                fs_proc: \n {featureSource}, and featureID={featureID}"))
+    } else if (base::is.null(site_feature)){ # Try again with discover_nhdplus_id
+      warning(glue::glue("^^ Could not retrieve geometry for {nldi_feat$featureID}."))
+      comid <- try(nhdplusTools::discover_nhdplus_id(point=site_feature$geometry))
+      if("try-error" %in% base::class(comid)){ # Assign NA values for everything
+        site_feature <- tibble::tibble(identifier=nldi_feat$featureID,comid=NA,
+                                 geometry=sf::st_sfc(sf::st_point(),crs=epsg))
+      } else { # Assign NA values for geometry
+        site_feature <- tibble::tibble(identifier=nldi_feat$featureID,comid=comid,
+                                 geometry = sf::st_sfc(sf::st_point(),crs=epsg))
       }
     }
     if("sfc_LINESTRING" %in% base::class(site_feature$geometry)){
@@ -1483,6 +1473,12 @@ retr_comids <- function(gage_ids,featureSource,featureID,dir_db_attrs,
   #'  e.g. featureID="USGS-{gage_id}". When defining featureID, it's expected
   #'  that the term 'gage_id' is used as a variable in glue syntax to create featureID
   #'  Refer to ?dataRetrieval::get_nldi_sources() for options to use with nldi_feature
+  #' @param dir_db_attrs Attribute directory path, where the standardized
+  #' comid-gage_id will be stored as a .csv
+  #' @param path_save_gpkg The filepath where the geopackage containing
+  #' comid-gageid-geometry mappings are saved. Default NULL, but strongly recommended
+  #' to use!
+  #' @note 2025-03-07 This needs a deeper refactoring
   #' @export
   #'
   # Changelog/Contributions
@@ -1526,13 +1522,11 @@ retr_comids <- function(gage_ids,featureSource,featureID,dir_db_attrs,
                             featureID = as.character(glue::glue(featureID)) # This should expect {'gage_id'} as a variable!
     )
     ls_featid[[i]] <- nldi_feat
-    if(nldi_feat$featureSource == 'comid'){ # A simple case that may not off
-      comid <- nldi_feat$featureID
-    } else if(base::any(df_comid_featid$featureID == nldi_feat$featureID)){
+
+    if(base::any(df_comid_featid$featureID == nldi_feat$featureID)){
       # Check the comid-featureID mapped database first
       comid <- df_comid_featid$comid[df_comid_featid$featureID == nldi_feat$featureID]
-
-      if(base::length(comid)>1){
+      if(base::length(comid)!=1){
         stop(glue::glue("Problem with comid database logic. Look at how many
         entries exist for comid {comid} in the comid_featID_map.csv"))
       }
@@ -1570,7 +1564,7 @@ retr_comids <- function(gage_ids,featureSource,featureID,dir_db_attrs,
     ls_comid[[i]] <- comid
   }
 
-  # Combine/Update the custom mapper and write to file:
+  # Combine the custom mapper and write to file:
   df_featid_new <- data.frame(featureID = as.character(unlist(base::lapply(ls_featid, function(x) (x$featureID)))),
                               featureSource = as.character(featureSource),
                               gage_id = base::as.character(gage_ids))
@@ -1750,8 +1744,8 @@ std_path_dataset <- function(dir_dataset, ds_filenames = ''){
   #' @export
   # Changelog/contributions
   #. 2025-02-21 Refactored from proc_attr_read_gage_ids_fs
-  # ----  Read in a standard format filename and file type from fs_prep ---- #
-  # TODO make this more adaptable so that it doesn't depend on running python fs_prep beforehand
+  # ----  Read in a standard format filename and file type from fs_proc ---- #
+  # TODO make this more adaptable so that it doesn't depend on running python fs_proc beforehand
   dir_ds <- base::file.path(dir_dataset)
   files_ds <- base::list.files(dir_ds)
   fns <- base::lapply(ds_filenames,
@@ -1767,7 +1761,7 @@ std_path_dataset <- function(dir_dataset, ds_filenames = ''){
     print(paste0("The following contents inside \n",dir_ds,
                  "\n do not match expected format:\n", paste0(fns, collapse = ", ")))
     stop("Create a different file format reader here that generates everything in the return list.")
-    # TODO make this more adaptable so that it doesn't depend on running python fs_prep beforehand
+    # TODO make this more adaptable so that it doesn't depend on running python fs_proc beforehand
     # Idea: e.g. read in user-defined gage_id data as a .csv
     # Idea: read in gage_id data inside a non-standard netcdf file, then define featureSource and featureID from a separate yaml file
   }
@@ -1776,7 +1770,7 @@ std_path_dataset <- function(dir_dataset, ds_filenames = ''){
 
 proc_attr_read_gage_ids_fs <- function(dir_dataset, ds_filenames=''){
   #' @title Read in standardized formulation-selector gage_id location identifiers
-  #' @description Reads output generated using \pkg{fs_prep} python package and
+  #' @description Reads output generated using \pkg{fs_proc} python package and
   #' selects the gage_id location identifier(s) and the
   #' featureSource & featureID that correspond to the gage_id
   #' @param dir_dataset directory path to the dataset
@@ -1788,12 +1782,11 @@ proc_attr_read_gage_ids_fs <- function(dir_dataset, ds_filenames=''){
   #' featureID: The method of converting gage_id into a standardized featureSource's featureID
   #' @seealso \link[nhdplusTools]{get_nldi_feature}
   #' @export
-
   # Changelog/contributions
   #  2024-07-29 Originally created, GL
   #. 2025-02-21 Refactor with std_path_dataset
   #. 2025-03-07 Add path_dat_in as additional return object
-  # ----  Read in a standard format filename and file type from fs_prep ---- #
+  # ----  Read in a standard format filename and file type from fs_proc ---- #
   path_dat_in <- proc.attr.hydfab:::std_path_dataset(dir_dataset, ds_filenames)
   # Read the netcdf
   nc <- ncdf4::nc_open(path_dat_in)
@@ -1835,7 +1828,7 @@ grab_attrs_datasets_fs_wrap <- function(Retr_Params,lyrs="network",overwrite=FAL
   #' comid/gage_id/coords. Default NULL means that the path is automated based
   #' on the standardized input dataset location \link[proc.attr.hydfab]{std_path_retr_gpkg}
   #' @details Runs two proc.attr.hydfab functions:
-  #'  \link[proc.attr.hydfab]{proc_attr_read_gage_ids_fs} - retrieves the gage_ids generated by \pkg{fs_prep}
+  #'  \link[proc.attr.hydfab]{proc_attr_read_gage_ids_fs} - retrieves the gage_ids generated by \pkg{fs_proc}
   #'  \link[proc.attr.hydfab]{proc_attr_gageids} - retrieves the attributes for all provided gage_ids
   #'
   #' @export
@@ -1866,6 +1859,8 @@ grab_attrs_datasets_fs_wrap <- function(Retr_Params,lyrs="network",overwrite=FAL
   ls_sitefeat_all <- base::list()
   for(ds in datasets){ # Looping by dataset
     message(glue::glue("--- PROCESSING {ds} DATASET ---"))
+
+    dir_dataset <- proc.attr.hydfab::std_dir_dataset(Retr_Params$paths$dir_std_base,ds)
 
     dir_dataset <- proc.attr.hydfab::std_dir_dataset(Retr_Params$paths$dir_std_base,ds)
 
@@ -1911,7 +1906,7 @@ grab_attrs_datasets_fs_wrap <- function(Retr_Params,lyrs="network",overwrite=FAL
       # path_save_gpkg <- proc.attr.hydfab:::std_path_retr_gpkg(fs_path)
       if(base::is.null(path_save_gpkg_cstm)){
         warning("STRONGLY RECOMMENDED that user provide path_save_gpkg_cstm to
-                proc.attr.hydfab::grab_attrs_datasets_fs_wrap.")
+                grab_attrs_datasets_fs_wrap().")
       } else {
         path_save_gpkg <- path_save_gpkg_cstm
       }
@@ -2510,33 +2505,4 @@ fs_attrs_miss_mlti_wrap <- function(path_attr_config){
 }
 
 
-######################### NOAA-specific functions #############################
 
-retr_noaa_gauges_meta <- function(gauge_ids,
-                             gauge_url_base = "https://api.water.noaa.gov/nwps/v1/gauges",
-                             retr_ids = c("lid","usgsId","name","latitude","longitude")){
-  #' @title Retrieve metadata based on a NOAA RFC gauge ID, aka lid
-  #' @description Uses the NWPS api to retrieve gauge metadata
-  #' @param gauge_ids list of NOAA gauge ids of interest
-  #' @param gauge_url_base the base api url for NWPS
-  #' @param retr_ids The desired data to retrieve from the api
-  #' @export
-  ls_all_resp <- list()
-  for(gid in gauge_ids){
-    url <- file.path(gauge_url_base,gid)
-    resp <- curl::curl_fetch_memory(url)
-
-    if (resp$status_code == 200) {
-      # Parse the JSON data
-      data <- jsonlite::fromJSON(rawToChar(resp$content))
-      dt_resp <- data.table::data.table(data.frame(data[retr_ids]))
-      ls_all_resp[[url]] <- dt_resp
-    } else {
-      ls_all_resp[[url]] <- data.table::data.table(lid=gid)
-      cat(glue::glue("Request for {gid} failed with status code:",
-                     resp$status_code, "\n"))
-    }
-  }
-  dt_all <- data.table::rbindlist(ls_all_resp,fill=TRUE)
-  return(dt_all)
-}
