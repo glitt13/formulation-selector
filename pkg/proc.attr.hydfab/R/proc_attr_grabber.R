@@ -151,6 +151,7 @@ attr_cfig_parse <- function(path_attr_config){
   return(Retr_Params)
 }
 
+<<<<<<< HEAD
 tform_cfig_parse <- function(path_tfrm_config){
   #' @title Read & parse the transformation config yaml file
   #' @param path_tfrm_config Full filepath to the transformation config file
@@ -277,6 +278,8 @@ map_attrs_to_dataset <- function(vars){
 }
 
 
+=======
+>>>>>>> 9e88745 (fix: address merge conflicts)
 proc_attr_std_hfsub_name <- function(comid,custom_name='', fileext='gpkg'){
   #' @title Standardidze hydrofabric subsetter's local filename
   #' @description Internal function that ensures consistent filename
