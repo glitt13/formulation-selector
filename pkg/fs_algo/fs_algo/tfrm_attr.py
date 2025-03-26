@@ -12,10 +12,10 @@ import dask.dataframe as dd
 from datetime import datetime, timezone
 import os
 from collections import ChainMap
-
+import geopandas as gpd
 
 def read_df_ext(path_to_file: str | os.PathLike) -> pd.DataFrame:
-    """Read a tabular file with an extension of csv or parquet
+    """Read a tabular file with an extension of csv, parquet, or gpkg
 
     :param path_to_file: file path of tabular file
     :type path_to_file: str | os.PathLike
@@ -32,8 +32,10 @@ def read_df_ext(path_to_file: str | os.PathLike) -> pd.DataFrame:
         df = pd.read_csv(path_to_file)
     elif 'parquet' in path_to_file.suffix:
         df = pd.read_parquet(path_to_file)
+    elif 'gpkg' in path_to_file.suffix:
+        df = gpd.read_file(path_to_file)
     else:
-        raise ValueError("Expecting path to file containing comids to be csv or parquet file")
+        raise ValueError("Expecting path to file containing comids to be csv, parquet, or gpkg file")
     return df
 
 
