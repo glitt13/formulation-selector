@@ -9,6 +9,7 @@
 echo "Using system home directory as basis for all paths: $HOME"
 DIR_REPO="$HOME/git/formulation-selector/" # The system-specific path to the formulation-selector repo
 DIR_CONFIG="${DIR_REPO}/scripts/eval_ingest/xssa_us/"
+DIR_PRED="${DIR_REPO}/scripts/prediction/rfc_locs/"
 DIR_PY="${DIR_REPO}/pkg/fs_algo/fs_algo/"
 DIR_R="${DIR_REPO}/pkg/proc.attr.hydfab/flow/"
 
@@ -39,11 +40,18 @@ echo "Algorithm training completed!"
 # Print a message to indicate all scripts have finished executing
 echo "Attribute grabbing, transformation, and algorithm training executed successfully!"
 
-# 4.1 Identify which locations will be used for prediction, and generate the attributes
-# TODO insert custom script call here
+# 4.1 Identify which locations will be used for prediction, and generate the attributes (and metadata file for predictions)
+echo "Retrieve prediction location attribute data and geometry data"
+# CAUTION: The following Rscript has some custom dependencies in identifying which locations need predicting. Refer to script for details.
+Rscript "${DIR_PRED}gen_pred_locs_xssaus_map.R" "{DIR_CONFIG}xssaus_pred_config.yaml"
+echo "Acquired prediction location attribute data and geometry data"
 
 # 4.2 Perform transformations on prediction locations
-# TODO insert modified script call here
+echo "Transforming prediction location attribute data"
+python3 "${DIR_PY}fs_tfrm_attrs.py"   "${DIR_CONFIG}xssaus_attrs_tform.yaml"
+echo "Transformed prediction location attribute data"
 
 # 4.3 Perform the prediction
+echo "Performing process predictions"
+python3 "${DIR_PY}fs_pred_algo.py" "{DIR_CONFIG}xssaus_pred_config.yaml"
 # TODO insert the prediction script here
