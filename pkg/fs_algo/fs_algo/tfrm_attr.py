@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 import os
 from collections import ChainMap
 import geopandas as gpd
+import warnings
 
 def read_df_ext(path_to_file: str | os.PathLike) -> pd.DataFrame:
     """Read a tabular file with an extension of csv, parquet, or gpkg
@@ -441,7 +442,7 @@ def tfrm_attr_comids_wrap(comids: Iterable, path_tfrm_cfig: str | os.PathLike):
 
     """
     # Changelog/contributions
-    # 2025-03: Changed to wrapper function based on comid and transformation config, GL
+    # Changed to wrapper function based on comid and transformation config 
 
 
     with open(path_tfrm_cfig, 'r') as file:
@@ -483,7 +484,7 @@ def tfrm_attr_comids_wrap(comids: Iterable, path_tfrm_cfig: str | os.PathLike):
     ls_all_cstm_funcs = list(dict_all_cstm_funcs.values())
 
     # Define path to store missing comid-attribute pairings:
-    path_need_attrs = std_path_miss_tfrm(dir_db_attrs)
+    path_need_attrs = std_miss_path(dir_db_attrs)
     #%%
     for comid in comids:
         ddf_loc_attrs=_subset_ddf_parquet_by_comid(dir_db_attrs,
@@ -516,15 +517,13 @@ def tfrm_attr_comids_wrap(comids: Iterable, path_tfrm_cfig: str | os.PathLike):
 
             # The attributes used for creating the new variable
             attrs_retr_sub = dict_retr_vars.get(new_var)
+            
+
 
             # Retrieve the variables of interest for the function
-            try:
-                df_attr_sub = fsate.fs_read_attr_comid(dir_db_attrs, comids_resp=[str(comid)], attrs_sel=attrs_retr_sub,
-                                _s3 = None,storage_options=None,read_type='filename')
-            except:
-                warnings.warn(f'Could not acquire comid {comid} attributes. Skipping to next comid.')
-                warnings.warn(f'Missing attributes include {"|".join(attrs_retr_sub)}')
-                continue
+            df_attr_sub = fsate.fs_read_attr_comid(dir_db_attrs, comids_resp=[str(comid)], attrs_sel=attrs_retr_sub,
+                            _s3 = None,storage_options=None,read_type='filename')
+
             # Check if needed attribute data all exist. If not, write to 
             # csv file to know what is missing
             if df_attr_sub.shape[0] < len(attrs_retr_sub):
