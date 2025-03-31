@@ -41,15 +41,17 @@ main <- function(){
     stop(glue::glue("The provided path_cfig_pred does not exist: {path_cfig_pred}"))
   }
 
-  sleep_every_hour <- FALSE # Should we only ping the NLDI database <400 times each hour? This should be TRUE when running the script for the first time.
-  dir_save_nhdp <- NULL # TODO consider defining inside prediction location. But we really want to save this geometry (outlet, flowlines, catchment) in the dataset directory
+  # TODO consider defining dir_save_nhdp inside prediction config. Presently we just save the geometries (outlet, flowlines, catchment) in the dataset directory
+  dir_save_nhdp <- NULL
 
   cfig_pred <- yaml::read_yaml(path_cfig_pred)
   ds_type <- base::unlist(cfig_pred)[['ds_type']]
   write_type <- base::unlist(cfig_pred)[['write_type']]
   path_meta <- base::unlist(cfig_pred)[['path_meta']] # The filepath of the file that generates the list of comids used for prediction
   # READ IN ATTRIBUTE CONFIG FILE
-  path_attr_config <- glue::glue(cfig_pred[['path_attr_config']])
+  path_attr_config <- file.path(base::dirname(path_cfig_pred),unlist(cfig_pred)[['name_attr_config']])
+
+  #path_attr_config <- glue::glue(cfig_pred[['path_attr_config']])
   cfig_attr <- yaml::read_yaml(path_attr_config)
 
   # Defining directory paths as early as possible:
@@ -59,7 +61,15 @@ main <- function(){
   dir_db_hydfab <- glue::glue(base::unlist(io_cfig)[['dir_db_hydfab']])
   dir_db_attrs <- glue::glue(base::unlist(io_cfig)[['dir_db_attrs']])
 
+  # ----------------------- TRANSFORMATION CONFIGURATION --------------------- #
+  path_attr_config <- base::file.path(base::dirname(path_cfig_pred),
+                                base::unlist(cfig_pred)[['name_tfrm_config']])
+  path_tfrm_script <- glue::glue(base::unlist(cfig_pred)[['path_tfrm_script']])
+  conda_env <- base::unlist(cfig_pred)[['conda_env']]
 
+  # TODO auto-determine the transformation config file from the prediction (or attribute?) config
+  # TODO perform transformations during attribute grabbing!
+  # TODO add in new changes from xssaus_attr_config.yaml
 
 
   # ------------------------ ATTRIBUTE CONFIGURATION --------------------------- #
@@ -159,10 +169,6 @@ main <- function(){
                                                           lyrs='network',
                                                           overwrite=FALSE)
       ls_site_feat[[ctr]] <- dt_site_feat
-      if(sleep_every_hour){
-        # TODO determine whether sleep every hour needs to happen here
-        Sys.sleep(60*61) # 400 NLDI queries per hour
-      }
     }
 
     base::message(glue::glue("Completed attribute retrieval to
@@ -179,7 +185,33 @@ main <- function(){
 
     # ------------------------------------------------------------------------ #
     # ------------------------------------------------------------------------ #
+    library(reticulate)
+
     # TODO add in attribute transformation of prediction variables by calling python transformation script
+    # TODO make sure user activates appropriate conda environment before running!
+
+    path_tfrm_script <- glue::glue("{dir_repo}/pkg/fs_algo/fs_algo/fs_tfrm_attrs.py")
+    path_tfrm_config <- glue::glue("{dir_repo}/scripts/eval_ingest/xssa_us/xssaus_attrs_tform.yaml")
+    if(!file.exists(path_tfrm_script)){
+      stop(glue::glue("Does not exist: {path_tfrm_script}"))
+    }
+    if(!file.exists(path_tfrm_config)){
+      stop(glue::glue("Does not exist: {path_tfrm_config}"))
+    }
+    text_script <- glue::glue('python {path_tfrm_script} "{path_tfrm_config}"')
+    source(text_script)
+
+    # Run python function from the tfrm_attr.py file:
+    reticulate::use_condaenv(condaenv="py312",required=TRUE) # The anaconda environment that has the fs_algo RaFTS package installed
+    fta <- reticulate::import("fs_algo.tfrm_attr")
+    result <- try(fta$tfrm_attr_comids_wrap(comids = df[,col_comid],
+                                        path_tfrm_cfig = path_tfrm_config))
+    if("try-error" %in% class(result)){
+      warning(glue::glue("Could not call python transformation script using
+      R's reticulate. To complete transformations, run this transformation
+      script directly from the shell or terminal:
+      {path_tfrm_script}") )
+    }
 
     # ------------------------------------------------------------------------ #
     # ------------------------------------------------------------------------ #
