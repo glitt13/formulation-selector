@@ -132,7 +132,7 @@ if __name__ == "__main__":
                                                storage_options=None,
                                                read_type='all',reindex=True)
     # Create unique combination of comid-attribute pairings:
-    df_attr_all['uniq_cmbo'] = df_attr_all['featureID'].astype(str) + '_' + df_attr_all['attribute'].values
+    df_attr_all['uniq_cmbo'] = df_attr_all['featureID'].astype(str) + '_' + df_attr_all['attribute'].values#f"{df_attr_all['featureID']}_{df_attr_all['attribute']}"
     
     # ALL NEEDED UNIQUE COMBOS:
     must_have_uniq_cmbo = [f"{comid}_{var}" for comid in comids for var in all_retr_vars]
