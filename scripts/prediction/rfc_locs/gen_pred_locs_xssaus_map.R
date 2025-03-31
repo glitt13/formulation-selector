@@ -192,7 +192,7 @@ main <- function(){
                                               dir_save_nhdp = dir_save_nhdp,
                                               filename_str=paste0(glue::glue("{datasets}_{ds_type}")),
                                               id_type = "comid",
-                                              keep_cols=c(NULL,"all")[2],
+                                              keep_cols="all",
                                               seq_size = 390,
                                               overwrite_chunk=FALSE)
 
