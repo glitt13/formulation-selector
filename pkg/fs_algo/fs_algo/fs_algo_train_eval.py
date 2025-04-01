@@ -30,6 +30,7 @@ from shapely.geometry import Point
 import geopandas as gpd
 import urllib
 import zipfile
+import re
 import forestci as fci
 
 # %% BASIN ATTRIBUTES (PREDICTORS) & RESPONSE VARIABLES (e.g. METRICS)
@@ -151,7 +152,7 @@ def fs_read_attr_comid(dir_db_attrs:str | os.PathLike, comids_resp:list | Iterab
     :param storage_options: future feature, defaults to None
     :type storage_options: future feature, optional
     :param read_type: should all parquet files be lazy-loaded, assign 'all'
-     otherwise just files with comids_resp in the file name? assign 'filename'. Defaults to 'all'
+     otherwise just files with comids_resp in the file name? assign 'filename'. Defaults to 'all', which should be fastest
     :type read_type: str
     :param reindex: Should attribute dataframe be reindexed? Default False
     :type reindex: bool
@@ -179,14 +180,20 @@ def fs_read_attr_comid(dir_db_attrs:str | os.PathLike, comids_resp:list | Iterab
     # ------------------- Subset based on comids of interest ------------------
     if read_type == 'all': # Considering all parquet files inside directory
         # Read attribute data acquired using proc.attr.hydfab R package
-        all_attr_ddf = dd.read_parquet(dir_db_attrs, storage_options = storage_options)
-        attr_df_sub = all_attr_ddf.compute()
-        attr_ddf_subloc = all_attr_ddf[all_attr_ddf['featureID'].isin(comids_resp)]
-
+        all_files = [x for x in Path(dir_db_attrs).glob('*.parquet')]
+        all_df = pd.read_parquet(all_files)
+        #all_attr_ddf = dd.read_parquet(dir_db_attrs, storage_options = storage_options)
+        comids_resp_str = [str(s) for s in comids_resp]
+        attr_ddf_subloc = dd.from_pandas(all_df[all_df['featureID'].isin(comids_resp_str)],
+                                         npartitions=2)
     elif read_type == 'filename': # Read based on comid being located in the parquet filename
-        matching_files = [file for file in Path(dir_db_attrs).iterdir() \
-                          if file.is_file() and any(f'_{sub}_' in file.name for sub in comids_resp)]
-        attr_ddf_subloc = dd.read_parquet(matching_files, storage_options=storage_options)
+        
+        substrings = [f'_{sub}_' for sub in comids_resp]
+        pattern = re.compile('|'.join(map(re.escape,substrings)))
+        all_files = [file for file in Path(dir_db_attrs).iterdir() if file.is_file()]
+        matching_files = [file for file in all_files if pattern.search(str(file))]
+        # Read in all matching filenames and proceed
+        attr_ddf_subloc = dd.from_pandas(pd.read_parquet(matching_files),npartitions=2)
     else:
         # Initialize attr_ddf_sub
         attr_ddf_sub = None
@@ -202,7 +209,7 @@ def fs_read_attr_comid(dir_db_attrs:str | os.PathLike, comids_resp:list | Iterab
 
     attr_ddf_sub = attr_ddf_subloc[attr_ddf_subloc['attribute'].isin(attrs_sel)]
     
-    attr_df_sub = attr_ddf_sub.compute()
+    attr_df_sub = attr_ddf_sub.compute() # This takes a while querying many files.
 
     if attr_df_sub.shape[0] == 0:
         warnings.warn(f'The provided attributes do not exist with the retrieved featureIDs : \
