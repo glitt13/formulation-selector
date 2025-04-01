@@ -163,10 +163,18 @@ def fs_read_attr_comid(dir_db_attrs:str | os.PathLike, comids_resp:list | Iterab
         - `datasets`
     :rtype: pd.DataFrame
     """
+    # Changelog/contributions
+    #  2025-04-01 Add logic to remove empty parquet files
     if _s3:
         storage_options={"anon",True} # for public
         # TODO  Setup the s3fs filesystem that will be used, with xarray to open the parquet files
         #_s3 = s3fs.S3FileSystem(anon=True)
+
+    # Parquet files sized 0 bytes cause fatal errors when trying to read. Remove them.
+    files_empty = [file for file in Path(dir_db_attrs).rglob("*.parquet") if file.stat().st_size == 0]
+    if len(files_empty) > 0:
+        for file in files_empty:
+            os.remove(file)
 
     # ------------------- Subset based on comids of interest ------------------
     if read_type == 'all': # Considering all parquet files inside directory
@@ -643,16 +651,18 @@ def _read_pred_comid(path_pred_locs: str | os.PathLike, comid_pred_col:str ) -> 
     :return: list of comids
     :rtype: list[str]
     """
+    # Changelog/contributions
+    # 2025-03-30 Add in drop_duplicates(), GL
     if not Path(path_pred_locs).exists():
         FileNotFoundError(f"The path to prediction location data could not be found: \n{path_pred_locs} ")
     if '.csv' in Path(path_pred_locs).suffix:
         try:
-            comids_pred = pd.read_csv(path_pred_locs)[comid_pred_col].values
+            comids_pred = pd.read_csv(path_pred_locs).drop_duplicates()[comid_pred_col].values            
         except:
             raise ValueError(f"Could not successfully read in {path_pred_locs} & select col {comid_pred_col}")
     elif '.parquet' in Path(path_pred_locs).suffix:
         try:
-            comids_pred = pd.read_parquet(path_pred_locs)[comid_pred_col].values
+            comids_pred = pd.read_parquet(path_pred_locs).drop_duplicates()[comid_pred_col].values
         except:
             raise ValueError(f"Could not successfully read in {path_pred_locs} & select col {comid_pred_col}")
     else:
