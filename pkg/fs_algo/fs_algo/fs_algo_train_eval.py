@@ -672,7 +672,7 @@ def _read_pred_comid(path_pred_locs: str | os.PathLike, comid_pred_col:str ) -> 
         FileNotFoundError(f"The path to prediction location data could not be found: \n{path_pred_locs} ")
     if '.csv' in Path(path_pred_locs).suffix:
         try:
-            comids_pred = pd.read_csv(path_pred_locs)[comid_pred_col].drop_duplicates().values            
+            comids_pred = pd.read_csv(path_pred_locs).drop_duplicates()[comid_pred_col].values            
         except:
             raise ValueError(f"Could not successfully read in {path_pred_locs} & select col {comid_pred_col}")
     elif '.parquet' in Path(path_pred_locs).suffix:
