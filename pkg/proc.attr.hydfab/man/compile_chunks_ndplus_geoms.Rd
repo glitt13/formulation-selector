@@ -19,11 +19,13 @@ compile_chunks_ndplus_geoms(
 }
 \value{
 A compiled list of the geospatial data, containing:
-\list{catchment} The catchment boundaries NHDplus dataset
-\list{flowlines} The flowlines NHDplus dataset
-\list{outlet} The catchment outlet NHDplus dataset
-\list{input_dt} The input data.table with data used to query NHDplus
-\list{path_gpkg_compiled} File path of the saved geopackage
+\itemize{
+\item \code{catchment} The catchment boundaries NHDplus dataset
+\list \code{flowlines} The flowlines NHDplus dataset
+\list \code{outlet} The catchment outlet NHDplus dataset
+\list \code{input_dt} The input data.table with data used to query NHDplus
+\list \code{path_gpkg_compiled} File path of the saved geopackage
+}
 }
 \description{
 Compile chunked NHDPlus-retrieved geospatial datasets
