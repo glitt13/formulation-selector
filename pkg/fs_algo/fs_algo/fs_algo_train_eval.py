@@ -306,6 +306,7 @@ def _id_attrs_sel_wrap(attr_cfig: AttrConfigAndVars,
     :return: list of all attributes of interest, likely to use for training/prediction
     :rtype: list
 
+    :seealso: `proc.attr.hydfab::_id_attrs_sel_wrap` companion R function
     """
     # Changelog / contributions
     #  2024-04-15 Force into ensure uniqueness attributes, GL

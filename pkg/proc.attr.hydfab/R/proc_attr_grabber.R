@@ -24,6 +24,9 @@ library(tibble)
 library(stringr)
 library(fs)
 
+
+
+
 attr_cfig_parse <- function(path_attr_config){
   #' @title Read and parse the attribute config yaml file to create parameter
   #' list object
@@ -2768,9 +2771,8 @@ fs_attrs_miss_mlti_wrap <- function(path_attr_config){
   # Generate the parameter list
   Retr_Params <- proc.attr.hydfab::attr_cfig_parse(path_attr_config = path_attr_config)
 
-  # Missing attributes specifically needed for transformation
-  path_missing_attrs <- proc.attr.hydfab::std_path_miss_tfrm(Retr_Params$paths$dir_db_attrs)
-  df_miss <- proc.attr.hydfab::std_path_miss_tfrm_io(path_missing_attrs, read=TRUE)
+  path_missing_attrs <- proc.attr.hydfab::std_miss_path(Retr_Params$paths$dir_db_attrs)
+  df_miss <- utils::read.csv(path_missing_attrs)
   # Remove any null comids:
   idxs_none <- base::which(df_miss$comid == "None")
   if(base::length(idxs_none)>0){
@@ -2887,13 +2889,14 @@ fs_attrs_miss_mlti_wrap <- function(path_attr_config){
     } else {
       message("Some missing comid-attribute pairings still remain")
     }
-    # Now update the transformation's missing comid-attribute pairing file
-    proc.attr.hydfab::std_path_miss_tfrm_io(path_missing_attrs,
-                                       df_miss=df_still_missing,read=FALSE)
+
+    # Write the updated missing attributes file
+    base::write.csv(df_still_missing,path_missing_attrs,row.names = FALSE)
   } else {
     message("No missing comid-attribute pairings.")
   }
 }
+
 
 
 
