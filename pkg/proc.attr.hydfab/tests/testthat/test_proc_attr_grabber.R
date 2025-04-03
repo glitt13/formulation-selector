@@ -71,6 +71,71 @@ ignore_deprecated_tests <- TRUE # Tests built for functions now deprecated
 #                              UNIT TESTING
 # ---------------------------------------------------------------------------- #
 
+
+testthat::test_that("tform_cfig_parse", {
+  # Define path to yaml
+  path_tform_config <- base::file.path(dir_base,"test_config","tform_config.yaml")
+  # NOTE: EDIT TEST FOR build_cfig_path IF THIS ^^ CHANGES!!
+
+  # Run the function
+  parsed_config <- proc.attr.hydfab::tform_cfig_parse(path_tform_config)
+
+  # Check that the function returns a list with expected names
+  testthat::expect_type(parsed_config, "list")
+  testthat::expect_named(parsed_config, c("file_io", "transform_attrs"))
+
+  # Check transform_attrs section
+  testthat::expect_identical(c("TOT_PROGLACIAL_SED_{tform_type}",
+    "TOT_GLACIAL_TILL_{tform_type}","TOT_NLCD06_FOR_{tform_type}",
+    "TOT_WB5100_yr_{tform_type}","TOT_HDENS_8010_{tform_type}"),
+                   names(parsed_config$transform_attrs))
+
+})
+
+testthat::test_that("build_cfig_path",{
+
+  path_attr_config <- base::file.path(dir_base,"test_config","attr_config.yaml")
+  rslt <- proc.attr.hydfab::build_cfig_path(path_known_config = path_attr_config,
+                                            path_or_name_cfig = "tform_config.yaml")
+  testthat::expect_true(base::file.exists(rslt))
+  testthat::expect_true(base::dirname(rslt) == base::dirname(path_attr_config))
+})
+
+testthat::test_that("attr_cfig_parse", {
+  # Define path to yaml
+  path_attr_config <- base::file.path(dir_base,"test_config","attr_config.yaml")
+  # NOTE: EDIT TEST FOR build_cfig_path IF THIS ^^ CHANGES!!
+
+  # Run the function
+  parsed_config <- proc.attr.hydfab::attr_cfig_parse(path_attr_config)
+
+  # Check that the function returns a list with expected names
+  testthat::expect_type(parsed_config, "list")
+  testthat::expect_named(parsed_config, c("paths","vars","datasets","ds_type",
+                                          "write_type"))
+  # The variables from transform config should also be present
+  testthat::expect_equal(length(unique(parsed_config$vars$usgs_vars) ), 72)
+  testthat::expect_true(any(grepl("TOT_HDENS10",parsed_config$vars$usgs_vars)))
+
+})
+
+
+testthat::test_that("map_attrs_to_dataset", {
+  # Run function using variables from hydroatlas, USGS NLDI/NHDPlus
+  vars <- base::c('pet_mm_s01','TOT_PPT7100_ANN', 'TOT_BASIN_AREA')
+  rslt <- proc.attr.hydfab::map_attrs_to_dataset(vars)
+
+  testthat::expect_type(rslt, "list")
+  testthat::expect_equal(names(rslt), c("ha_vars","usgs_vars"))
+  testthat::expect_true(length(rslt$usgs_vars) == 2)
+
+  # Run when a variable doesn't exist:
+  # Check error when mapping is incomplete
+  testthat::expect_error(proc.attr.hydfab::map_attrs_to_dataset(c("A", "B","C")),
+               "Total variables in should match total variables matched.")
+})
+
+
 # ------------------ multi-comid attribute grabbing functions -----------------
 testthat::test_that("io_attr_dat",{
   path_attr_exst <- file.path(dir_base,"attributes_pah","comid_1722317_attrs.parquet")
