@@ -2,8 +2,7 @@
 % Please edit documentation in R/proc_attr_grabber.R
 \name{std_path_miss_tfrm}
 \alias{std_path_miss_tfrm}
-\title{Create a standardized path for storing missing comid-attribute
-pairings needed for attribute transformation}
+\title{standardize path to file listing all missing attributes needed for transformation}
 \usage{
 std_path_miss_tfrm(dir_db_attrs)
 }
@@ -11,8 +10,7 @@ std_path_miss_tfrm(dir_db_attrs)
 \item{dir_db_attrs}{The directory to the attribute database}
 }
 \description{
-Create a standardized path for storing missing comid-attribute
-pairings needed for attribute transformation
+standardize path to file listing all missing attributes needed for transformation
 }
 \seealso{
 \code{fs_algo.tfrm_attrs.std_path_miss_tfrm} python package
