@@ -108,7 +108,6 @@ if __name__ == "__main__":
                 if not Path(path_algo).exists():
                     raise FileNotFoundError(f"The following algorithm path does not exist: \n{path_algo}")
 
-
                 # Read in the algorithm's pipeline
                 # pipe = joblib.load(path_algo)
                 pipeline_with_ci = joblib.load(path_algo)
@@ -116,13 +115,21 @@ if __name__ == "__main__":
                 feat_names = list(pipe.feature_names_in_)
                 df_attr_sub = df_attr_wide[feat_names]
 
-                # Perform prediction
-                resp_pred = pipe.predict(df_attr_sub)
+                # Remove na values
+                df_attr_sub_rmna = df_attr_sub.dropna()
+                if df_attr_sub_rmna.shape[0] < df_attr_sub.shape[0]:
 
+                    ids_na = set(df_attr_sub.index) - set(df_attr_sub_rmna.index)
+                    msg_rm_na = f"Removing the following featureIDs from prediction due " + \
+                     f"to NA values:\n{'\n'.join(ids_na)}"
+                    warnings.warn(msg_rm_na)
+
+                # Perform prediction
+                resp_pred = pipe.predict(df_attr_sub_rmna)
 
                 # compile prediction results:
                 comids_pred = list(set(comids_pred)) # Make sure there are no duplicates
-                df_pred =pd.DataFrame({'comid':comids_pred,
+                df_pred =pd.DataFrame({'featureID':df_attr_sub_rmna.index.to_list(),
                              'prediction':resp_pred,
                             #  'ci': pred_ci,
                              'metric':metric,

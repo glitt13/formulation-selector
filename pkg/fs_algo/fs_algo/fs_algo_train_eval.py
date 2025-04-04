@@ -249,7 +249,6 @@ def _check_attributes_exist(df_attr: pd.DataFrame, attrs_sel:pd.Series | Iterabl
     :seealso: :func:`fs_read_attr_comid()`
 
     """
-    #
     if not isinstance(attrs_sel,pd.Series):
         # Convert to a series for convenience of pd.Series.isin()
         attrs_sel = pd.Series(attrs_sel)
@@ -260,8 +259,8 @@ def _check_attributes_exist(df_attr: pd.DataFrame, attrs_sel:pd.Series | Iterabl
         # multiple combos of comid/attrs exist. Find them and warn about it.
         vec_missing = df_attr.groupby('featureID')['attribute'].count() != len(attrs_sel)
         bad_comids = vec_missing.index.values[vec_missing]
-        
-        warnings.warn(f"    TOTAL unique locations with missing attributes: {len(bad_comids)}",UserWarning)
+        msg_tot_loc = f"    TOTAL unique locations with missing attributes: {len(bad_comids)}"
+        warnings.warn(msg_tot_loc,UserWarning)
         df_attr_sub_missing = df_attr[df_attr['featureID'].isin(bad_comids)]
     
         if isinstance(attrs_sel,list):
@@ -269,7 +268,8 @@ def _check_attributes_exist(df_attr: pd.DataFrame, attrs_sel:pd.Series | Iterabl
             missing_attrs = pd.DataFrame({'attribute':missing_attrs})
         else:
             missing_attrs = attrs_sel[~attrs_sel.isin(df_attr_sub_missing['attribute'])]
-        warnings.warn(f"    TOTAL MISSING ATTRS: {len(missing_attrs)}",UserWarning)
+        msg_tot_miss = f"    TOTAL MISSING ATTRS: {len(missing_attrs)}"
+        warnings.warn(msg_tot_miss,UserWarning)
         str_missing = '\n    '.join(missing_attrs.values)
 
         warn_msg_missing_attrs = "\
@@ -279,8 +279,6 @@ def _check_attributes_exist(df_attr: pd.DataFrame, attrs_sel:pd.Series | Iterabl
         warn_msg2 = "\nMissing attributes include: \n    " + str_missing
         warn_msg_3 = "\n COMIDs with missing attributes include: \n" + ', '.join(bad_comids)
         warnings.warn(warn_msg_missing_attrs + warn_msg2 + warn_msg_3,UserWarning)
-        
-    
     return {'df_attr': df_attr, 'attrs_sel': attrs_sel}
 
 
