@@ -2014,13 +2014,31 @@ hfab_config_opt <- function(hfab_config,
   return(xtra_cfig_hfab)
 }
 
-std_miss_path <- function(dir_db_attrs){
-  #' @title standardize path to file listing all missing attributes
+std_path_miss_tfrm <- function(dir_db_attrs){
+  #' @title Create a standardized path for storing missing comid-attribute
+  #' pairings needed for attribute transformation
   #' @param dir_db_attrs The directory to the attribute database
-  #' @seealso `fs_algo.tfrm_attrs.std_miss_path` python package
+  #' @seealso `fs_algo.tfrm_attrs.std_path_miss_tfrm` python package
   #' @export
-  path_missing_attrs <- file.path(dir_db_attrs,"missing","needed_loc_attrs.csv")
+  path_missing_attrs <- file.path(dir_db_attrs,"missing_tform",
+                                  "needed_loc_attrs_for_tform.csv")
   return(path_missing_attrs)
+}
+
+std_path_miss_tfrm_io <- function(path_missing_attrs,  read=TRUE, df_miss=NULL){
+  #' @title Read or write the standardized missing comid file for transformation
+  #' @param path_missing_attrs The full path to file created by \link[proc.attr.hydfab]{std_path_miss_tfrm}
+  #' @param df_miss The dataframe if interested in writing. Default NULL for reading.
+  #' @param read Boolean. Should the missing data be read? Default TRUE
+  #' @export
+  if(read){
+    df_miss <- utils::read.csv(path_missing_attrs,header=TRUE, check.names=TRUE)
+    return(df_miss)
+  } else if (!base::is.null(df_miss)) {
+    utils::write.csv(x=df_miss,file = path_missing_attrs,row.names = FALSE)
+  } else {
+    stop("Inappropriate application of the standardized file i/o for missing comids")
+  }
 }
 
 ######## MISSING COMID-ATTRIBUTES ##########
@@ -2041,8 +2059,8 @@ fs_attrs_miss_wrap <- function(path_attr_config){
   # Generate the parameter list
   Retr_Params <- proc.attr.hydfab::attr_cfig_parse(path_attr_config = path_attr_config)
 
-  path_missing_attrs <- proc.attr.hydfab::std_miss_path(Retr_Params$paths$dir_db_attrs)
-  df_miss <- utils::read.csv(path_missing_attrs,header=TRUE, check.names = TRUE)#,col.names = c("X","comid"	attribute	config_file	uniq_cmbo	dl_dataset)
+  path_missing_attrs <- proc.attr.hydfab::std_path_miss_tfrm(Retr_Params$paths$dir_db_attrs)
+  df_miss <- proc.attr.hydfab::std_path_miss_tfrm_io(path_missing_attrs, read=TRUE)
 
   bool_chck_class_comid <- df_miss[['comid']][1] %>% as.character() %>%
     as.numeric() %>% suppressWarnings() %>% is.na() # Is the comid non-numeric?
@@ -2159,8 +2177,8 @@ fs_attrs_miss_wrap <- function(path_attr_config){
     } else {
       message("Some missing comid-attribute pairings still remain")
     }
-    # Now update the missing comid-attribute pairing file
-    write.csv(filter_df,file = path_missing_attrs,row.names = FALSE)
+    # Now update the transformation's missing comid-attribute pairing file
+    proc.attr.hydfab::std_path_miss_tfrm_io(path_missing_attrs,df_miss=filter_df,read=FALSE)
 
   } else {
     message("No missing comid-attribute pairings.")
@@ -2189,8 +2207,9 @@ fs_attrs_miss_mlti_wrap <- function(path_attr_config){
   # Generate the parameter list
   Retr_Params <- proc.attr.hydfab::attr_cfig_parse(path_attr_config = path_attr_config)
 
-  path_missing_attrs <- proc.attr.hydfab::std_miss_path(Retr_Params$paths$dir_db_attrs)
-  df_miss <- utils::read.csv(path_missing_attrs)
+  # Missing attributes specifically needed for transformation
+  path_missing_attrs <- proc.attr.hydfab::std_path_miss_tfrm(Retr_Params$paths$dir_db_attrs)
+  df_miss <- proc.attr.hydfab::std_path_miss_tfrm_io(path_missing_attrs, read=TRUE)
   # Remove any null comids:
   idxs_none <- base::which(df_miss$comid == "None")
   if(base::length(idxs_none)>0){
@@ -2274,9 +2293,15 @@ fs_attrs_miss_mlti_wrap <- function(path_attr_config){
       message(glue::glue(
         "Retrieving {length(unlist(vars_ls))} attributes for {length(comids)} total comids.
         This may take a while."))
-      dt_all <- proc.attr.hydfab::proc_attr_mlti_wrap(comids=comids,
+      dt_all <- try(proc.attr.hydfab::proc_attr_mlti_wrap(comids=comids,
                                             Retr_Params=Retr_Params,
-                                            lyrs="network",overwrite=FALSE)
+                                            lyrs="network",overwrite=FALSE))
+      if("try-error" %in% base::class(dt_all) || base::nrow(dt_all) == 0){
+        comids_str <- base::paste0(comids,collapse='\n')
+        warning(glue::glue("Could not retrieve attribute data for the following comids:
+                {comids_str}"))
+        next()
+      }
 
       # The unique-id key for identifying unique location-attribute combinations
       ls_have_uniq_cmbo[[row]] <- proc.attr.hydfab:::uniq_id_loc_attr(dt_all$featureID,
@@ -2301,9 +2326,9 @@ fs_attrs_miss_mlti_wrap <- function(path_attr_config){
     } else {
       message("Some missing comid-attribute pairings still remain")
     }
-
-    # Write the updated missing attributes file
-    base::write.csv(df_still_missing,path_missing_attrs,row.names = FALSE)
+    # Now update the transformation's missing comid-attribute pairing file
+    proc.attr.hydfab::std_path_miss_tfrm_io(path_missing_attrs,
+                                       df_miss=df_still_missing,read=FALSE)
   } else {
     message("No missing comid-attribute pairings.")
   }
