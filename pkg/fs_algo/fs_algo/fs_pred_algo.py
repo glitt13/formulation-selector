@@ -121,31 +121,6 @@ if __name__ == "__main__":
                 # Perform prediction
                 resp_pred = pipe.predict(df_attr_sub_rmna)
 
-                # Initialize DataFrame for storing results
-                #df_pred = pd.DataFrame({'featureID': comids_pred, 'prediction': resp_pred, 'metric': metric, 'dataset': ds, 'algo': algo, 'name_algo': Path(path_algo).name})
-                df_pred = pd.DataFrame({'featureID': df_attr_sub_rmna.index.astype(str), 'prediction': resp_pred, 'metric': metric, 'dataset': ds, 'algo': algo, 'name_algo': Path(path_algo).name})
-                # If using RandomForest, calculate confidence intervals using forestci
-                if algo == 'rf' and forestci:
-                    rf_model = pipe.named_steps['randomforestregressor']  # Use the correct step name
-                    forest_ci = fci.random_forest_error(forest=rf_model, X_train_shape=X_train_shape, X_test=df_attr_sub.to_numpy())
-                    df_pred['forestci'] = forest_ci
-        
-                # If MAPIE is available, compute prediction intervals
-                if 'mapie' in pipeline_data and mapie_alpha:
-                    mapie = pipeline_data['mapie']
-                    y_pred_mapie, y_pis = mapie.predict(df_attr_sub, alpha=mapie_alpha)
-        
-                    # Rename columns based on self.mapie_alpha values
-                    for i, alpha in enumerate(mapie_alpha):
-                        df_pred[f'mapie_lower_{alpha:.2f}'] = y_pis[:, 0, i]
-                        df_pred[f'mapie_upper_{alpha:.2f}'] = y_pis[:, 1, i]
-                elif mapie_alpha and 'mapie' not in pipeline_data:
-                    warnings.warn("MAPIE prediction interval estimation is not available in the " \
-                    "trained algorithm pipeline, but mapie_alpha is specified in the prediction config file." \
-                    "If prediction uncertainty desired, re-run the algorithm training fs_proc_algo_viz.py, " \
-                    "with mapie specified in the Uncertainty section of the algo config file.")
-
-
                 # compile prediction results:
                 df_pred =pd.DataFrame({'comid':comids_pred,
                              'prediction':resp_pred,
