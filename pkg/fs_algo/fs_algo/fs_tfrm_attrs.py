@@ -61,7 +61,7 @@ if __name__ == "__main__":
     home_dir = attr_cfig.attrs_cfg_dict.get('home_dir',Path.home())
 
     # Define path to store missing comid-attribute pairings:
-    path_need_attrs = fta.std_miss_path(dir_db_attrs)
+    path_need_attrs = fta.std_path_miss_tfrm(dir_db_attrs)
 
     #%% READ COMIDS FROM CUSTOM FILE (IF path_comid present in tfrm config)
     # Extract location of custom file containing comids:
@@ -126,8 +126,9 @@ if __name__ == "__main__":
     must_have_uniq_cmbo = [f"{comid}_{var}" for comid in comids for var in all_retr_vars]
 
     # Determine which comid-attribute pairings missing using unique key
-    uniq_cmbo_absent = [item for item in must_have_uniq_cmbo if item not in df_attr_all['uniq_cmbo'].values]
-    
+    #uniq_cmbo_absent = [item for item in must_have_uniq_cmbo if item not in df_attr_all['uniq_cmbo'].values]
+    uniq_cmbo_absent = list(set(must_have_uniq_cmbo) - set(df_attr_all['uniq_cmbo']))
+
     # Split items not in series back into comids and attributes
     df_missing = pd.DataFrame({'comid':[x.split('_')[0] for x in uniq_cmbo_absent],
                                'attribute': [re.sub(r'^\d+_','',x) for x in uniq_cmbo_absent],

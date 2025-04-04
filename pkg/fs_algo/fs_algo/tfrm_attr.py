@@ -185,11 +185,11 @@ def _subset_ddf_parquet_by_comid(dir_db_attrs: str | os.PathLike,
     parquet file corresponding to single location, i.e. f'*_{comid}_*'
     :type fp_struct: str, optional
     :return: lazy dask dataframe of all attributes corresponding to the 
-    single comid
+    unique id (e.g. comid)
     :rtype: dd.DataFrame
     """
 
-    # Based on the structure of comid
+    # Based on the structure of unique id in filename
     fp = list(Path(dir_db_attrs).rglob('*'+str(fp_struct)+'*') )
     if fp:
       all_attr_ddf = dd.read_parquet(fp, storage_options = None)
@@ -373,7 +373,7 @@ def _id_need_tfrm_attrs(all_attr_ddf: dd.DataFrame|None,
 
 #%% missing attributes
 
-def std_miss_path(dir_db_attrs: str | os.PathLike) -> os.PathLike:
+def std_path_miss_tfrm(dir_db_attrs: str | os.PathLike) -> os.PathLike:
     """Create a standardized csv path for storing missing comid-attribute 
     pairings needed for attribute transformation
 
@@ -383,7 +383,7 @@ def std_miss_path(dir_db_attrs: str | os.PathLike) -> os.PathLike:
     `Path(dir_db_attrs/Path(missing/needed_loc_attrs.csv))`
     :rtype: os.PathLike
     """
-    path_need_attrs = Path(Path(dir_db_attrs) / Path('missing/needed_loc_attrs.csv'))
+    path_need_attrs = Path(Path(dir_db_attrs) / Path('missing_tform/needed_loc_attrs_for_tform.csv'))
     path_need_attrs.parent.mkdir(parents=True,exist_ok=True)
     return path_need_attrs
 
@@ -404,7 +404,7 @@ def write_missing_attrs(attrs_retr_sub:list, dir_db_attrs: str | os.PathLike,
     :type path_tfrm_cfig: str | os.PathLike
     """
     # Create path where needed attributes are saved
-    path_need_attrs = std_miss_path(dir_db_attrs)
+    path_need_attrs = std_path_miss_tfrm(dir_db_attrs)
 
     # All the available attributes for a given comid
     df_all = fsate.fs_read_attr_comid(dir_db_attrs, comids_resp=[str(comid)], attrs_sel='all',
@@ -443,7 +443,7 @@ def tfrm_attr_comids_wrap(comids: Iterable, path_tfrm_cfig: str | os.PathLike):
 
     """
     # Changelog/contributions
-    # Changed to wrapper function based on comid and transformation config 
+    # 2025-03: Changed to wrapper function based on comid and transformation config, GL
 
 
     with open(path_tfrm_cfig, 'r') as file:
@@ -485,7 +485,7 @@ def tfrm_attr_comids_wrap(comids: Iterable, path_tfrm_cfig: str | os.PathLike):
     ls_all_cstm_funcs = list(dict_all_cstm_funcs.values())
 
     # Define path to store missing comid-attribute pairings:
-    path_need_attrs = std_miss_path(dir_db_attrs)
+    path_need_attrs = std_path_miss_tfrm(dir_db_attrs)
     #%%
     for comid in comids:
         ddf_loc_attrs=_subset_ddf_parquet_by_comid(dir_db_attrs,
@@ -518,13 +518,15 @@ def tfrm_attr_comids_wrap(comids: Iterable, path_tfrm_cfig: str | os.PathLike):
 
             # The attributes used for creating the new variable
             attrs_retr_sub = dict_retr_vars.get(new_var)
-            
-
 
             # Retrieve the variables of interest for the function
-            df_attr_sub = fsate.fs_read_attr_comid(dir_db_attrs, comids_resp=[str(comid)], attrs_sel=attrs_retr_sub,
-                            _s3 = None,storage_options=None,read_type='filename')
-
+            try:
+                df_attr_sub = fsate.fs_read_attr_comid(dir_db_attrs, comids_resp=[str(comid)], attrs_sel=attrs_retr_sub,
+                                _s3 = None,storage_options=None,read_type='filename')
+            except:
+                warnings.warn(f'Could not acquire comid {comid} attributes. Skipping to next comid.')
+                warnings.warn(f'Missing attributes include {"|".join(attrs_retr_sub)}')
+                continue
             # Check if needed attribute data all exist. If not, write to 
             # csv file to know what is missing
             if df_attr_sub.shape[0] < len(attrs_retr_sub):

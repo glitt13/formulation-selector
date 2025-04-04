@@ -301,7 +301,6 @@ def _id_attrs_sel_wrap(attr_cfig: AttrConfigAndVars,
     :return: list of all attributes of interest, likely to use for training/prediction
     :rtype: list
 
-    :seealso: `proc.attr.hydfab::_id_attrs_sel_wrap` companion R function
     """
     if name_attr_csv:
         path_attr_csv = build_cfig_path(path_cfig,name_attr_csv)
