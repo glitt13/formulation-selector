@@ -1993,7 +1993,7 @@ def gen_conus_basemap(dir_out_basemap:str | os.PathLike, # This should be the da
     return states
     
 def plot_map_pred(geo_df:gpd.GeoDataFrame, states,title:str,metr:str,
-                  colname_data:str='performance'):
+                  colname_data:str='prediction'):
     """Genereate a map of predicted response variables
 
     :param geo_df: Geodataframe of response variable results
@@ -2004,7 +2004,7 @@ def plot_map_pred(geo_df:gpd.GeoDataFrame, states,title:str,metr:str,
     :type title: str
     :param metr: The metric/response variable of interest
     :type metr: str
-    :param colname_data: The geo_df column name representing data of interest, defaults to 'performance'
+    :param colname_data: The geo_df column name representing data of interest, defaults to 'prediction'
     :type colname_data: str, optional
     :return: Map of predicted response variables
     :rtype: Figure
@@ -2035,7 +2035,7 @@ def plot_map_pred(geo_df:gpd.GeoDataFrame, states,title:str,metr:str,
 def plot_map_pred_wrap(test_gdf,dir_out_viz_base, ds,
                       metr,algo_str,
                       split_type='test',
-                      colname_data='performance'):
+                      colname_data='prediction'):
 
     path_pred_map_plot = std_map_pred_path(dir_out_viz_base,ds,metr,algo_str,split_type)
     dir_out_basemap = path_pred_map_plot.parent.parent
@@ -2045,7 +2045,7 @@ def plot_map_pred_wrap(test_gdf,dir_out_viz_base, ds,
     test_gdf = test_gdf.to_crs(4326)
 
     # Generate the map
-    plot_title = f"Predicted Values: {metr} - {ds}"
+    plot_title = f"Predicted Values: {metr} - {ds}: {algo_str} algorithm"
     plot_pred_map = plot_map_pred(geo_df=test_gdf, states=states,title=plot_title,
                                   metr=metr,colname_data=colname_data)
 
@@ -2066,7 +2066,7 @@ def plot_best_perf_map(geo_df,states, title, comparison_col = 'dataset'):
     :type states: gpd.GeoDataFrame
     :param title: Map title
     :type title: str
-    :param comparison_col: The geo_df column name representing data of interest, defaults to 'performance'
+    :param comparison_col: The geo_df column name representing data of interest, defaults to 'dataset'
     :type comparison_col: str, optional
     :return: Map of best-predicted response variables
     :rtype: Figure
