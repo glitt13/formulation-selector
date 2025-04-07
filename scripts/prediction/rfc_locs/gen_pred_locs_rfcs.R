@@ -27,12 +27,12 @@ main <- function(){
     stop(glue::glue("The provided path_cfig_pred does not exist: {path_cfig_pred}"))
   }
 
-
   cfig_pred <- yaml::read_yaml(path_cfig_pred)
   ds_type <- base::unlist(cfig_pred)[['ds_type']]
   write_type <- base::unlist(cfig_pred)[['write_type']]
   path_meta <- base::unlist(cfig_pred)[['path_meta']] # The filepath of the file that generates the list of comids used for prediction
   # READ IN ATTRIBUTE CONFIG FILE
+
   name_attr_config <- cfig_pred[['name_attr_config']]
   path_attr_config <- proc.attr.hydfab::build_cfig_path(path_cfig_pred,name_attr_config)
 
