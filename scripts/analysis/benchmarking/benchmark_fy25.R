@@ -178,11 +178,6 @@ ha <- arrow::open_dataset(path_attrs_all_oconus) %>%
 path_attr_config <- "~/git/formulation-selector/scripts/analysis/benchmarking/oconus_attrs.yaml"
 Retr_Params <- proc.attr.hydfab::attr_cfig_parse(path_attr_config)
 
-
-# TODO determine vpu to map to appropriate hydrofabric geopackage created by
-
-# TODO add
-
 proc.attr.hydfab::fs_attrs_miss_mlti_wrap(path_attr_config)
 
 
@@ -206,67 +201,3 @@ if (demo_example){
 
 }
 
-
-#
-# # -----
-# testing_nwps_api = FALSE
-# if(testing_nwps_api){
-#   dt_meta_noaa <- proc.attr.hydfab::retr_noaa_gauges_meta(gauge_ids =gauge_ids,
-#                                                           gauge_url_base = path_nwps_api,
-#                                                           retr_ids = c("lid","usgsId","name","latitude","longitude"))
-#
-#   dt_meta_noaa_sub_no_coords <- dt_meta_noaa[base::which(is.na(dt_meta_noaa$latitude)),]
-#
-#   dt_hads_has_sub <- base::lapply(dt_meta_noaa_sub_no_coords$lid,
-#                                   function(id) dt_hads %>% dplyr::filter(lid == id)) %>%
-#     data.table::rbindlist()
-#   if(base::any(base::is.na(dret_meta_noaa$latitude))){
-#
-#   }
-#
-#   # for some reason, CSNC2 is not detected in the database. USGS-07103700
-#   dt_meta_noaa[['usgsId']][dt_meta_noaa$lid == "CSNC2"] <- "07103700"
-#   dt_meta_noaa[['name']][dt_meta_noaa$lid == "CSNC2"] <- "Fountain Creek Near Colorado Springs CO"
-#
-#
-#   # Populate standardized featureID and featureSource unique identifiers
-#   dt_meta_noaa <- proc.attr.hydfab::std_feat_id(df=dt_meta_noaa,
-#                                                 name_featureSource ="COMID",
-#                                                 vals_featureID = comids)
-#
-#
-#   # -----------------
-#   library(httr)
-#   library(jsonlite)
-#   retr_all_nwps_gauges <- function(gauge_url_base="https://api.water.noaa.gov/nwps/v1/gauges"){
-#     resp <- httr::GET(gauge_url_base)
-#     if(status_code(resp) == 200){
-#       contents <- httr::content(resp, as='text',encoding= "UTF-8")
-#       ls_nwps_gages <- jsonlite::fromJSON(contents,flatten=TRUE)
-#       df <- as.data.frame(data_list)
-#     }
-#   }
-#
-# }
-#
-#
-#
-# # -----
-# # TODO build this map based on config file rather than hard-code it
-# # Mapping the geopackage file locations to their postal id & expected CRS
-# # hfab_srce_map <- data.table::data.table(domain = c("AK","PR","VI","HI"),
-# #            paths = c("~/noaa/hydrofabric/v2.2/ak_nextgen.gpkg",
-# #                      "~/noaa/hydrofabric/v2.2/prvi_nextgen.gpkg",
-# #                      "~/noaa/hydrofabric/v2.2/prvi_nextgen.gpkg",
-# #                      "~/noaa/hydrofabric/v2.2/hi_nextgen.gpkg"),
-# #            crs_epsg = c("EPSG:3338","EPSG:6566",
-# #                         "EPSG:6566","ESRI:102007") # just in case can't be automatically detected with sf
-# #            )
-#
-#
-#
-# # df <- arrow::read_parquet("~/noaa/regionalization/data/input/attributes/comid_10023916_attrs.parquet")
-#
-
-
-#
