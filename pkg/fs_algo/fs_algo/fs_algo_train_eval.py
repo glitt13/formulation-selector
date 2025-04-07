@@ -351,11 +351,12 @@ def fs_retr_nhdp_comids_geom(featureSource:str,featureID:str,gage_ids: Iterable[
     :param gage_ids: The location identifiers compatible with the format specified in `featureID`
     :type gage_ids: Iterable[str]
     :raises warnings.warn: In case number of retrieved comids does not match total requested gage ids
-    :return: The COMIDs & point geometry corresponding to the provided location identifiers, `gage_ids`
+    :return: The COMIDs, gage_id, & point geometry corresponding to the provided location identifiers, `gage_ids`
     :rtype: GeoDataFrame
 
     Changelog:
         2024-12-01 refactor: return GeoDataFrame with coordinates instead of a list of just comids, GL
+        2025-03-07 add gage_id to return geodataframe
     """
 
     nldi = nhd.NLDI()
@@ -363,7 +364,9 @@ def fs_retr_nhdp_comids_geom(featureSource:str,featureID:str,gage_ids: Iterable[
     comids_miss = []
     comids_resp = []
     geom_pts = []
+    feature_id = []
     for gage_id in gage_ids:
+        feature_id.append(featureID.format(gage_id=gage_id))
         try:
             upstr_flowline = nldi.navigate_byid(
                 fsource=featureSource,
@@ -388,7 +391,8 @@ def fs_retr_nhdp_comids_geom(featureSource:str,featureID:str,gage_ids: Iterable[
     #     raise warnings.warn("The total number of retrieved comids does not match \
     #                   total number of provided gage_ids",UserWarning)
 
-    gdf_comid = gpd.GeoDataFrame(pd.DataFrame({ 'comid': comids_resp}),
+    gdf_comid = gpd.GeoDataFrame(pd.DataFrame({ 'comid': comids_resp,
+                                               'gage_id': gage_ids}),
                                             geometry=geom_pts,crs=4326 
                                 )
 
@@ -465,6 +469,22 @@ def fs_save_algo_dir_struct(dir_base: str | os.PathLike ) -> dict:
                 'dir_out_viz_base' : dir_out_viz_base}
 
     return out_dirs
+
+def _std_fs_proc_ds_companion_gpkg_path(path_fs_proc:str|os.PathLike)->os.PathLike:
+    """Create the standardized gpkg path for coordinate data & id mapping
+      corresponding to the standardized input data
+
+    :param path_fs_proc: Path used for the standardized dataset created using fs_proc.proc_eval_metrics.proc_col_schema()
+    :type path_fs_proc: str | os.PathLike
+    :return: Path storing the coordinates and id-mapping of each location of interest
+    :rtype: os.PathLike
+    """
+    path_fs_proc =Path(path_fs_proc)
+    sub_name_loc = path_fs_proc.with_suffix('')
+    new_name_loc = str(sub_name_loc.name) + '_loc'
+    new_name_gpkg = str(Path(new_name_loc).with_suffix('.gpkg'))
+    path_gpkg_fs_proc = path_fs_proc.with_name(new_name_gpkg)
+    return path_gpkg_fs_proc
 
 def _std_fs_proc_ds_paths(dir_std_base: str|os.PathLike,ds:str,mtch_str='*.nc') -> list:
     """The standard .nc paths for standardized dataset created using fs_proc.proc_eval_metrics.proc_col_schema()
@@ -665,6 +685,61 @@ def find_common_comid(dict_gdf_comids:Dict[str,gpd.GeoDataFrame], column='comid'
     common_comid = list(common_comid)
     return common_comid
 
+
+def fs_retr_nhdp_comids_geom_wrap(path_save_gpkg:str|os.PathLike,
+                                  gage_ids:Iterable,
+                                featureSource:str='nwissite', featureID:str='USGS-{gage_id}'
+                                ) ->gpd.GeoDataFrame:
+    """Read or generate a geodataframe that queries NHDplus for comid and coordinate based
+    on provided gage_id, or compatible featureSource/featureID pairing
+
+    :param path_save_gpkg: filepath where data are saved. This limits the number of hits to the NHDplus database
+    :type path_save_gpkg: str | os.PathLike
+    :param gage_ids: The identifiers of interest, e.g. the USGS gage id numbers
+    :type gage_ids: Iterable
+    :param featureSource: the datasource for featureID from the R function 
+        :mod:`nhdplusTools` :func:`get_nldi_features()`,defaults to 'nwissite'
+    :type featureSource: str
+    :param featureID: The conversion format of `gage_ids` into a recognizable string for
+      :mod:`nhdplusTools`, which is an f-string configured conversion of `gage_id`
+       defaults to 'USGS-{gage_id}'. Expected to contain the string `"{gage_id}"`
+    :type featureID: str
+    :return: Geodataframe with the columns 'comid', 'geometry', 'gage_id'
+    :rtype: gpd.GeoDataFrame
+    :seealso: :func:`combine_resp_gdf_comid_wrap` A wrapper function that calls this function
+    :seealso: :func:`_std_fs_proc_ds_companion_gpkg_path` The standardized path to use for path_save_gpkg
+    :seealso: :mod:`proc.attr.hydfab`:func:`fs_retr_nhdp_comids_geom_wrap` The corresponding R function
+    """
+    path_save_gpkg = Path(path_save_gpkg)
+    if path_save_gpkg.exists(): # Maybe we can skip the database connection!
+        # Read the intermediate file & check if any gage_ids need comids:
+        gdf_comid_in = gpd.read_file(path_save_gpkg,layer='outlet')
+        cmmn_ids = np.intersect1d(gdf_comid_in['gage_id'], gage_ids)
+        if len(cmmn_ids) == len(gage_ids): # All gage_ids accounted for
+            gdf_comid = gdf_comid_in.copy()
+            # TODO could consider check to try and fill in missing comid data here...
+            # TODO MUST ensure these searches/fill ins ultimately maintain same sequence as gage_ids
+            # if gdf_comid_in['comid'].isna().sum() >0:
+            #     need_gage_ids = gdf_comid_in['gage_id'][gdf_comid_in['comid'].isna()]
+            #     gid_chck = fs_retr_nhdp_comids_geom(featureSource=featureSource,
+            #                                         featureID=featureID,
+            #                                         gage_ids=need_gage_ids.values)
+        else:
+            # Grab the comid and associated coords/geodataframe 
+            gdf_comid = fs_retr_nhdp_comids_geom(featureSource=featureSource,
+                                                        featureID=featureID,
+                                                        gage_ids=gage_ids)
+            # Write to file
+            gdf_comid.to_file(path_save_gpkg, layer = 'outlet',driver='GPKG')
+    else:
+        # Grab the comid and associated coords/geodataframe 
+        gdf_comid = fs_retr_nhdp_comids_geom(featureSource=featureSource,
+                                                    featureID=featureID,
+                                                    gage_ids=gage_ids)
+        # Write to file
+        gdf_comid.to_file(path_save_gpkg, layer = 'outlet',driver='GPKG')
+    return(gdf_comid)
+
 def combine_resp_gdf_comid_wrap(dir_std_base:str|os.PathLike,ds:str,
                           attr_config:dict)->dict:
     """Standardize the response variable and geodataframe/comid retrieval for a single dataset in a wrapper function
@@ -684,16 +759,20 @@ def combine_resp_gdf_comid_wrap(dir_std_base:str|os.PathLike,ds:str,
 
     dat_resp = _open_response_data_fs(dir_std_base,ds)
 
-    # %% COMID retrieval and assignment to response variable's coordinate
+    # %% COMID & coord retrieval and assignment to response variable's coordinate
     [featureSource,featureID] = _find_feat_srce_id(dat_resp,attr_config) # e.g. ['nwissite','USGS-{gage_id}']
-    # Grab the comid and associated coords/geodataframe 
-    gdf_comid = fs_retr_nhdp_comids_geom(featureSource=featureSource,
-                                                featureID=featureID,
-                                                gage_ids=dat_resp['gage_id'].values)
-    # Ensure the original identifier gage_id matches up to the coords
-    gdf_comid['gage_id'] = dat_resp['gage_id']
- 
+    
+    path_fs_dat_resp =  _std_fs_proc_ds_paths(dir_std_base=dir_std_base,ds=ds,mtch_str='*.nc')
+    if len(path_fs_dat_resp) > 1:
+        error_str = f"The following directory contains too many .nc files: {path_fs_dat_resp}"
+        raise ValueError(error_str)
+    path_gpkg_fs_proc = _std_fs_proc_ds_companion_gpkg_path(path_fs_dat_resp[0])
 
+    # Retrieve the geodataframe of comids
+    gdf_comid = fs_retr_nhdp_comids_geom_wrap(path_save_gpkg=path_gpkg_fs_proc,
+                                  gage_ids=dat_resp['gage_id'].values,
+                                featureSource=featureSource, featureID=featureID)
+   
     # --- response data identifier alignment with comids & na removal --- #
     dat_resp = dat_resp.assign_coords(comid = gdf_comid['comid'].values)
     idxs_na_comid = list(np.where(gdf_comid['comid'].isna())[0])
@@ -711,7 +790,6 @@ def combine_resp_gdf_comid_wrap(dir_std_base:str|os.PathLike,ds:str,
     if any(gdf_comid['comid'].duplicated()):
         print("Note that some duplicated comids found in dataset based on initial location identifier, gage_id")
     gdf_comid['dataset'] = ds 
-
 
     dict_resp_gdf = dict({'dat_resp':dat_resp,
                         'gdf_comid': gdf_comid})
@@ -747,7 +825,6 @@ def split_train_test_comid_wrap(dir_std_base:str|os.PathLike,
     """
     dict_gdf_comids = dict()
     for ds in datasets:
-
         # Generate the geodataframe in a standard format
         dict_resp_gdf = combine_resp_gdf_comid_wrap(dir_std_base,ds,attr_config )
     
