@@ -17,7 +17,5 @@ Other options include any of the following inside
 Read the hydrofabric file gpkg for each layer
 }
 \seealso{
-
 \link[proc.attr.hydfab]{proc_attr_hf}
-
 }
