@@ -922,6 +922,7 @@ retr_attr_new <- function(comids,need_vars,path_ha){
   #' @param comids The list of of the comid identifier
   #' @param need_vars The needed attributes that haven't been acquired yet
   #' @param path_ha character, the filepath where hydroatlas data.
+  #' @param Retr_Params list. List of list structure with parameters/paths needed to acquire variables of interest
   #' @seealso \link[proc.attr.hydfab]{proc_attr_wrap}
   #' @seealso \link[proc.attr.hydfab]{proc_attr_mlti_wrap}
   #' @export
