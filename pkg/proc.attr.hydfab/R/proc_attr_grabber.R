@@ -918,6 +918,7 @@ retr_attr_new <- function(comids,need_vars,path_ha){
   #' @param comids The list of of the comid identifier
   #' @param need_vars The needed attributes that haven't been acquired yet
   #' @param path_ha character, the filepath where hydroatlas data.
+  #' @param Retr_Params list. List of list structure with parameters/paths needed to acquire variables of interest
   #' @seealso \link[proc.attr.hydfab]{proc_attr_wrap}
   #' @seealso \link[proc.attr.hydfab]{proc_attr_mlti_wrap}
   #' @export
@@ -2435,4 +2436,18 @@ fs_attrs_miss_mlti_wrap <- function(path_attr_config){
   }
 }
 
+retr_noaa_gauges_meta <- function(gauge_ids,
+                             gauge_url_base = "https://api.water.noaa.gov/nwps/v1/gauges",
+                             retr_ids = c("lid","usgsId","name","latitude","longitude")){
+  #' @title Retrieve metadata based on a NOAA RFC gauge ID, aka lid
+  #' @description Uses the NWPS api to retrieve gauge metadata
+  #' @param gauge_ids list of NOAA gauge ids of interest
+  #' @param gauge_url_base the base api url for NWPS
+  #' @param retr_ids The desired data to retrieve from the api
+  #' @seealso \link[proc.attr.hydfab]{read_noaa_hads_sites}
+  #' @export
+  ls_all_resp <- list()
+  for(gid in gauge_ids){
+    url <- file.path(gauge_url_base,gid)
+    resp <- curl::curl_fetch_memory(url)
 
