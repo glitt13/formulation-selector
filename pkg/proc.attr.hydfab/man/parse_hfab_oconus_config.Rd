@@ -5,11 +5,15 @@
 \title{Parse the OCONUS hydrofabric metadata}
 \usage{
 parse_hfab_oconus_config(path_oconus_config)
+
+parse_hfab_oconus_config(path_oconus_config)
 }
 \arguments{
 \item{path_oconus_config}{filepath to the yaml configuration file}
 }
 \description{
+Parse the OCONUS hydrofabric metadata
+
 Parse the OCONUS hydrofabric metadata
 }
 \details{
