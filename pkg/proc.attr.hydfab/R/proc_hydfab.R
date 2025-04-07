@@ -170,6 +170,7 @@ map_hfab_oconus_sources_wrap <- function( dt_need_hf, hfab_srce_map,
       lat <- dt_need_hf[[col_lat]][i]
       lon <- dt_need_hf[[col_lon]][i]
       if(base::any(base::is.na(base::c(lat,lon)))){
+
         warning(glue::glue("Lat/Lon unavailable for
                            {paste0(names(dt_need_hf),collapse='|')}
                            {paste0(dt_need_hf[i,],collapse='|')}"))
