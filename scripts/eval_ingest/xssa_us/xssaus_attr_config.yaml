@@ -125,8 +125,4 @@ attr_select: # Required. The names of variable sublistings are standardized with
     # - 'TOT_TMIN7100_JAN'
     # - 'TOT_TMIN7100_FEB'
     # - 'TOT_TMIN7100_MAR'
-<<<<<<< HEAD
     # - 'TOT_TMIN7100_APR'
-=======
-    # - 'TOT_TMIN7100_APR'
->>>>>>> 537e9d7 (Refactor to only perform comid/geometry retrieval in proc.attr.hydfab (#51))
