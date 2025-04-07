@@ -10,6 +10,13 @@ read_noaa_hads_sites(
     "LONGITUDE", "LOCATION"), std_name = c("lid", "usgsId", "GOES", "NWS_HSA",
     "latitude", "longitude", "name"))
 )
+
+read_noaa_hads_sites(
+  path_hads_sites = "https://hads.ncep.noaa.gov/USGS/ALL_USGS-HADS_SITES.txt",
+  name_map = data.frame(hads_row2 = c("5 CHR", "STATION", "GOES", "NWS", "LATITUDE",
+    "LONGITUDE", "LOCATION"), std_name = c("lid", "usgsId", "GOES", "NWS_HSA",
+    "latitude", "longitude", "name"))
+)
 }
 \arguments{
 \item{path_hads_sites}{The path to NCEP NOAA HADS site locations}
@@ -20,7 +27,11 @@ more importantly, the NWPS data retrieved via retr_noaa_gauges_meta}
 }
 \description{
 Read and parse NOAA HADS sites metadata
+
+Read and parse NOAA HADS sites metadata
 }
 \seealso{
+\link[proc.attr.hydfab]{retr_noaa_gauges_meta}
+
 \link[proc.attr.hydfab]{retr_noaa_gauges_meta}
 }
