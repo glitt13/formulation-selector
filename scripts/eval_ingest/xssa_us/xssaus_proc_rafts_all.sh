@@ -43,7 +43,7 @@ echo "Attribute grabbing, transformation, and algorithm training executed succes
 # 4.1 Identify which locations will be used for prediction, and generate the attributes (and metadata file for predictions)
 echo "Retrieve prediction location attribute data and geometry data"
 # CAUTION: The following Rscript has some custom dependencies in identifying which locations need predicting. Refer to script for details.
-Rscript "${DIR_PRED}gen_pred_locs_xssaus_map.R" "{DIR_CONFIG}xssaus_pred_config.yaml"
+Rscript "${DIR_PRED}gen_pred_locs_xssaus_map.R" "${DIR_CONFIG}xssaus_pred_config.yaml"
 echo "Acquired prediction location attribute data and geometry data"
 
 # 4.2 Perform transformations on prediction locations
@@ -53,5 +53,11 @@ echo "Transformed prediction location attribute data"
 
 # 4.3 Perform the prediction
 echo "Performing process predictions"
-python3 "${DIR_PY}fs_pred_algo.py" "{DIR_CONFIG}xssaus_pred_config.yaml"
-# TODO insert the prediction script here
+python3 "${DIR_PY}fs_pred_algo.py" "${DIR_CONFIG}xssaus_pred_config.yaml"
+
+# 4.4 Map the predictions (static map)
+echo "Plotting the process predictions on static map"
+python3 "${DIR_CONFIG}fs_proc_viz_xssaus.py" "${DIR_CONFIG}xssaus_pred_config.yaml"
+echo "Completed prediction mapping"
+
+echo "Finished the xSSA process sensitivity mapping predictions"
