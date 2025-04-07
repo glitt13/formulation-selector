@@ -86,7 +86,6 @@ main <- function(){
   df <- df[-which(base::is.na(df$comid)),]
   col_comid <- 'comid'
 
-
   ############################ END CUSTOM MUNGING ##############################
 
   message(glue::glue("Processing {nrow(df)} locations"))
