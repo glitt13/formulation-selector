@@ -88,7 +88,6 @@ main <- function(){
     col_comid <- "hf_id"
   }
 
-
   ############################ END CUSTOM MUNGING ##############################
 
   message(glue::glue("Processing {nrow(df)} locations"))
