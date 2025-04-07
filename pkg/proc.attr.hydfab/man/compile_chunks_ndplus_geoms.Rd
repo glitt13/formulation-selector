@@ -33,7 +33,6 @@ A compiled list of the geospatial data, containing:
 \list{outlet} The catchment outlet NHDplus dataset
 \list{input_dt} The input data.table with data used to query NHDplus
 \list{path_gpkg_compiled} File path of the saved geopackage
->>>>>>> 537e9d7 (Refactor to only perform comid/geometry retrieval in proc.attr.hydfab (#51))
 }
 \description{
 Compile chunked NHDPlus-retrieved geospatial datasets

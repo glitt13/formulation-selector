@@ -1,10 +1,6 @@
 #' @title Retrieve attributes for RFC locations (as available!)
 #' @author Guy Litt
-<<<<<<< HEAD
 #' @description Given the comids of RFC forecast locations, grab NHDPlus
-=======
-#' @description Given the comids of RFC forecast locations, grab NHDPlus 
->>>>>>> 537e9d7 (Refactor to only perform comid/geometry retrieval in proc.attr.hydfab (#51))
 #' catchment attributes
 
 library(nhdplusTools)
@@ -30,7 +26,6 @@ main <- function(){
   if(!base::file.exists(path_cfig_pred)){
     stop(glue::glue("The provided path_cfig_pred does not exist: {path_cfig_pred}"))
   }
-<<<<<<< HEAD
 
   cfig_pred <- yaml::read_yaml(path_cfig_pred)
   ds_type <- base::unlist(cfig_pred)[['ds_type']]
@@ -39,33 +34,21 @@ main <- function(){
   # READ IN ATTRIBUTE CONFIG FILE
   path_attr_config <- glue::glue(cfig_pred[['path_attr_config']])
   cfig_attr <- yaml::read_yaml(path_attr_config)
-<<<<<<< HEAD
 
-=======
-  
->>>>>>> 537e9d7 (Refactor to only perform comid/geometry retrieval in proc.attr.hydfab (#51))
   # Defining directory paths as early as possible:
   io_cfig <- cfig_attr[['file_io']]
   dir_base <- glue::glue(base::unlist(io_cfig)[['dir_base']])
   dir_std_base <- glue::glue(base::unlist(io_cfig)[['dir_std_base']])
   dir_db_hydfab <- glue::glue(base::unlist(io_cfig)[['dir_db_hydfab']])
   dir_db_attrs <- glue::glue(base::unlist(io_cfig)[['dir_db_attrs']])
-<<<<<<< HEAD
 
   # ------------------------ ATTRIBUTE CONFIGURATION --------------------------- #
   hfab_cfg <- cfig_attr[['hydfab_config']]
 
-=======
-  
-  # ------------------------ ATTRIBUTE CONFIGURATION --------------------------- #
-  hfab_cfg <- cfig_attr[['hydfab_config']]
-  
->>>>>>> 537e9d7 (Refactor to only perform comid/geometry retrieval in proc.attr.hydfab (#51))
   names_hfab_cfg <- unlist(lapply(hfab_cfg, function(x) names(x)))
   names_attr_sel_cfg <- unlist(lapply(cfig_attr[['attr_select']], function(x) names(x)))
   s3_base <- glue::glue(base::unlist(hfab_cfg)[['s3_base']]) # s3 path containing hydrofabric-formatted attribute datasets
   s3_path_hydatl <- glue::glue(unlist(cfig_attr[['attr_select']])[['s3_path_hydatl']]) # path to hydroatlas data formatted for hydrofabric
-<<<<<<< HEAD
 
   form_cfig <- cfig_attr[['formulation_metadata']]
   datasets <- form_cfig[[grep("datasets",form_cfig)]]$datasets
@@ -77,28 +60,11 @@ main <- function(){
   names_attr_sel <- base::lapply(cfig_attr[['attr_select']],
                                  function(x) base::names(x)[[1]]) %>% unlist()
 
-=======
-  
-  form_cfig <- cfig_attr[['formulation_metadata']]
-  datasets <- form_cfig[[grep("datasets",form_cfig)]]$datasets
-  
-  # Additional config options
-  hf_cat_sel <- base::unlist(hfab_cfg)[['hf_cat_sel']]#c("total","all")[1] # total: interested in the single location's aggregated catchment data; all: all subcatchments of interest
-  
-  # The names of attribute datasets of interest (e.g. 'ha_vars', 'usgs_vars', etc.)
-  names_attr_sel <- base::lapply(cfig_attr[['attr_select']],
-                                 function(x) base::names(x)[[1]]) %>% unlist()
-  
->>>>>>> 537e9d7 (Refactor to only perform comid/geometry retrieval in proc.attr.hydfab (#51))
   # Generate list of standard attribute dataset names containing sublist of variable IDs
   ls_vars <- names_attr_sel[grep("_vars",names_attr_sel)]
   vars_ls <- base::lapply(ls_vars, function(x) base::unlist(base::lapply(cfig_attr[['attr_select']], function(y) y[[x]])))
   names(vars_ls) <- ls_vars
-<<<<<<< HEAD
 
-=======
-  
->>>>>>> 537e9d7 (Refactor to only perform comid/geometry retrieval in proc.attr.hydfab (#51))
   # The attribute retrieval parameters
   Retr_Params <- list(paths = list(# Note that if a path is provided, ensure the
     # name includes 'path'. Same for directory having variable name with 'dir'
@@ -117,11 +83,7 @@ main <- function(){
   # Read file and remove poorly-parsed rows
   if(TRUE){
     df <- read.delim(file="~/git/formulation-selector/scripts/prediction/rfc_locs/nws_nwm_crosswalk.txt", # Obtained from Gautam Sood at OWP: a file of all RFC station locations
-<<<<<<< HEAD
                      skip=0,sep = "|",col.names = c("nws_station_id","comid"))
-=======
-                     skip=0,sep = "|",col.names = c("nws_station_id","comid")) 
->>>>>>> 537e9d7 (Refactor to only perform comid/geometry retrieval in proc.attr.hydfab (#51))
     df <- df[-base::grep("-------+-----", df$nws_station_id),]
     df <- df[-which(base::is.na(df$comid)),]
     col_comid <- 'comid'
@@ -130,15 +92,8 @@ main <- function(){
     col_comid <- "hf_id"
   }
 
-<<<<<<< HEAD
-
   ############################ END CUSTOM MUNGING ##############################
 
-=======
-  
-  ############################ END CUSTOM MUNGING ##############################
-  
->>>>>>> 537e9d7 (Refactor to only perform comid/geometry retrieval in proc.attr.hydfab (#51))
   message(glue::glue("Processing {nrow(df)} locations"))
   # ---------------------- Grab all needed attributes ---------------------- #
   # --- Create the path to the geopackage:
@@ -160,17 +115,9 @@ main <- function(){
                                                         path_save_gpkg = path_save_gpkg,
                                                         lyrs='network',
                                                         overwrite=FALSE)
-<<<<<<< HEAD
     #Sys.sleep(60*61) # 400 NLDI queries per hour
   }
 
 }
 
 main()
-=======
-    Sys.sleep(60*61) # 400 NLDI queries per hour
-  }
-}
-
-main()
->>>>>>> 537e9d7 (Refactor to only perform comid/geometry retrieval in proc.attr.hydfab (#51))
