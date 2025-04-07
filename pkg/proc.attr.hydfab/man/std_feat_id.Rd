@@ -6,7 +6,21 @@
 \usage{
 std_feat_id(
   df,
-  name_featureSource = c("COMID", "custom_hf")[1],
+  name_featureSource = c("COMID", "custom_hfab")[1],
+  col_featureID = NULL,
+  vals_featureID = NULL
+)
+
+std_feat_id(
+  df,
+  name_featureSource = c("COMID", "custom_hfab")[1],
+  col_featureID = NULL,
+  vals_featureID = NULL
+)
+
+std_feat_id(
+  df,
+  name_featureSource = c("COMID", "custom_hfab")[1],
   col_featureID = NULL,
   vals_featureID = NULL
 )
@@ -14,12 +28,16 @@ std_feat_id(
 \arguments{
 \item{df}{The data.frame of interest containing an identifier}
 
-\item{name_featureSource}{The expected name of the feature source. Default "COMID" expected for CONUS, but OCONUS will use "custom_hf"}
+\item{name_featureSource}{The expected name of the feature source. Default "COMID" expected for CONUS, but OCONUS will use "custom_hfab"}
 
 \item{col_featureID}{The column name inside \code{df} containing featureID of interest. Must provide if \code{vals_featureID} empty.}
 
 \item{vals_featureID}{The unique identifiers to populate featureID of interest. Must provide if \code{col_featureID} empty.}
 }
 \description{
+Generate the standardized format of featureID and featureSource
+
+Generate the standardized format of featureID and featureSource
+
 Generate the standardized format of featureID and featureSource
 }

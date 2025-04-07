@@ -8,10 +8,17 @@ read_noaa_nwps_gauges(
   path_nwps_rpt =
     "https://water.noaa.gov/resources/downloads/reports/nwps_all_gauges_report.csv"
 )
+
+read_noaa_nwps_gauges(
+  path_nwps_rpt =
+    "https://water.noaa.gov/resources/downloads/reports/nwps_all_gauges_report.csv"
+)
 }
 \arguments{
 \item{path_nwps_rpt}{Path to the data source}
 }
 \description{
+Read & clean NOAA NWPS gauge metadata
+
 Read & clean NOAA NWPS gauge metadata
 }
