@@ -47,17 +47,16 @@ main <- function(){
   names_attr_sel_cfg <- unlist(lapply(cfig_attr[['attr_select']], function(x) names(x)))
   s3_base <- glue::glue(base::unlist(hfab_cfg)[['s3_base']]) # s3 path containing hydrofabric-formatted attribute datasets
   s3_path_hydatl <- glue::glue(unlist(cfig_attr[['attr_select']])[['s3_path_hydatl']]) # path to hydroatlas data formatted for hydrofabric
-
   form_cfig <- cfig_attr[['formulation_metadata']]
   datasets <- form_cfig[[grep("datasets",form_cfig)]]$datasets
-
+  
   # Additional config options
   hf_cat_sel <- base::unlist(hfab_cfg)[['hf_cat_sel']]#c("total","all")[1] # total: interested in the single location's aggregated catchment data; all: all subcatchments of interest
-
+  
   # The names of attribute datasets of interest (e.g. 'ha_vars', 'usgs_vars', etc.)
   names_attr_sel <- base::lapply(cfig_attr[['attr_select']],
                                  function(x) base::names(x)[[1]]) %>% unlist()
-
+  
   # Generate list of standard attribute dataset names containing sublist of variable IDs
   ls_vars <- names_attr_sel[grep("_vars",names_attr_sel)]
   vars_ls <- base::lapply(ls_vars, function(x) base::unlist(base::lapply(cfig_attr[['attr_select']], function(y) y[[x]])))
