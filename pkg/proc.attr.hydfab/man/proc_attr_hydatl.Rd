@@ -5,15 +5,15 @@
 \title{Retrieve hydroatlas variables}
 \usage{
 proc_attr_hydatl(
-  hf_id,
+  hf_ids,
   path_ha,
   ha_vars,
-  hf_id_col = c("id", "hf_id")[2],
+  hf_id_col = c("hf_uid", "hf_id")[2],
   s3_ha = "s3://lynker-spatial/tabular-resources/hydroATLAS/hydroatlas_vars.parquet"
 )
 }
 \arguments{
-\item{hf_id}{character or numeric. the hydrofabric id, usually the COMID, may be vector}
+\item{hf_ids}{character or numeric, vector or atomic. The hydrofabric ids}
 
 \item{path_ha}{character. full path to the local parquet or s3 bucket's
 parquet holding the hydroatlas data as formatted for the hydrofabric.}

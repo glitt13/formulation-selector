@@ -19,7 +19,6 @@ compile_chunks_ndplus_geoms(
 }
 \value{
 A compiled list of the geospatial data, containing:
-
 \list{catchment} The catchment boundaries NHDplus dataset
 \list{flowlines} The flowlines NHDplus dataset
 \list{outlet} The catchment outlet NHDplus dataset

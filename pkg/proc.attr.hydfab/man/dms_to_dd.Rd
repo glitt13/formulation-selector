@@ -5,10 +5,16 @@
 \title{Internal function to convert dms to decimal degrees}
 \usage{
 dms_to_dd(dms)
+
+dms_to_dd(dms)
 }
 \description{
 Internal function to convert dms to decimal degrees
+
+Internal function to convert dms to decimal degrees
 }
 \seealso{
+\link[proc.attr.hydfab]{read_noaa_hads_sites}
+
 \link[proc.attr.hydfab]{read_noaa_hads_sites}
 }
