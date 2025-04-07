@@ -32,7 +32,6 @@ comid-gage_id will be stored as a .csv}
 \item{path_save_gpkg}{The filepath where the geopackage containing
 comid-gageid-geometry mappings are saved. Default NULL, but strongly recommended
 to use!}
-
 }
 \description{
 Retrieve comids based on provided gage_ids and expected NLDI format
