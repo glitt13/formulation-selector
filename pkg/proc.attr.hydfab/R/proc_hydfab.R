@@ -444,8 +444,8 @@ retr_comids_coords <- function(df, col_lat = "latitude",
 }
 
 retr_hfab_id_wrap <- function(dt_need_hf, path_oconus_hfab_config,
-                              col_usgsId = "usgsId",col_lon= 'longitude',
-                              col_lat= 'latitude',epsg_coords=4326){
+                              col_usgsId="usgsId",col_lon='longitude',
+                              col_lat='latitude',epsg_coords=4326){
   #' @title Retrieve hydrofabric IDs wrapper
   #' @details Intended for situations when comids unavailable, generally as OCONUS
   #' @param dt_need_hf data.table of needed
@@ -467,22 +467,14 @@ retr_hfab_id_wrap <- function(dt_need_hf, path_oconus_hfab_config,
                                                                hfab_srce_map)
   col_gpkg_path <- "path" # column name inside `dt_need_hf` for hydrofabric
 
-  # Parse the hydrofabric config file
-  hfab_srce_map <- proc.attr.hydfab::parse_hfab_oconus_config(path_oconus_config)
-
-  # Identify postal code and gpkg mappings:
-  dt_need_hf <- proc.attr.hydfab::map_hfab_oconus_sources_wrap(dt_need_hf,
-                                                               hfab_srce_map)
-  col_gpkg_path <- "path" # column name inside `dt_need_hf` for hydrofabric
-
   # Check to ensure expected columns
   need_colnames <- base::c(col_gpkg_path,col_usgsId, col_lat, col_lon)
   if(!base::all(need_colnames %in% base::colnames(dt_need_hf))){
-    need_colnames <- need_colnames[base::which(!need_colnames %in%
+    need_colnames_txt <- need_colnames[base::which(!need_colnames %in%
                                                  base::names(dt_need_hf))] %>%
       base::paste0(collapse = "\n")
     stop(glue::glue("dt_need_hf does not contain the expected column
-                    {need_colnames}. Check map_hfab_oconus_sources_wrap()."))
+                    {need_colnames_txt}. Check map_hfab_oconus_sources_wrap()."))
   }
 
   # Grouping by paths so we only read in each gpkg once:
