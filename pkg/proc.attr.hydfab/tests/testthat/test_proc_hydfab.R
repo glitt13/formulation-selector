@@ -24,15 +24,15 @@ base::writeLines(
   'dir_base_hfab: "~/noaa/hydrofabric/v2.2"
 source_map_ak:
   path: "{dir_base_hfab}/path/to/file_ak.gpkg"
-  domain: "ak"
+  domain: "AK"
   crs_hfab: "TBD"
 source_map_hi:
   path: "{dir_base_hfab}/path/to/file_hi.gpkg"
-  domain: "hi"
+  domain: "HI"
   crs_hfab: "TBD"
 source_map_pr:
   path: "{dir_base_hfab}/path/to/file_pr.gpkg"
-  domain: "prvi"
+  domain: "PRVI"
   crs_hfab: "4326"',
   con = test_yaml)
 
@@ -214,7 +214,7 @@ glue::glue(
 'dir_base_hfab: ""
 source_map_ak:
   path: "{temp_dir}/{fn_ak}.gpkg"
-  domain: "ak"
+  domain: "AK"
   crs_hfab: "TBD"'),
   con = test_yaml2)
 
@@ -224,7 +224,7 @@ testthat::test_that("retr_hfab_id_wrap correctly retrieves hydrofabric IDs", {
   dt_need_hf <- dt_hads %>% dplyr::filter(usgsId %in% usgs_ids_oconus)
 
   result <- proc.attr.hydfab::retr_hfab_id_wrap(dt_need_hf = dt_need_hf,
-                              path_oconus_hfab_config = test_yaml2) %>%
+                              path_oconus_hfab_config = test_yaml) %>%
     pkgcond::suppress_warnings()
 
   # Check that result is a data.table
