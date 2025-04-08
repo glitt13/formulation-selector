@@ -295,6 +295,7 @@ hf_ids <- base::c("ak-wb-15164", NA,"hi-wb-2629","hi-wb-1365","prvi-wb-752",9250
 hf_ids <- c(1022566, 1702414)
 proc_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
                                   hf_id_cols = c("hf_uid","hf_id","id")){
+  #' @title Process hydroatlas attributes wrapper
   #' @param hf_id_cols Possible hydrofabric id columns, *listed in priority*, meaning
   #' the `'hf_uid'` is the most important column to find, and if that is not
   #' present, move on to the `'hf_id'` and finally to `'id'`
