@@ -71,7 +71,6 @@ attr_cfig_parse <- function(path_attr_config){
   # Figure out the dataset name(s) in order to generate path_meta appropriately
   path_meta <- base::unlist(raw_config$file_io)[['path_meta']] # Still needs glue substitution
 
-
   # Read s3 connection details
   s3_base <- base::unlist(raw_config$hydfab_config)[['s3_base']]#s3://lynker-spatial/tabular-resources" # s3 path containing hydrofabric-formatted attribute datasets
   s3_bucket <- base::unlist(raw_config$hydfab_config)[['s3_bucket']] #'lynker-spatial' # s3 bucket containing hydrofabric data
@@ -89,6 +88,7 @@ attr_cfig_parse <- function(path_attr_config){
 
   #-----------------------------------------------------
   # Variable listings:
+  # The types of data of interest
   names_attr_sel <- base::unlist(base::lapply(raw_config$attr_select,
                                               function(x) base::names(x)))
 
@@ -102,9 +102,38 @@ attr_cfig_parse <- function(path_attr_config){
   # Subset to only those non-null variables:
   sub_attr_sel <- sub_attr_sel[base::unlist(base::lapply(sub_attr_sel,
                                                          function(x) base::any(!base::is.null(unlist(x)))))]
-  var_names_sub <- names(sub_attr_sel)
-  #-----------------------------------------------------
+  var_names_sub <- base::names(sub_attr_sel)
 
+  # Consider transformation dependencies here
+  name_tform_config <- try(base::unlist(raw_config$file_io)[['name_tform_config']])
+  if(!"try-error" %in% base::class(name_tform_config)){
+    # Create standardized path to config file
+    path_tfrm_config <- proc.attr.hydfab::build_cfig_path(path_attr_config,name_tform_config)
+    # parse the transformation config file
+    ls_tfrm_cfig <- proc.attr.hydfab::tform_cfig_parse(path_tfrm_config)
+    # retrieve the transformation config's attributes of interest
+    vars_tfrm <- base::lapply(ls_tfrm_cfig$transform_attrs,
+                              function(x) x$vars) %>% base::unlist() %>%
+                                  base::unique()
+    # Identify which datasets correspond to these variables used in transformation
+    vars_tfrm_ls <- map_attrs_to_dataset(vars_tfrm)
+
+    # Add the transformation config's attributes to sub_attr_sel & de-dupe
+    srces_integrate <- base::names(vars_tfrm_ls)[base::which(base::names(vars_tfrm_ls) %in%
+                                                 base::names(sub_attr_sel))]
+    for(srce in srces_integrate){
+      orig_vars <- sub_attr_sel[[srce]]
+      tfrm_vars <- vars_tfrm_ls[[srce]]
+      sub_attr_sel[[srce]] <- base::unique(base::c(sub_attr_sel[[srce]],
+                                           vars_tfrm_ls[[srce]]))
+    } # Completed addition of attributes used in transformation to full attribute retrievals
+  } else {
+    message(glue::glue("Assuming transformations on retrieved catchment",
+    "attributes are not desired.\nIf transformations are desired add ",
+    "'name_tform_config' entry in the attribute config file\n{path_attr_config}"))
+  }
+
+  #-----------------------------------------------------
   Retr_Params <- base::list(paths = base::list(
     # Note that if a path is provided, ensure the
     # name includes 'path'. Same for directory having variable name with 'dir'
@@ -120,6 +149,131 @@ attr_cfig_parse <- function(path_attr_config){
     write_type = write_type
   )
   return(Retr_Params)
+}
+
+tform_cfig_parse <- function(path_tfrm_config){
+  #' @title Read & parse the transformation config yaml file
+  #' @param path_tfrm_config Full filepath to the transformation config file
+  #' @seealso \link[proc.attr.hydfab]{attr_cfig_parse}
+  #' @export
+  raw_cfig <- yaml::read_yaml(path_tfrm_config) %>% pkgcond::suppress_warnings()
+
+  names_raw_lev1 <- lapply(raw_cfig, function(x) names(x)) %>% unlist()
+
+  fio <- raw_cfig[[base::grep("file_io",names_raw_lev1)]]$file_io
+  tfa <- raw_cfig[[base::grep("transform_attrs",names_raw_lev1)]]$transform_attrs
+  # ------------ Parse file io section of transformation file ------------- #
+  names_fio <- base::lapply(fio, function(x) names(x)) %>% base::unlist()
+  ls_fio <- base::list()
+  for(i in 1:base::length(names_fio)){
+    name_fio <- names_fio[[i]]
+    ls_fio[[name_fio]] <- fio[[i]][[name_fio]]
+  }
+
+  # ------------ Parse attributes section of transformation file ------------- #
+  # The transformation names
+  names_tfa <- base::lapply(tfa, function(x) names(x)) %>% unlist()
+  ls_tfrm <- list()
+  for(i in 1:base::length(names_tfa)){
+    name_tfa <- names_tfa[i]
+    tfa_sublevl1 <- tfa[[i]][[names_tfa[i]]]
+    tfa_sub_catg <- base::lapply(tfa_sublevl1, function(x) names(x)) %>% unlist()
+
+    tform_types <- tfa_sublevl1[[grep("tform_type", tfa_sub_catg)]]$tform_type
+    var_desc <- tfa_sublevl1[[grep("var_desc", tfa_sub_catg)]]$var_desc
+    vars <- tfa_sublevl1[[grep("vars", tfa_sub_catg)]]$vars
+
+    ls_tfrm[[name_tfa]] <- base::list(tform_types = tform_types,
+                              var_desc = var_desc,
+                              vars = vars)
+  }
+
+  ls_tfrm_cfig <- base::list(file_io = ls_fio,
+                             transform_attrs = ls_tfrm)
+
+  return(ls_tfrm_cfig)
+}
+
+build_cfig_path <- function(path_known_config, path_or_name_cfig) {
+  #' @title Build a standardized path for every config file used in RaFTS
+  #' @param path_known_config The full filepath of a known configuration file
+  #' @param path_or_name_cfig Path or name of configuration file. If only name provided, it's assumed it resides in same directory as `path_known_config`
+  #' @details Ensure the 'path_known_config' exists
+  #' @seealso `fs_algo.build_cfig_path` The python equivalent of this function
+  #' @export
+  if (!base::file.exists(path_known_config)) {
+    stop(glue::glue("The provided 'known' configuration file does not exist: \n
+                    {path_known_config}"))
+  }
+
+  # Determine the parent directory
+  dir_parent_cfig <- base::dirname(path_known_config)
+
+  # Check if the configuration path or name was provided
+  if (!base::is.null(path_or_name_cfig)) {
+    path_cfig <- base::file.path(dir_parent_cfig, path_or_name_cfig)
+
+    # Check if the constructed path exists
+    if (!base::file.exists(path_cfig)) {
+      path_cfig <- base::file.path(path_or_name_cfig)
+      if (!base::file.exists(path_cfig)) {
+        stop(glue::glue("The following configuration file could not be found: \n
+        {path_or_name_cfig}"))
+      }
+    }
+  } else {
+    warning("The configuration file may not have specified the path or file name.")
+    path_cfig <- NULL
+  }
+  return(path_cfig)
+}
+
+map_attrs_to_dataset <- function(vars){
+  #' @title Match the variable names to the data source
+  #' @param vars List of variable names, possibly mixed across different data sources
+  #' @export
+  # Read in proc.attr.hydfab package's extdata describing attributes & data sources
+  dir_extdata <- system.file("extdata",package="proc.attr.hydfab")
+  path_attr_menu <- base::file.path(dir_extdata, "fs_attr_menu.yaml")
+  ls_attr_menu <- yaml::read_yaml(path_attr_menu)
+
+  path_attr_src_types <- base::file.path(dir_extdata,"attr_source_types.yml")
+  df_attr_src_types <- yaml::read_yaml(path_attr_src_types)
+  srce_types <- base::lapply(df_attr_src_types, function(x) base::unlist(x)) %>%
+    base::names()
+  ls_internal_vars <- base::list()
+  ls_internal_ds_names <- base::list()
+  ctr <- 0
+  for(x in df_attr_src_types){
+    ctr <- ctr+1
+    ls_internal_ds_names[[ctr]] <- base::lapply(x, function(j) j[['name']]) %>%
+      base::unlist()
+  }
+  # Map the names used in the menu to the names used in the attribute config file/RaFTS code
+  df_map <- data.frame(menu_name = base::unlist(srce_types),
+                       rafts_name = base::unlist(ls_internal_ds_names))
+
+  # Now figure out which variables correspond to which rafts_name
+  ls_attrs_name <- base::list()
+  for(i in 1:base::nrow(df_map)){
+    rafts_name <- df_map$rafts_name[i]
+    menu_name <- df_map$menu_name[i]
+    # subset menu to this variable:
+    attrs_in_menu_catg <- base::lapply(ls_attr_menu[[menu_name]],
+                                       function(x) names(x)) %>% base::unlist()
+    idxs_vars_in_this_catg <- base::which(vars %in% attrs_in_menu_catg)
+    if(base::length(idxs_vars_in_this_catg)>0){
+      ls_attrs_name[[rafts_name]] <- vars[idxs_vars_in_this_catg]
+    }
+  }
+
+  # Unit test expected total number of mapped variables based on input
+  if(base::length(base::unique(base::unlist(ls_attrs_name))) !=
+     base::length(base::unique(vars))){
+    stop("Total variables in should match total variables matched.")
+  }
+
+  return(ls_attrs_name)
 }
 
 
@@ -175,7 +329,6 @@ proc_attr_hydatl <- function(hf_id, path_ha, ha_vars,
 
   return(ha)
 }
-
 
 std_dir_dataset <- function(dir_std_base, ds){
   #' @title Generate the standardized dataset directory
@@ -808,7 +961,7 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
   #' @param overwrite boolean. Should the hydrofabric cloud data acquisition be redone and overwrite any local files? Default FALSE.
   #' @seealso \link[proc.attr.hydfab]{proc_attrs_gageids}
   #' @export
-
+  # TODO integrate id_attrs_sel_wrap here
   vars_ls <- Retr_Params$vars
 
   # ------- Retr_Params$vars format checker --------- #
@@ -1693,8 +1846,8 @@ wrap_check_vars <- function(vars_ls){
   #' that can be used to retrieve attributes (e.g. 'TOT_TWI' as an nhdplus attribute)
 
   # Get the accepted variable categories used in proc.attr.hydfab R package
-  dir_pkg <- system.file("extdata",package="proc.attr.hydfab")
-  cfg_attr_src <- yaml::read_yaml(base::file.path(dir_pkg,"attr_source_types.yml"))
+  dir_extdata <- system.file("extdata",package="proc.attr.hydfab")
+  cfg_attr_src <- yaml::read_yaml(base::file.path(dir_extdata,"attr_source_types.yml"))
   var_catgs <- base::lapply(cfg_attr_src,
                             function(x) base::unlist(x)[['name']]) %>%
     base::unlist() %>% base::unname()
@@ -1741,10 +1894,10 @@ check_attr_selection <- function(attr_cfg_path = NULL, vars = NULL, verbose = TR
   #' @export
 
   # Read in the menu of attributes available through formulation-selector
-  dir_base <- system.file("extdata",package="proc.attr.hydfab")
-  attr_menu <- base::paste0(dir_base, '/fs_attr_menu.yaml')
-  attr_menu <- yaml::read_yaml(attr_menu)
-  dataset_indices <- seq(1, base::length(attr_menu))
+  dir_extdata <- system.file("extdata",package="proc.attr.hydfab")
+  path_attr_menu <- base::file.path(dir_extdata, 'fs_attr_menu.yaml')
+  attr_menu <- yaml::read_yaml(path_attr_menu)
+  dataset_indices <- base::seq(1, base::length(attr_menu))
 
   if(!is.null(attr_cfg_path)){
 
@@ -1858,13 +2011,31 @@ hfab_config_opt <- function(hfab_config,
   return(xtra_cfig_hfab)
 }
 
-std_miss_path <- function(dir_db_attrs){
-  #' @title standardize path to file listing all missing attributes
+std_path_miss_tfrm <- function(dir_db_attrs){
+  #' @title Create a standardized path for storing missing comid-attribute
+  #' pairings needed for attribute transformation
   #' @param dir_db_attrs The directory to the attribute database
-  #' @seealso `fs_algo.tfrm_attrs.std_miss_path` python package
+  #' @seealso `fs_algo.tfrm_attrs.std_path_miss_tfrm` python package
   #' @export
-  path_missing_attrs <- file.path(dir_db_attrs,"missing","needed_loc_attrs.csv")
+  path_missing_attrs <- file.path(dir_db_attrs,"missing_tform",
+                                  "needed_loc_attrs_for_tform.csv")
   return(path_missing_attrs)
+}
+
+std_path_miss_tfrm_io <- function(path_missing_attrs,  read=TRUE, df_miss=NULL){
+  #' @title Read or write the standardized missing comid file for transformation
+  #' @param path_missing_attrs The full path to file created by \link[proc.attr.hydfab]{std_path_miss_tfrm}
+  #' @param df_miss The dataframe if interested in writing. Default NULL for reading.
+  #' @param read Boolean. Should the missing data be read? Default TRUE
+  #' @export
+  if(read){
+    df_miss <- utils::read.csv(path_missing_attrs,header=TRUE, check.names=TRUE)
+    return(df_miss)
+  } else if (!base::is.null(df_miss)) {
+    utils::write.csv(x=df_miss,file = path_missing_attrs,row.names = FALSE)
+  } else {
+    stop("Inappropriate application of the standardized file i/o for missing comids")
+  }
 }
 
 ######## MISSING COMID-ATTRIBUTES ##########
@@ -1885,8 +2056,8 @@ fs_attrs_miss_wrap <- function(path_attr_config){
   # Generate the parameter list
   Retr_Params <- proc.attr.hydfab::attr_cfig_parse(path_attr_config = path_attr_config)
 
-  path_missing_attrs <- proc.attr.hydfab::std_miss_path(Retr_Params$paths$dir_db_attrs)
-  df_miss <- utils::read.csv(path_missing_attrs,header=TRUE, check.names = TRUE)#,col.names = c("X","comid"	attribute	config_file	uniq_cmbo	dl_dataset)
+  path_missing_attrs <- proc.attr.hydfab::std_path_miss_tfrm(Retr_Params$paths$dir_db_attrs)
+  df_miss <- proc.attr.hydfab::std_path_miss_tfrm_io(path_missing_attrs, read=TRUE)
 
   bool_chck_class_comid <- df_miss[['comid']][1] %>% as.character() %>%
     as.numeric() %>% suppressWarnings() %>% is.na() # Is the comid non-numeric?
@@ -1905,7 +2076,7 @@ fs_attrs_miss_wrap <- function(path_attr_config){
       new_cols <- cols
     }
 
-    new_cols <- new_cols[!grepl("X",new_cols)]
+    new_cols <- new_cols[!basegrepl("X",new_cols)]
     sub_df_miss <- df_miss[,1:(ncol(df_miss)-1)]
     names(sub_df_miss) <- new_cols
 
@@ -2003,8 +2174,8 @@ fs_attrs_miss_wrap <- function(path_attr_config){
     } else {
       message("Some missing comid-attribute pairings still remain")
     }
-    # Now update the missing comid-attribute pairing file
-    write.csv(filter_df,file = path_missing_attrs,row.names = FALSE)
+    # Now update the transformation's missing comid-attribute pairing file
+    proc.attr.hydfab::std_path_miss_tfrm_io(path_missing_attrs,df_miss=filter_df,read=FALSE)
 
   } else {
     message("No missing comid-attribute pairings.")
@@ -2033,8 +2204,14 @@ fs_attrs_miss_mlti_wrap <- function(path_attr_config){
   # Generate the parameter list
   Retr_Params <- proc.attr.hydfab::attr_cfig_parse(path_attr_config = path_attr_config)
 
-  path_missing_attrs <- proc.attr.hydfab::std_miss_path(Retr_Params$paths$dir_db_attrs)
-  df_miss <- utils::read.csv(path_missing_attrs)
+  # Missing attributes specifically needed for transformation
+  path_missing_attrs <- proc.attr.hydfab::std_path_miss_tfrm(Retr_Params$paths$dir_db_attrs)
+  df_miss <- proc.attr.hydfab::std_path_miss_tfrm_io(path_missing_attrs, read=TRUE)
+  # Remove any null comids:
+  idxs_none <- base::which(df_miss$comid == "None")
+  if(base::length(idxs_none)>0){
+    df_miss <- df_miss[-idxs_none,]
+  }
   df_miss$uniq_cmbo <- proc.attr.hydfab:::uniq_id_loc_attr(df_miss$comid,df_miss$attribute)
   if(base::nrow(df_miss)>0){
     message("Beginning search for missing comid-attribute pairings.")
@@ -2062,7 +2239,7 @@ fs_attrs_miss_mlti_wrap <- function(path_attr_config){
     ############# Map needed attributes to names in menu #################
     # Read in proc.attr.hydfab package's extdata describing attributes & data sources
     dir_extdata <- system.file("extdata",package="proc.attr.hydfab")
-    path_attr_menu <- file.path(dir_extdata, "fs_attr_menu.yaml")
+    path_attr_menu <- base::file.path(dir_extdata, "fs_attr_menu.yaml")
     df_attr_menu <- yaml::read_yaml(path_attr_menu)
 
     path_attr_src_types <- file.path(dir_extdata,"attr_source_types.yml")
@@ -2072,14 +2249,14 @@ fs_attrs_miss_mlti_wrap <- function(path_attr_config){
     # by looping over each unique grouping of comid-attribute pairings
     filter_df <- df_miss
     ls_have_uniq_cmbo <- list()
-    for(row in 1:nrow(shared_values)){
+    for(row in 1:base::nrow(shared_values)){
       sub_grp <- shared_values[row,]
       comids <- sub_grp['comid'][[1]][[1]]
-      attrs <- strsplit(sub_grp['attribute'][[1]],',')[[1]]
+      attrs <- base::strsplit(sub_grp['attribute'][[1]],',')[[1]]
       #attrs <- df_miss$attribute
       vars_ls <- list()
       df_miss$dl_dataset <- NA
-      for (dl_ds in names(df_attr_menu)){
+      for (dl_ds in base::names(df_attr_menu)){
         sub_df_attr_menu <- df_attr_menu[[dl_ds]]
         sub_attrs <- names(unlist(sub_df_attr_menu))
         ls_locs_df <- base::lapply(attrs, function(a)
@@ -2088,11 +2265,11 @@ fs_attrs_miss_mlti_wrap <- function(path_attr_config){
         idxs_this_dl_ds <- base::which(ls_locs_df==TRUE)
         attrs_have <- attrs[idxs_this_dl_ds]
 
-        if(length(idxs_this_dl_ds)>0){
+        if(base::length(idxs_this_dl_ds)>0){
           print(glue::glue("Found attributes from {dl_ds} dataset"))
-          df_miss$dl_dataset[which(df_miss$attribute %in% attrs_have)] <-
+          df_miss$dl_dataset[base::which(df_miss$attribute %in% attrs_have)] <-
             unlist(df_attr_src_types[[dl_ds]])[["name"]]
-          vars_ls[[unlist(df_attr_src_types[[dl_ds]])[["name"]]]] <- attrs_have
+          vars_ls[[base::unlist(df_attr_src_types[[dl_ds]])[["name"]]]] <- attrs_have
         } else {
           print(glue::glue("No attributes correspond to {dl_ds} dataset"))
         }
@@ -2113,9 +2290,15 @@ fs_attrs_miss_mlti_wrap <- function(path_attr_config){
       message(glue::glue(
         "Retrieving {length(unlist(vars_ls))} attributes for {length(comids)} total comids.
         This may take a while."))
-      dt_all <- proc.attr.hydfab::proc_attr_mlti_wrap(comids=comids,
+      dt_all <- try(proc.attr.hydfab::proc_attr_mlti_wrap(comids=comids,
                                             Retr_Params=Retr_Params,
-                                            lyrs="network",overwrite=FALSE)
+                                            lyrs="network",overwrite=FALSE))
+      if("try-error" %in% base::class(dt_all) || base::nrow(dt_all) == 0){
+        comids_str <- base::paste0(comids,collapse='\n')
+        warning(glue::glue("Could not retrieve attribute data for the following comids:
+                {comids_str}"))
+        next()
+      }
 
       # The unique-id key for identifying unique location-attribute combinations
       ls_have_uniq_cmbo[[row]] <- proc.attr.hydfab:::uniq_id_loc_attr(dt_all$featureID,
@@ -2140,13 +2323,12 @@ fs_attrs_miss_mlti_wrap <- function(path_attr_config){
     } else {
       message("Some missing comid-attribute pairings still remain")
     }
-
-    # Write the updated missing attributes file
-    write.csv(df_still_missing,path_missing_attrs,row.names = FALSE)
+    # Now update the transformation's missing comid-attribute pairing file
+    proc.attr.hydfab::std_path_miss_tfrm_io(path_missing_attrs,
+                                       df_miss=df_still_missing,read=FALSE)
   } else {
     message("No missing comid-attribute pairings.")
   }
 }
-
 
 

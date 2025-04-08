@@ -30,6 +30,7 @@ from shapely.geometry import Point
 import geopandas as gpd
 import urllib
 import zipfile
+import re
 import forestci as fci
 
 # %% BASIN ATTRIBUTES (PREDICTORS) & RESPONSE VARIABLES (e.g. METRICS)
@@ -58,7 +59,8 @@ class AttrConfigAndVars:
 
         # identify attribute data of interest from attr_config
         attrs_all = [v for x in self.attr_config['attr_select'] for k,v in x.items() if '_vars' in k]
-        attrs_sel = [x for x in list(itertools.chain(*attrs_all)) if x is not None]
+        attrs_all_filtered = [attr for attr in attrs_all if attr is not None]
+        attrs_sel = [x for x in list(itertools.chain(*attrs_all_filtered)) if x is not None]
 
         if len(attrs_sel) == None: # If no attributes generated, assume all attributes are of interest
             attrs_sel = 'all'
@@ -150,7 +152,7 @@ def fs_read_attr_comid(dir_db_attrs:str | os.PathLike, comids_resp:list | Iterab
     :param storage_options: future feature, defaults to None
     :type storage_options: future feature, optional
     :param read_type: should all parquet files be lazy-loaded, assign 'all'
-     otherwise just files with comids_resp in the file name? assign 'filename'. Defaults to 'all'
+     otherwise just files with comids_resp in the file name? assign 'filename'. Defaults to 'all', which should be fastest
     :type read_type: str
     :param reindex: Should attribute dataframe be reindexed? Default False
     :type reindex: bool
@@ -162,22 +164,36 @@ def fs_read_attr_comid(dir_db_attrs:str | os.PathLike, comids_resp:list | Iterab
         - `datasets`
     :rtype: pd.DataFrame
     """
+    # Changelog/contributions
+    #  2025-04-01 Add logic to remove empty parquet files
     if _s3:
         storage_options={"anon",True} # for public
         # TODO  Setup the s3fs filesystem that will be used, with xarray to open the parquet files
         #_s3 = s3fs.S3FileSystem(anon=True)
 
+    # Parquet files sized 0 bytes cause fatal errors when trying to read. Remove them.
+    files_empty = [file for file in Path(dir_db_attrs).rglob("*.parquet") if file.stat().st_size == 0]
+    if len(files_empty) > 0:
+        for file in files_empty:
+            os.remove(file)
+
     # ------------------- Subset based on comids of interest ------------------
     if read_type == 'all': # Considering all parquet files inside directory
         # Read attribute data acquired using proc.attr.hydfab R package
-        all_attr_ddf = dd.read_parquet(dir_db_attrs, storage_options = storage_options)
-        attr_df_sub = all_attr_ddf.compute()
-        attr_ddf_subloc = all_attr_ddf[all_attr_ddf['featureID'].isin(comids_resp)]
-
+        all_files = [x for x in Path(dir_db_attrs).glob('*.parquet')]
+        all_df = pd.read_parquet(all_files)
+        #all_attr_ddf = dd.read_parquet(dir_db_attrs, storage_options = storage_options)
+        comids_resp_str = [str(s) for s in comids_resp]
+        attr_ddf_subloc = dd.from_pandas(all_df[all_df['featureID'].isin(comids_resp_str)],
+                                         npartitions=2)
     elif read_type == 'filename': # Read based on comid being located in the parquet filename
-        matching_files = [file for file in Path(dir_db_attrs).iterdir() \
-                          if file.is_file() and any(f'_{sub}_' in file.name for sub in comids_resp)]
-        attr_ddf_subloc = dd.read_parquet(matching_files, storage_options=storage_options)
+        
+        substrings = [f'_{sub}_' for sub in comids_resp]
+        pattern = re.compile('|'.join(map(re.escape,substrings)))
+        all_files = [file for file in Path(dir_db_attrs).iterdir() if file.is_file()]
+        matching_files = [file for file in all_files if pattern.search(str(file))]
+        # Read in all matching filenames and proceed
+        attr_ddf_subloc = dd.from_pandas(pd.read_parquet(matching_files),npartitions=2)
     else:
         # Initialize attr_ddf_sub
         attr_ddf_sub = None
@@ -193,7 +209,7 @@ def fs_read_attr_comid(dir_db_attrs:str | os.PathLike, comids_resp:list | Iterab
 
     attr_ddf_sub = attr_ddf_subloc[attr_ddf_subloc['attribute'].isin(attrs_sel)]
     
-    attr_df_sub = attr_ddf_sub.compute()
+    attr_df_sub = attr_ddf_sub.compute() # This takes a while querying many files.
 
     if attr_df_sub.shape[0] == 0:
         warnings.warn(f'The provided attributes do not exist with the retrieved featureIDs : \
@@ -233,7 +249,6 @@ def _check_attributes_exist(df_attr: pd.DataFrame, attrs_sel:pd.Series | Iterabl
     :seealso: :func:`fs_read_attr_comid()`
 
     """
-    #
     if not isinstance(attrs_sel,pd.Series):
         # Convert to a series for convenience of pd.Series.isin()
         attrs_sel = pd.Series(attrs_sel)
@@ -244,8 +259,8 @@ def _check_attributes_exist(df_attr: pd.DataFrame, attrs_sel:pd.Series | Iterabl
         # multiple combos of comid/attrs exist. Find them and warn about it.
         vec_missing = df_attr.groupby('featureID')['attribute'].count() != len(attrs_sel)
         bad_comids = vec_missing.index.values[vec_missing]
-        
-        warnings.warn(f"    TOTAL unique locations with missing attributes: {len(bad_comids)}",UserWarning)
+        msg_tot_loc = f"    TOTAL unique locations with missing attributes: {len(bad_comids)}"
+        warnings.warn(msg_tot_loc,UserWarning)
         df_attr_sub_missing = df_attr[df_attr['featureID'].isin(bad_comids)]
     
         if isinstance(attrs_sel,list):
@@ -253,7 +268,8 @@ def _check_attributes_exist(df_attr: pd.DataFrame, attrs_sel:pd.Series | Iterabl
             missing_attrs = pd.DataFrame({'attribute':missing_attrs})
         else:
             missing_attrs = attrs_sel[~attrs_sel.isin(df_attr_sub_missing['attribute'])]
-        warnings.warn(f"    TOTAL MISSING ATTRS: {len(missing_attrs)}",UserWarning)
+        msg_tot_miss = f"    TOTAL MISSING ATTRS: {len(missing_attrs)}"
+        warnings.warn(msg_tot_miss,UserWarning)
         str_missing = '\n    '.join(missing_attrs.values)
 
         warn_msg_missing_attrs = "\
@@ -263,8 +279,6 @@ def _check_attributes_exist(df_attr: pd.DataFrame, attrs_sel:pd.Series | Iterabl
         warn_msg2 = "\nMissing attributes include: \n    " + str_missing
         warn_msg_3 = "\n COMIDs with missing attributes include: \n" + ', '.join(bad_comids)
         warnings.warn(warn_msg_missing_attrs + warn_msg2 + warn_msg_3,UserWarning)
-        
-    
     return {'df_attr': df_attr, 'attrs_sel': attrs_sel}
 
 
@@ -284,6 +298,7 @@ def _id_attrs_sel_wrap(attr_cfig: AttrConfigAndVars,
     :type colname_attr_csv: str, optional
     :return: list of all attributes of interest, likely to use for training/prediction
     :rtype: list
+
     """
     if name_attr_csv:
         path_attr_csv = build_cfig_path(path_cfig,name_attr_csv)
@@ -642,16 +657,18 @@ def _read_pred_comid(path_pred_locs: str | os.PathLike, comid_pred_col:str ) -> 
     :return: list of comids
     :rtype: list[str]
     """
+    # Changelog/contributions
+    # 2025-03-30 Add in drop_duplicates(), GL
     if not Path(path_pred_locs).exists():
         FileNotFoundError(f"The path to prediction location data could not be found: \n{path_pred_locs} ")
     if '.csv' in Path(path_pred_locs).suffix:
         try:
-            comids_pred = pd.read_csv(path_pred_locs)[comid_pred_col].values
+            comids_pred = pd.read_csv(path_pred_locs).drop_duplicates()[comid_pred_col].values            
         except:
             raise ValueError(f"Could not successfully read in {path_pred_locs} & select col {comid_pred_col}")
     elif '.parquet' in Path(path_pred_locs).suffix:
         try:
-            comids_pred = pd.read_parquet(path_pred_locs)[comid_pred_col].values
+            comids_pred = pd.read_parquet(path_pred_locs).drop_duplicates()[comid_pred_col].values
         except:
             raise ValueError(f"Could not successfully read in {path_pred_locs} & select col {comid_pred_col}")
     else:
@@ -1976,7 +1993,7 @@ def gen_conus_basemap(dir_out_basemap:str | os.PathLike, # This should be the da
     return states
     
 def plot_map_pred(geo_df:gpd.GeoDataFrame, states,title:str,metr:str,
-                  colname_data:str='performance'):
+                  colname_data:str='prediction'):
     """Genereate a map of predicted response variables
 
     :param geo_df: Geodataframe of response variable results
@@ -1987,7 +2004,7 @@ def plot_map_pred(geo_df:gpd.GeoDataFrame, states,title:str,metr:str,
     :type title: str
     :param metr: The metric/response variable of interest
     :type metr: str
-    :param colname_data: The geo_df column name representing data of interest, defaults to 'performance'
+    :param colname_data: The geo_df column name representing data of interest, defaults to 'prediction'
     :type colname_data: str, optional
     :return: Map of predicted response variables
     :rtype: Figure
@@ -2018,7 +2035,7 @@ def plot_map_pred(geo_df:gpd.GeoDataFrame, states,title:str,metr:str,
 def plot_map_pred_wrap(test_gdf,dir_out_viz_base, ds,
                       metr,algo_str,
                       split_type='test',
-                      colname_data='performance'):
+                      colname_data='prediction'):
 
     path_pred_map_plot = std_map_pred_path(dir_out_viz_base,ds,metr,algo_str,split_type)
     dir_out_basemap = path_pred_map_plot.parent.parent
@@ -2028,7 +2045,7 @@ def plot_map_pred_wrap(test_gdf,dir_out_viz_base, ds,
     test_gdf = test_gdf.to_crs(4326)
 
     # Generate the map
-    plot_title = f"Predicted Values: {metr} - {ds}"
+    plot_title = f"Predicted Values: {metr} - {ds}: {algo_str} algorithm"
     plot_pred_map = plot_map_pred(geo_df=test_gdf, states=states,title=plot_title,
                                   metr=metr,colname_data=colname_data)
 
@@ -2049,7 +2066,7 @@ def plot_best_perf_map(geo_df,states, title, comparison_col = 'dataset'):
     :type states: gpd.GeoDataFrame
     :param title: Map title
     :type title: str
-    :param comparison_col: The geo_df column name representing data of interest, defaults to 'performance'
+    :param comparison_col: The geo_df column name representing data of interest, defaults to 'dataset'
     :type comparison_col: str, optional
     :return: Map of best-predicted response variables
     :rtype: Figure
