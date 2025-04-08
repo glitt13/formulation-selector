@@ -100,11 +100,6 @@ coverage.xml
 *.Rproj
 *.Rhistory
 
-# Temporary
-NAMESPACE
-DESCRIPTION
-LICENSE
-*.Rd
 # Front-End #
 #############
 node_modules/
