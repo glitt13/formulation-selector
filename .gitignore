@@ -101,11 +101,6 @@ coverage.xml
 *.Rhistory
 pkg/proc.attr.hydfab/.RData
 
-# Temporary
-NAMESPACE
-DESCRIPTION
-LICENSE
-*.Rd
 # Front-End #
 #############
 node_modules/
