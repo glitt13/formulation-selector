@@ -69,8 +69,9 @@ class TestAttrConfigAndVars(unittest.TestCase):
             'home_dir': '/mocked/home',
             'datasets': ['dataset1', 'dataset2']
         }
-
+           
         self.assertEqual(attr_obj.attrs_cfg_dict, expected_attrs_cfg_dict)
+        print("✅ test_read_attr_config test passed.")
 
 class TestFsReadAttrComid(unittest.TestCase):   
     @patch('fs_algo.fs_algo_train_eval.dd.read_parquet')
@@ -78,49 +79,53 @@ class TestFsReadAttrComid(unittest.TestCase):
         print("    Testing fs_read_attr_comid")
         # Mock DataFrame
         mock_pdf = pd.DataFrame({
-            'data_source': 'hydroatlas__v1',
-            'dl_timestamp': '2024-07-26 08:59:36',
+            'data_source': ['hydroatlas__v1','hydroatlas__v1'],
+            'dl_timestamp': ['2024-07-26 08:59:36','2024-07-26 08:59:36'],
             'attribute': ['pet_mm_s01', 'cly_pc_sav'],
             'value': [58, 21],
-            'featureID': '1520007',
-            'featureSource': 'COMID'
+            'featureID': ['1520007','1520007'],
+            'featureSource': ['COMID','COMID']
         })
-        mock_ddf = dd.from_pandas(mock_pdf, npartitions=1)
-        mock_read_parquet.return_value = mock_ddf
-        # A normal result scenario, mocked:
-        dir_db_attrs = 'mock_dir'
-        comids_resp = ['1520007']
-        attrs_sel = 'all'
-        
-        result = fs_algo_train_eval.fs_read_attr_comid(dir_db_attrs=dir_db_attrs, comids_resp=comids_resp, attrs_sel=attrs_sel)
+        #result = fs_algo_train_eval.fs_read_attr_comid(dir_db_attrs=dir_db_attrs, comids_resp=comids_resp, attrs_sel=attrs_sel)
+        # Use unittest.mock.patch to mock pd.read_parquet
+        with patch('pandas.read_parquet', return_value=mock_pdf) as mock_read_parquet:
+            dir_db_attrs = 'mock_dir'
+            comids_resp = ['1520007']
+            attrs_sel = 'all'
 
-        # Assertions
-        self.assertTrue(mock_read_parquet.called)
-        self.assertEqual(result.shape[0], 2)
-        self.assertIn('1520007', result['featureID'].values)
-        self.assertIn('pet_mm_s01', result['attribute'].values)
-        self.assertIn('COMID',result['featureSource'].values )
-        self.assertIn('value',result.columns )
-        self.assertIn('data_source',result.columns )
-
-        # When only one attribute requested
-        single_result = fs_algo_train_eval.fs_read_attr_comid(dir_db_attrs=dir_db_attrs,
-                                                              comids_resp= comids_resp,attrs_sel= ['pet_mm_s01'])
-        self.assertIn('pet_mm_s01',single_result['attribute'].values)
-        self.assertNotIn('cly_pc_sav',single_result['attribute'].values)
-
-        # When COMID requested that doesn't exist
-        with self.assertWarns(UserWarning):
-                fs_algo_train_eval.fs_read_attr_comid(dir_db_attrs=dir_db_attrs,
-                                                              comids_resp= ['010101010'],
-                                                              attrs_sel= ['pet_mm_s01'])
-
-        # When attribute requested that doesn't exist
-        with self.assertWarns(UserWarning):
-            fs_algo_train_eval.fs_read_attr_comid(dir_db_attrs=dir_db_attrs,
-                                            comids_resp= comids_resp,
-                                            attrs_sel= ['nonexistent'])
+            result = fs_algo_train_eval.fs_read_attr_comid(dir_db_attrs=dir_db_attrs,
+                                        comids_resp=comids_resp,
+                                        attrs_sel=attrs_sel)
             
+            # Assertions and print
+            assert mock_read_parquet.called, "pandas.read_parquet was not called"
+            assert result.shape[0] == 2, f"Expected 2 rows, got {result.shape[0]}"
+            assert '1520007' in result['featureID'].values, "'1520007' not in featureID column"
+            assert 'pet_mm_s01' in result['attribute'].values, "'pet_mm_s01' not in attribute column"
+            assert 'COMID' in result['featureSource'].values, "'COMID' not in featureSource column"
+            assert 'value' in result.columns, "'value' column missing"
+            assert 'data_source' in result.columns, "'data_source' column missing"
+
+            print("✅ fs_read_attr_comid muliple-row test passed.")
+
+            # When only one attribute requested
+            single_result = fs_algo_train_eval.fs_read_attr_comid(dir_db_attrs=dir_db_attrs,
+                                                                comids_resp= comids_resp,attrs_sel= ['pet_mm_s01'])
+            self.assertIn('pet_mm_s01',single_result['attribute'].values)
+            self.assertNotIn('cly_pc_sav',single_result['attribute'].values)
+
+            # When COMID requested that doesn't exist
+            with self.assertWarns(UserWarning):
+                    fs_algo_train_eval.fs_read_attr_comid(dir_db_attrs=dir_db_attrs,
+                                                                comids_resp= ['010101010'],
+                                                                attrs_sel= ['pet_mm_s01'])
+
+            # When attribute requested that doesn't exist
+            with self.assertWarns(UserWarning):
+                fs_algo_train_eval.fs_read_attr_comid(dir_db_attrs=dir_db_attrs,
+                                                comids_resp= comids_resp,
+                                                attrs_sel= ['nonexistent'])
+            print("✅ fs_read_attr_comid single-row test passed.")
 
 class TestCheckAttributesExist(unittest.TestCase):
     print('Testing _check_attributes_exist')
@@ -144,7 +149,7 @@ class TestCheckAttributesExist(unittest.TestCase):
         with self.assertWarns(UserWarning):
             fs_algo_train_eval._check_attributes_exist(mock_pdf_bad,pd.Series(['pet_mm_s01','cly_pc_sav']))
         
-
+        print("✅ _check_attributes_exist test passed.")
 class TestFsRetrNhdpComids(unittest.TestCase):
 
     def test_fs_retr_nhdp_comids(self):
@@ -159,7 +164,7 @@ class TestFsRetrNhdpComids(unittest.TestCase):
         # Assertions
         self.assertListEqual(result['comid'].tolist(), ['1722317', '1520007'])
         self.assertEqual(result.columns.tolist(), ['comid','gage_id', 'geometry'])
-
+        print("✅ test_fs_retr_nhdp_comids test passed.")
 class TestFindFeatSrceId(unittest.TestCase):
 
     def test_find_feat_srce_id(self):
@@ -172,7 +177,7 @@ class TestFindFeatSrceId(unittest.TestCase):
                         }
         rslt = fs_algo_train_eval._find_feat_srce_id(attr_config = attr_config)
         self.assertEqual(rslt,['nwissite','USGS-{gage_id}'])
-
+        print("✅ _find_feat_srce_id standard test passed.")
     # Raise error when featureSource not provided:
     def test_missing_feat_srce(self):
         attr_config_miss = {'col_schema': [{'featureID': 'USGS-{gage_id}'},
@@ -180,7 +185,7 @@ class TestFindFeatSrceId(unittest.TestCase):
                             'loc_id_read': {'gage_id': 'gage_id'}}
         with self.assertRaises(ValueError):
             fs_algo_train_eval._find_feat_srce_id(attr_config = attr_config_miss, dat_resp=None)
-
+        print("✅ _find_feat_srce_id missing test passed.")
     def test_netcdf_attributes(self):
          # Create a mock xarray.Dataset object w/ attributes
         mock_xr = MagicMock(spec=xr.Dataset)
@@ -189,7 +194,7 @@ class TestFindFeatSrceId(unittest.TestCase):
 
         rslt = fs_algo_train_eval._find_feat_srce_id(mock_xr)
         self.assertEqual(rslt,['nwissite','USGS-{gage_id}'])
-
+        print("✅ _find_feat_srce_id mock xarray test passed.")
 
     # Raise error when featureID not provided:
     def test_missing_feat_id(self):
@@ -200,7 +205,7 @@ class TestFindFeatSrceId(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             fs_algo_train_eval._find_feat_srce_id(mock_xr)
-
+        print("✅ _find_feat_srce_id mock xarray missing featureID test passed.")
     # Test when dataset does not have any attributes but does have config:
     def test_missing_attrs(self):
         mock_xr = MagicMock(spec=xr.Dataset)
@@ -215,6 +220,7 @@ class TestFindFeatSrceId(unittest.TestCase):
                 }
         rslt = fs_algo_train_eval._find_feat_srce_id(dat_resp = mock_xr, attr_config = attr_config)
         self.assertEqual(rslt,['nwissite','USGS-{gage_id}'])
+        print("✅ _find_feat_srce_id missing attributes test passed.")
 
 class build_cfig_path(unittest.TestCase):
     def test_build_cfig_path(self):
@@ -229,6 +235,7 @@ class build_cfig_path(unittest.TestCase):
 
         with self.assertWarns(UserWarning):
             fs_algo_train_eval.build_cfig_path(dir_new,'')
+        print("✅ test_build_cfig_path build config paths test passed.")
 
     @patch('pathlib.Path.exists')
     def test_file_exists(self, mock_exists):
@@ -243,6 +250,7 @@ class build_cfig_path(unittest.TestCase):
         # Assert
         self.assertEqual(rslt, path_or_name_cfig)
         self.assertEqual(mock_exists.call_count, 2)
+        print("✅ build_cfig_path build config paths test with mock paths passed.")
 
 class TestFsSaveAlgoDirStruct(unittest.TestCase):
     def test_fs_save_algo_dir_struct(self):
@@ -254,7 +262,7 @@ class TestFsSaveAlgoDirStruct(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             fs_algo_train_eval.fs_save_algo_dir_struct(dir_base + '/not_a_dir/')
-
+        print("✅ fs_save_algo_dir_struct creating directory structure for outputs passed.")
 class TestOpenResponseDataFs(unittest.TestCase):
     dir_std_base = tempfile.gettempdir()
 
@@ -262,6 +270,7 @@ class TestOpenResponseDataFs(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, 'Could not identify an approach to read in dataset'):
             fs_algo_train_eval._open_response_data_fs(self.dir_std_base,ds='not_a_ds')
+        print("✅ _open_response_data_fs unable to read dataset test passed.")
 #%% ALGO TRAIN & EVAL
 class TestStdAlgoPath(unittest.TestCase):
 
