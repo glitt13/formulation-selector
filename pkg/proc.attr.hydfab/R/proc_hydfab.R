@@ -299,12 +299,13 @@ retr_state_terr_postal <- function(lat, lon) {
   return(postal_id)
 }
 
-custom_hf_id <- function(df, col_vpu = "vpu",col_id = "id"){
-  #' @title Build a custom hydrofabric id that is unique to place
+custom_hf_id <- function(df, col_vpu = "vpu",col_id = "divide_id"){
+  #' @title Build a custom hydrofabric id that is unique to place across all domains
   #' @param df The dataframe for a specific location corresponding to the
   #' @param col_vpu The column in df representing the vpu
   #' @param col_id The column in df representing the hydrofabric id
-  #' hydrofabric 'network'
+  #' hydrofabric 'network'. Default 'divide_id' e.g. cat-447 avoids the
+  #' common possibility of NA values in the 'id' column
   #' @export
 
   # Remove NA values

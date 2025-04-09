@@ -19,6 +19,18 @@
 #' https://drive.google.com/drive/folders/1RpmXevXvhKR-DGmf_lY8nHzwkghK8LOO?usp=drive_link
 # Changelog / Contributions
 #. 2025-02-25 Originally created, GL
+# TODO change this analysis to be based on watershed centroid overlap rather
+#. than areal weighting
+
+# ------- STEPS USED FOR CONUS HYDROATLAS-HYDROFABRIC DIVIDE DOWNSCALING -------
+# 1. Download the BasinATLAS data, subset to NWM domains.
+# 2. Intersect the reference fabric divide centroids with the HydroAtlas basins
+#.    to establish a hf_id:hydroatlas_id association
+# 3. For each CAMELs subset, the network tables are used to define the
+#.   hf_areassqkm to areasqkm ratio in a divide (r, all sum to 1 in a divide)
+# 4. All associated HydroAtlas basins are requested and the value of each
+#.   attribute is multiplied by the area ratio (r) for each incremental divide.
+# 5. Values are then summed across the NextGen divide.
 
 library(sf)
 library(dplyr)
@@ -37,17 +49,50 @@ path_hfab_ak <- base::file.path(dir_base_hfab,"ak_nextgen.gpkg")
 path_hfab_prvi <- base::file.path(dir_base_hfab,"prvi_nextgen.gpkg")
 paths_hfab <- base::c(path_hfab_ak,path_hfab_prvi) # Define the paths to the hydrofabric geopackages of interest
 
+proc_ntrsct <- FALSE # TODO eliminate? Perform intersection processing? Placeholder
 redo_intersection_analysis <- FALSE # Should we re-run hydroatlas/hydrofabric intersection analysis if it hasn't already been run? (may take ~18 hours)
 # Directory containing hydrotlas basins manually downloaded from https://www.hydrosheds.org/products/hydrobasins
 dir_base_hydatl <- "~/noaa/data/hydroatlas/"
-path_haa_global <-  file.path(dir_base_hydatl,"BasinATLAS_Data_v10.gdb","BasinATLAS_v10.gdb")
+path_haa_global <-  base::file.path(dir_base_hydatl,"BasinATLAS_Data_v10.gdb","BasinATLAS_v10.gdb")
 #------ END USER INPUT HERE
 if(!base::dir.exists(dir_save_base)){
   base::dir.create(dir_save_base,recursive=TRUE)
 }
 
 dir_extdata <- system.file("extdata", package="proc.attr.hydfab")
-path_hydatl_catg <- file.path(dir_extdata,"hydatl_catg_aggr.yml")
+path_hydatl_catg <- base::file.path(dir_extdata,"hydatl_catg_aggr.yml")
+
+# ---------- convenience functions ---------------
+plot_hf_ha <- function(div_hf_hab, viz_idx=1, total_vpu=FALSE,
+                       col_geom_ha='geometry',
+                       col_geom_hf='geom',
+                       col_centroid_hf='centroid'){
+  #' @title Plot hydrofabric and HydroATLAS basins
+  #' @details Will calculate hydrofabric centroids if column doesn't exist
+  #' @param div_hf_hab merged dataframe of hydrofabric and hydroatlas
+  #' @param viz_idx Row indices of dataframe for plotting. Default 1.
+  #' @param total_vpu Boolean. Should the entire dataframe's gemoetry also be included?
+  #' @seealso prep_oconus_hydroatlas.R
+  map_basins <- ggplot2::ggplot()
+  if(total_vpu){ # View the entire vpu/domain
+    map_basins <- map_basins + ggplot2::geom_sf(data = div_hf_hab$geometry)
+  }
+  if(!col_centroid_hf %in% names(div_hf_hab)){ # Compute the
+    div_hf_hfab[[col_centroid_hf]] <- sf::st_centroid(div_hf_hfab[[col_geom_hf]])
+  }
+
+  map_basins <- map_basins +
+    ggplot2::ggtitle(glue::glue("domain: {vpu}\nid:{div_hf_hab$id[viz_idx]} divide_id:{div_hf_hab$divide_id[viz_idx]}\nHYBAS_ID:{div_hf_hab$HYBAS_ID[viz_idx]}")) +
+    ggplot2::geom_sf(data = div_hf_hab[viz_idx,col_geom_ha], ggplot2::aes(color = "HydroAtlas")) +
+    ggplot2::geom_sf(data = div_hf_hab[viz_idx,col_geom_hf], ggplot2::aes(color = 'hydrofabric'), alpha=0.3) +
+    ggplot2::geom_sf(data = div_hf_hab[viz_idx,col_centroid_hf], ggplot2::aes(color = 'hf centroid')) +
+    ggplot2::ggtitle(glue::glue("domain: {vpu}\nid:{div_hf_hab$id[viz_idx]} divide_id:{div_hf_hab$divide_id[viz_idx]}\nHYBAS_ID:{div_hf_hab$HYBAS_ID[viz_idx]}")) +
+    ggplot2::scale_color_manual(name="Layers",
+                                values = c("HydroAtlas"='green',
+                                           'hydrofabric'='blue',
+                                           'hf centroid'='blue'))
+  return(map_basins)
+}
 
 # ---------------------------------------------------------------------------- #
 ########## 1. HYDROFABRIC-HYDROATLAS INTERSECTION FRACTION PROCESSING ##########
@@ -89,43 +134,96 @@ for(path_hfab in paths_hfab){
 
   # Subset the hydroatlas data to a buffered hydrofabric extent
   hab_shp_sub <- proc.attr.hydfab:::subset_hydatl_by_hydfab(div_hfab_val,hab_shp_val,buff_dist=50000)
+  # ----------------------------------------------------------------------------
+  # ---------------------------      CENTROID       ----------------------------
+  # Create centroids of every hydrofabric divide
+  div_hfab_val$centroid <- sf::st_centroid(div_hfab_val$geom)
+  # Intersect each hydrofabric divide centroid with HydroATLAS basin
+  ls_ctrnd_ha_hfab <- base::lapply(div_hfab_val$centroid, function(c) sf::st_join(c,hab_shp_sub)) %>% purrr::quietly()
+  ls_idxs_cntrd_ntrsct <- base::lapply(div_hfab_val$centroid, function(c) base::which(sf::st_contains(hab_shp_sub,c, sparse = FALSE)))
+  hab_shp_sub_reordr <- hab_shp_sub
+  hab_shp_sub_reordr <- hab_shp_sub_reordr[unlist(ls_idxs_cntrd_ntrsct),]
+  div_hf_hab <- base::cbind(div_hfab_val,hab_shp_sub_reordr) # The combined hydrofabric divides - hydroatlas basins
 
+  # Ratio of a hydrofabric divide to the HydroATLAS basin
+  div_hf_hab$ratio_area_hf_to_hab <- div_hf_hab$areasqkm/div_hf_hab$SUB_AREA
+
+  # Summing hydrofabric divide area ratios within each HydroATLAS basin
+  summed_ratios <- div_hf_hab %>% dplyr::group_by(HYBAS_ID) %>%
+    dplyr::summarise(sum_ratios_by_ha = base::sum(ratio_area_hf_to_hab, na.rm=TRUE))
+  #hist(summed_ratios$sum_ratios_by_ha)
+  hybas_min_frac <- summed_ratios$HYBAS_ID[which.min(summed_ratios$sum_ratios_by_ha)]
+  hybas_max_frac <- summed_ratios$HYBAS_ID[which.max(summed_ratios$sum_ratios_by_ha)]
+
+  # Manual visualizations of hydrofabric overlaps with HydroATLAS basins
+  viz_idx <- grep(hybas_max_frac, div_hf_hab$HYBAS_ID)#1302 # 1301 is an interior basin in PR
+  viz_idx <- grep(hybas_min_frac,div_hf_hab$HYBAS_ID)
+  plot_hf_ha(div_hf_hab, viz_idx, total_vpu=FALSE)
+
+  # -------------- FLOWPATH
+  # TODO DO WE EVEN NEED THE flowpath network table????
+  # TODO acquire the network tables from hf
+  fp_hfab_val <- proc.attr.hydfab:::read_hfab_lyr_val(path_hfab,lyr='flowpaths')
+  fp_hfab_val$ratio_area_hf <- fp_hfab_val$areasqkm/fp_hfab_val$tot_drainage_areasqkm # TODO consider removing this
+
+  # TODO add NA handling when tot_drainage_areasqkm is NA, but areasqkm is not (typical for coastal areas)
+  # Combine the network ratios with the hydroatlas basins
+  # No geometry
+
+  dt_div_hf_hab <- div_hf_hab %>% sf::st_drop_geometry() %>%
+    dplyr::select(-dplyr::all_of(c("geometry","centroid")))  %>%
+    data.table::as.data.table()
+  dt_fp_hfab_val <- fp_hfab_val %>% sf::st_drop_geometry() %>%
+    data.table::as.data.table()
+  # The common columns
+  common_cols <- base::intersect(names(dt_div_hf_hab),names(dt_fp_hfab_val))
+
+  div_fp_hf_hab <- base::merge(dt_div_hf_hab, dt_fp_hfab_val,by='divide_id',all.x = TRUE)
+  div_fp_hf_hab$ratio_area_hf_to_ha <- div_fp_hf_hab$areasqkm.x/div_fp_hf_hab$UP_AREA
+  div_fp_hf_hab %>% dplyr::group_by('HYBAS_ID') %>% dplyr::summarise(summed_ratios_to_ha = sum("ratio_area"))
+  # -------------- END FLOWPATH SECTION
+  # TODO  hf_areassqkm to areasqkm ratio in a divide (r, all sum to 1 in a divide) from the network tables
+
+
+
+  # ----------------------------------------------------------------------------
   # ------------------------      INTERSECTION       --------------------------
-  # Loop over the hydrofabric catchments and find intersections with hydroatlas
-  ls_ntrsct_ha_hfab <- list()
-  ls_ntrsct_intrmediate <- list()
-  ctr <- 0
-  for(div_id in unique(div_hfab_val$divide_id)){
-    ctr <- ctr+1
-    print(glue::glue("Processing {div_id}"))
-    sub_hfab <- div_hfab_val[div_hfab_val$divide_id == div_id,]
-    #small_in_big <-  try(sf::st_join(sub_hfab,hab_shp_val, join = sf::st_within))
+  if(proc_ntrsct){
+    # Loop over the hydrofabric catchments and find intersections with hydroatlas
+    ls_ntrsct_ha_hfab <- list()
+    ls_ntrsct_intrmediate <- list()
+    ctr <- 0
+    for(div_id in unique(div_hfab_val$divide_id)){
+      ctr <- ctr+1
+      print(glue::glue("Processing {div_id}"))
+      sub_hfab <- div_hfab_val[div_hfab_val$divide_id == div_id,]
+      #small_in_big <-  try(sf::st_join(sub_hfab,hab_shp_val, join = sf::st_within))
 
-    ntrsct <- try(sf::st_intersection(sub_hfab,hab_shp_sub)) # small, big overlap
-    if(!"try-error" %in% class(ntrsct)){
-      ntrsct$area_intersect <- sf::st_area(ntrsct) # compute area of intersections
-      sub_hfab$area_small <- sf::st_area(sub_hfab) # compute overall area of the smaller hydrofabric basin
+      ntrsct <- try(sf::st_intersection(sub_hfab,hab_shp_sub)) # small, big overlap
+      if(!"try-error" %in% class(ntrsct)){
+        ntrsct$area_intersect <- sf::st_area(ntrsct) # compute area of intersections
+        sub_hfab$area_small <- sf::st_area(sub_hfab) # compute overall area of the smaller hydrofabric basin
 
-      frac_overlaps <- ntrsct$area_intersect/sub_hfab$area_small
-      ntrsct$frac_overlaps <- frac_overlaps
-      ls_ntrsct_ha_hfab[[div_id]] <- ntrsct
-      ls_ntrsct_intrmediate[[div_id]] <- ntrsct
-    } else {
-      ls_ntrsct_ha_hfab[[div_id]] <- data.frame(divide_id = div_id)
-      ls_ntrsct_intrmediate[[div_id]] <- data.frame(divide_id = div_id)
+        frac_overlaps <- ntrsct$area_intersect/sub_hfab$area_small
+        ntrsct$frac_overlaps <- frac_overlaps
+        ls_ntrsct_ha_hfab[[div_id]] <- ntrsct
+        ls_ntrsct_intrmediate[[div_id]] <- ntrsct
+      } else {
+        ls_ntrsct_ha_hfab[[div_id]] <- data.frame(divide_id = div_id)
+        ls_ntrsct_intrmediate[[div_id]] <- data.frame(divide_id = div_id)
+      }
+      # Implement intermediate file saving every 100 iterations
+      if(ctr%%100==0 || ctr==nrow(div_hfab_val)){
+        intermediate_file_name <- base::gsub(pattern = ".gpkg",
+                                             replacement=glue::glue("_{ctr}.rds"),
+                                             x = base::basename(path_hfab))
+        path_save_ls_intrmediate <- base::file.path(dir_save_base,intermediate_file_name)
+
+        base::saveRDS(ls_ntrsct_intrmediate, file = path_save_ls_intrmediate)
+        ls_ntrsct_intrmediate <- list() # reset the intermediate list for future file saving
+      }
     }
-    # Implement intermediate file saving every 100 iterations
-    if(ctr%%100==0 || ctr==nrow(div_hfab_val)){
-      intermediate_file_name <- base::gsub(pattern = ".gpkg",
-                                           replacement=glue::glue("_{ctr}.rds"),
-                                           x = base::basename(path_hfab))
-      path_save_ls_intrmediate <- base::file.path(dir_save_base,intermediate_file_name)
-
-      base::saveRDS(ls_ntrsct_intrmediate, file = path_save_ls_intrmediate)
-      ls_ntrsct_intrmediate <- list() # reset the intermediate list for future file saving
-    }
-  }
-
+  } # End process intersection approach
   #--------------------------   Save binary file   --------------------------- #
   base::saveRDS(ls_ntrsct_ha_hfab, file = path_save_ls_ntrsct)
   print(glue::glue("Wrote {path_save_ls_ntrsct}"))
