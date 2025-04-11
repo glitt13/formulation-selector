@@ -598,16 +598,16 @@ testthat::test_that("grab_attrs_datasets_fs_wrap", {
 })
 
 
-testthat::test_that("proc_attr_hydatl", {
+testthat::test_that("retr_attr_hydatl", {
   exp_dat_ha <- readRDS(system.file("extdata", paste0("ha_18094981.Rds"), package="proc.attr.hydfab"))
-  ha <- proc.attr.hydfab::proc_attr_hydatl(comid,s3_path_hydatl,
+  ha <- proc.attr.hydfab::retr_attr_hydatl(comid,s3_path_hydatl,
                                            ha_vars=c("pet_mm_s01","cly_pc_sav","cly_pc_uav"))
   # saveRDS(ha,paste0("~/git/fsds/pkg/proc.attr.hydfab/inst/extdata/ha_",comid,".Rds"))
   # Wide data expected
   testthat::expect_equal(ha,exp_dat_ha)
 
   # Run this with a bad s3 bucket
-  testthat::expect_error(proc.attr.hydfab::proc_attr_hydatl(comid="18094981",
+  testthat::expect_error(proc.attr.hydfab::retr_attr_hydatl(comid="18094981",
                                                           s3_path_hydatl ='https://s3.notabucket',
                                                           ha_vars = Retr_Params$vars$ha_vars))
 })

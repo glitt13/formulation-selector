@@ -1,4 +1,5 @@
-#' @title Script to work through FY25 NWM v4 benchmarking (first stage, small # of catchments)
+#' @title Script to work through FY25 NWM v4 benchmarking locations (first stage, small # of catchments)
+#' @description GOAL: Identify
 #' @seealso prep_oconus_hydroatlas.R for preparation of hydroatlas attributes
 #' corresponding to AK and PRVI hydrofabric VPU domains.
 
@@ -135,19 +136,70 @@ if (base::any(base::is.na(dt_meta$featureID))){
 # https://github.com/NOAA-OWP/hydrofabric/wiki/Data-Access-Patterns
 
 library(arrow)
-hydatl <- arrow::read_parquet("~/Downloads/hydroatlas_vars.parquet")
+# hydatl <- arrow::read_parquet("~/Downloads/hydroatlas_vars.parquet")
 # TODO retrieve hydroatlas catchment attributes (make them a parquet format)
 
 # tabular data:
 dir_hfab_tab_dat <- "~/noaa/hydrofabric/tabular-data/" # Save the parquet file here
 path_attrs_all_oconus <- proc.attr.hydfab:::std_path_attrs_all_parq(dir_hfab_tab_dat, ls_vpus=c("ak","prvi"))
 path_attrs_conus <- file.path(dir_hfab_tab_dat,"hydroatlas_vars.parquet")
-path_attrs_all_oconus <- "~/noaa/hydrofabric/tabular-data//hydroatlas_attributes_ak_prvi.parquet"
+#path_attrs_all_oconus <- "~/noaa/hydrofabric/tabular-data//hydroatlas_attributes_ak_prvi.parquet"
 
-proc.attr.hydfab::proc_attr_hydatl(hf_id = 899,path_ha = path_attrs_conus,ha_vars =c("ari_ix_sav","cly_pc_sav","snw_pc_uyr"))
-proc.attr.hydfab::proc_attr_hydatl(hf_id =, path_ha = path_attrs_all_oconus,ha_vars =c("ari_ix_sav","cly_pc_sav","snw_pc_uyr"))
+
+# ---------------------------------------------------------------------------- #
+#. Trying to formalize here
+# ---------------------------------------------------------------------------- #
+path_attr_config <- "~/git/formulation-selector/scripts/eval_ingest/xssa/xssa_attr_config.yaml"
+
+Retr_Params <- proc.attr.hydfab::attr_cfig_parse(path_attr_config)
+
+# TODO update function that creates Retr_Params: add hydroatlas paths to Retr_Params$paths
+Retr_Params$paths$dir_hfab_tab_dat <- dir_hfab_tab_dat # TODO define path in attr_config
+Retr_Params$paths$path_attrs_conus <- path_attrs_conus # TODO define path in attr_config
+Retr_Params$paths$path_attrs_all_oconus <- proc.attr.hydfab:::std_path_attrs_all_parq(dir_hfab_tab_dat, ls_vpus=c("ak","prvi")) # TODO define ls_vpus in attr_config
+
+# TODO generate hf_id using proc.attr.hydfab::custom_hf_id(dt_ha_oc, col_vpu = "vpu",col_id = "id")
+
+# Example of retrieving a .nc standardized dataset following fs_proc
+ds <- Retr_Params$datasets[1]
+ls_fs_std <- proc.attr.hydfab::proc_attr_read_gage_ids_fs( proc.attr.hydfab::std_dir_dataset(Retr_Params$paths$dir_std_base,ds))
+# PROBLEM: this assumes every gage_ids uses the same featureSource
+# WORKAROUND: make a list of networks using standardized options e.g.
+# TODO implement a standardization of hydrofabric ids in the fs_proc Step 1 approach.
+# Idea: Generate a separate .nc file for hydrofabric formatting & separate for nhdplus fomratting
+# Idea: Generate a separate 
+
+
+ls_fs_std_ntwk <- list()
+# TODO determine how to split up data between network options:
+# 1) conus vs. 2) oconus?
+# 2) networks: 1) nhdplus (aka conus) vs 2) hydrofabric (oconus) vs 3) HydroATLAS networks (global) 
+# What are acceptable location identifiers?
+#. 1) RFC IDs : convert to hydrofabric id
+#. 2) USGS gage ids : convert to hydrofabric id (or comid??)
+#. 3) coordinates  
+#. 4) hydrofabric location ids
+
+ls_fs_std_ntwk[['nhdplus']] <- ls_fs_std # valid with historic versions of proc.attr.hydfab, specific to NHDPlus comid locations
+ls_fs_std_ntwk[['hydrofabric']] <- list(loc_id = c('ak-wb-10272','prvi-wb-'), # TODO how to handle coordinate searches??
+                                        col_uid = c('hf_uid','hf_uid'), # TODO how to handle coordinate searches??
+                                        path_dat_in = "TODO") # hydrofabric compatibility for OCONUS-relevant IDs
+
+
+
+
+
+# TODO add in some $g
+
+
+proc.attr.hydfab::retr_attr_hydatl(hf_id = 899,path_ha = path_attrs_conus,ha_vars=Retr_Params$vars$ha_vars)
+
+# ---------------------------------------------------------------------------- #
+proc.attr.hydfab::retr_attr_hydatl(hf_id = 899,path_ha = path_attrs_conus,ha_vars =c("ari_ix_sav","cly_pc_sav","snw_pc_uyr"))
+proc.attr.hydfab::retr_attr_hydatl(hf_id = "ak-wb-10272", path_ha = path_attrs_all_oconus,ha_vars =c("ari_ix_sav","cly_pc_sav","snw_pc_uyr"))
 
 paths_ha <- c(path_attrs_conus, path_attrs_all_oconus)
+hf_id_cols = c("hf_uid",'hfab_uid',"hf_id", "id") # TODO remove hfab_id
 
 hf_id_col <- "id"
 
