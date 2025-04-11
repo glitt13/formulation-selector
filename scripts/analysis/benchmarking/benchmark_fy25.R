@@ -171,7 +171,6 @@ ls_fs_std <- proc.attr.hydfab::proc_attr_read_gage_ids_fs( proc.attr.hydfab::std
 # Idea: Generate a separate .nc file for hydrofabric formatting & separate for nhdplus fomratting
 # Idea: Generate a separate
 
-
 ls_fs_std_ntwk <- list()
 # TODO determine how to split up data between network options:
 # 1) conus vs. 2) oconus?
