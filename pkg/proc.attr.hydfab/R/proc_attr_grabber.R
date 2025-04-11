@@ -75,7 +75,7 @@ attr_cfig_parse <- function(path_attr_config){
   s3_base <- base::unlist(raw_config$hydfab_config)[['s3_base']]#s3://lynker-spatial/tabular-resources" # s3 path containing hydrofabric-formatted attribute datasets
   s3_bucket <- base::unlist(raw_config$hydfab_config)[['s3_bucket']] #'lynker-spatial' # s3 bucket containing hydrofabric data
 
-  # s3 path to hydroatlas data formatted for hydrofabric (may also be a local path)
+  # s3 path to HydroATLAS data formatted for hydrofabric (may also be a local path)
   if ("s3_path_hydatl" %in% names(base::unlist(raw_config$attr_select))){
     s3_path_hydatl <- glue::glue(base::unlist(raw_config$attr_select)[['s3_path_hydatl']])  # glue::glue('{s3_base}/hydroATLAS/hydroatlas_vars.parquet')
   } else {
@@ -293,20 +293,23 @@ proc_attr_std_hfsub_name <- function(comid,custom_name='', fileext='gpkg'){
 ha_vars <- c("ari_ix_sav","cly_pc_sav","snw_pc_uyr")
 hf_ids <- base::c("ak-wb-15164", NA,"hi-wb-2629","hi-wb-1365","prvi-wb-752",9250320)
 hf_ids <- c(1022566, 1702414)
-proc_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
+
+retr_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
                                   hf_id_cols = c("hf_uid","hf_id","id")){
-  #' @title Process hydroatlas attributes wrapper
+  #' @title Process HydroATLAS attributes wrapper
   #' @param hf_id_cols Possible hydrofabric id columns, *listed in priority*, meaning
   #' the `'hf_uid'` is the most important column to find, and if that is not
   #' present, move on to the `'hf_id'` and finally to `'id'`
   #' @details The hf_ids may contain 1) a COMID, corresponding to CONUS, &/or
   #' 2) a hydrofabric id for OCONUS
   # We want to make sure the hydrofabric id is a unique id
+  #' @seealso \link[proc.attr.hydfab]{retr_attr_hydatl}
+  #' @export
   ls_dat_ha <- list()
   for(path_ha in paths_ha){
 
     # TODO how do we split the hf_ids into COMIDs and non-COMIDs??
-    #.  - attempt proc_attr_hydatl() for each path_ha,generate NA empties, then merge back into the appropriate order?
+    #.  - attempt retr_attr_hydatl() for each path_ha,generate NA empties, then merge back into the appropriate order?
 
     colnames_ha <- arrow::open_dataset(path_ha) %>% base::colnames()
     # Identify which hydrofabric id is present in this dataset
@@ -317,14 +320,14 @@ proc_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
 
     if (hf_id_col == "hf_uid"){ # Expected to be OCONUS
       # The uid is already created - use it
-      dat_ha <- proc_attr_hydatl(hf_ids, path_ha, ha_vars,hf_id_col=hf_id_col)
+      dat_ha <- retr_attr_hydatl(hf_ids, path_ha, ha_vars,hf_id_col=hf_id_col)
         # TODO consider identifying an s3_ha path specific for this one
 
     } else if(hf_id_col == "hf_id"){ # Expected to be CONUS
       # The case used for the CONUS hydrofabric ids, which are actually COMIDs
       # DO NOT need to create a custom hydrofabric uid
       hf_id_num <- as.numeric(hf_ids)[6]
-      dat_ha <- proc_attr_hydatl(hf_id=hf_id_num, path_ha, ha_vars,hf_id_col=hf_id_col)
+      dat_ha <- retr_attr_hydatl(hf_id=hf_id_num, path_ha, ha_vars,hf_id_col=hf_id_col)
 
     } else if(hf_id_col == "id"){
       # TODO add in the standardization hf_uid approach here
@@ -349,21 +352,22 @@ proc_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
 }
 
 
-proc_attr_hydatl <- function(hf_ids, path_ha, ha_vars,hf_id_col=c("hf_uid","hf_id")[2],
+retr_attr_hydatl <- function(hf_ids, path_ha, ha_vars,hf_id_col=c("hf_uid","hf_id")[2],
                              s3_ha='s3://lynker-spatial/tabular-resources/hydroATLAS/hydroatlas_vars.parquet'){
-  #' @title Retrieve hydroatlas variables
+  #' @title Retrieve HydroATLAS variables
   #' @description retrieves hydrofabric variables from s3 bucket or a local file
   #' @param hf_ids character or numeric, vector or atomic. The hydrofabric ids
   #' @param path_ha character. full path to the local parquet or s3 bucket's
-  #'  parquet holding the hydroatlas data as formatted for the hydrofabric.
-  #' @param ha_vars list of characters. The variables of interest in the hydroatlas v1
+  #'  parquet holding the HydroATLAS data as formatted for the hydrofabric.
+  #' @param ha_vars list of characters. The variables of interest in the HydroATLAS v1
   #' @param hf_id_col Custom column name for hydrofabric id unique identifier
   #' @param s3_ha character. The s3 path containing original
-  #' hydroatlas-hydrofabric dataset.
+  #' HydroATLAS-hydrofabric dataset.
+  #' @seealso \link[proc.attr.hydfab]{retr_attr_hydatl_wrap}
   #' @export
   #'
   #'
-  # Reads hydroatlas variables https://data.hydrosheds.org/file/technical-documentation/HydroATLAS_TechDoc_v10_1.pdf
+  # Reads HydroATLAS variables https://data.hydrosheds.org/file/technical-documentation/HydroATLAS_TechDoc_v10_1.pdf
   #  in a form adapted to the hydrofabric
   # Changelog / contributions
   #. 2024 Originally created, GL
@@ -371,12 +375,12 @@ proc_attr_hydatl <- function(hf_ids, path_ha, ha_vars,hf_id_col=c("hf_uid","hf_i
   if(base::grepl("s3",path_ha)){ # Run a check that the bucket connection works
     bucket <- try(arrow::s3_bucket(path_ha),silent=TRUE)
     if('try-error' %in% base::class(bucket)){
-      stop(glue::glue("Could not connect to an s3 bucket path for hydroatlas
+      stop(glue::glue("Could not connect to an s3 bucket path for HydroATLAS
                       data retrieval. Reconsider the path_ha of {path_ha}"))
     }
   } else if(!file.exists(path_ha)){
       warning(glue::glue(
-       "Local filepath does not exist for hydroatlas parquet file:\n{path_ha}
+       "Local filepath does not exist for HydroATLAS parquet file:\n{path_ha}
        \nAssigning lynker-spatial s3 path:\n{s3_ha}"))
       if(domain == 'conus'){
         path_ha <- s3_ha
@@ -921,7 +925,7 @@ retr_attr_new <- function(comids,need_vars,path_ha){
   #' @title Retrieve new attributes that haven't been acquired yet
   #' @param comids The list of of the comid identifier
   #' @param need_vars The needed attributes that haven't been acquired yet
-  #' @param path_ha character, the filepath where hydroatlas data.
+  #' @param path_ha character, the filepath where HydroATLAS data.
   #' @param Retr_Params list. List of list structure with parameters/paths needed to acquire variables of interest
   #' @seealso \link[proc.attr.hydfab]{proc_attr_wrap}
   #' @seealso \link[proc.attr.hydfab]{proc_attr_mlti_wrap}
@@ -934,7 +938,7 @@ retr_attr_new <- function(comids,need_vars,path_ha){
   if (('ha_vars' %in% base::names(need_vars)) &&
       (base::all(!base::is.na(need_vars$ha_vars)))){
     # Hydroatlas variable query; list name formatted as {dataset_name}__v{ver_num}
-    attr_data[['hydroatlas__v1']] <- proc.attr.hydfab::proc_attr_hydatl(
+    attr_data[['hydroatlas__v1']] <- proc.attr.hydfab::retr_attr_hydatl(
         path_ha=path_ha,
         hf_id=comids,
         ha_vars=need_vars$ha_vars)
@@ -1331,7 +1335,7 @@ proc_attr_wrap <- function(comid, Retr_Params, lyrs='network',overwrite=FALSE,hf
   # if (('ha_vars' %in% base::names(need_vars)) &&
   #     (base::all(!base::is.na(need_vars$ha_vars)))){
   #   # Hydroatlas variable query; list name formatted as {dataset_name}__v{version_number}
-  #   attr_data[['hydroatlas__v1']] <- proc.attr.hydfab::proc_attr_hydatl(path_ha=Retr_Params$paths$s3_path_hydatl,
+  #   attr_data[['hydroatlas__v1']] <- proc.attr.hydfab::retr_attr_hydatl(path_ha=Retr_Params$paths$s3_path_hydatl,
   #                                         hf_id=net$hf_id,
   #                                         ha_vars=need_vars$ha_vars) %>%
   #                               # ensures 'COMID' exists as colname
@@ -2027,7 +2031,7 @@ check_attr_selection <- function(attr_cfg_path = NULL, vars = NULL, verbose = TR
     # attr_cfg_path <- paste0(dir_base, '/xssa_attr_config_all_vars_avail.yaml')
     attr_cfg <- yaml::read_yaml(attr_cfg_path)
     attr_cfg_sel <- attr_cfg[['attr_select']] # select the section for attributes
-    attr_cfg_sel <- attr_cfg_sel[-1] # remove the s3 path to hydroatlas vars
+    attr_cfg_sel <- attr_cfg_sel[-1] # remove the s3 path to HydroATLAS vars
     vars_sel <- attr_cfg_sel %>% base::unlist() %>% base::unname()
 
     print_query <- function(dataset_index, verbose = verbose){
