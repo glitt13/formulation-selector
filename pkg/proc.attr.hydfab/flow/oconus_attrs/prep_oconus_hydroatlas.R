@@ -49,7 +49,7 @@ path_hfab_ak <- base::file.path(dir_base_hfab,"ak_nextgen.gpkg")
 path_hfab_prvi <- base::file.path(dir_base_hfab,"prvi_nextgen.gpkg")
 paths_hfab <- base::c(path_hfab_ak,path_hfab_prvi) # Define the paths to the hydrofabric geopackages of interest
 
-proc_ntrsct <- FALSE # TODO eliminate? Perform intersection processing? Placeholder
+proc_ntrsct <- FALSE # TODO REVISE? Perform intersection processing? Placeholder.
 redo_intersection_analysis <- FALSE # Should we re-run hydroatlas/hydrofabric intersection analysis if it hasn't already been run? (may take ~18 hours)
 # Directory containing hydrotlas basins manually downloaded from https://www.hydrosheds.org/products/hydrobasins
 dir_base_hydatl <- "~/noaa/data/hydroatlas/"
@@ -63,36 +63,7 @@ dir_extdata <- system.file("extdata", package="proc.attr.hydfab")
 path_hydatl_catg <- base::file.path(dir_extdata,"hydatl_catg_aggr.yml")
 
 # ---------- convenience functions ---------------
-plot_hf_ha <- function(div_hf_hab, viz_idx=1, total_vpu=FALSE,
-                       col_geom_ha='geometry',
-                       col_geom_hf='geom',
-                       col_centroid_hf='centroid'){
-  #' @title Plot hydrofabric and HydroATLAS basins
-  #' @details Will calculate hydrofabric centroids if column doesn't exist
-  #' @param div_hf_hab merged dataframe of hydrofabric and hydroatlas
-  #' @param viz_idx Row indices of dataframe for plotting. Default 1.
-  #' @param total_vpu Boolean. Should the entire dataframe's gemoetry also be included?
-  #' @seealso prep_oconus_hydroatlas.R
-  map_basins <- ggplot2::ggplot()
-  if(total_vpu){ # View the entire vpu/domain
-    map_basins <- map_basins + ggplot2::geom_sf(data = div_hf_hab$geometry)
-  }
-  if(!col_centroid_hf %in% names(div_hf_hab)){ # Compute the
-    div_hf_hfab[[col_centroid_hf]] <- sf::st_centroid(div_hf_hfab[[col_geom_hf]])
-  }
 
-  map_basins <- map_basins +
-    ggplot2::ggtitle(glue::glue("domain: {vpu}\nid:{div_hf_hab$id[viz_idx]} divide_id:{div_hf_hab$divide_id[viz_idx]}\nHYBAS_ID:{div_hf_hab$HYBAS_ID[viz_idx]}")) +
-    ggplot2::geom_sf(data = div_hf_hab[viz_idx,col_geom_ha], ggplot2::aes(color = "HydroAtlas")) +
-    ggplot2::geom_sf(data = div_hf_hab[viz_idx,col_geom_hf], ggplot2::aes(color = 'hydrofabric'), alpha=0.3) +
-    ggplot2::geom_sf(data = div_hf_hab[viz_idx,col_centroid_hf], ggplot2::aes(color = 'hf centroid')) +
-    ggplot2::ggtitle(glue::glue("domain: {vpu}\nid:{div_hf_hab$id[viz_idx]} divide_id:{div_hf_hab$divide_id[viz_idx]}\nHYBAS_ID:{div_hf_hab$HYBAS_ID[viz_idx]}")) +
-    ggplot2::scale_color_manual(name="Layers",
-                                values = c("HydroAtlas"='green',
-                                           'hydrofabric'='blue',
-                                           'hf centroid'='blue'))
-  return(map_basins)
-}
 
 # ---------------------------------------------------------------------------- #
 ########## 1. HYDROFABRIC-HYDROATLAS INTERSECTION FRACTION PROCESSING ##########
@@ -145,7 +116,9 @@ for(path_hfab in paths_hfab){
   hab_shp_sub_reordr <- hab_shp_sub_reordr[unlist(ls_idxs_cntrd_ntrsct),]
   div_hf_hab <- base::cbind(div_hfab_val,hab_shp_sub_reordr) # The combined hydrofabric divides - hydroatlas basins
 
-  # Ratio of a hydrofabric divide to the HydroATLAS basin
+  # Ratio of a hydrofabric divide drainage area to the HydroATLAS basin drainage area (THIS IS WHAT MATTERS FOR SCALING DISCHARGE!)
+  div_hf_hab$ratio_drain_area_hf_to_hab <- div_hf_hab$tot_drainage_areasqkm/div_hf_hab$UP_AREA
+  # Simple area ratio of a hydrofabric divide to the HydroATLAS basin area (useful for hydrofabric divides spanning multiple locations)
   div_hf_hab$ratio_area_hf_to_hab <- div_hf_hab$areasqkm/div_hf_hab$SUB_AREA
 
   # Summing hydrofabric divide area ratios within each HydroATLAS basin
@@ -155,10 +128,12 @@ for(path_hfab in paths_hfab){
   hybas_min_frac <- summed_ratios$HYBAS_ID[which.min(summed_ratios$sum_ratios_by_ha)]
   hybas_max_frac <- summed_ratios$HYBAS_ID[which.max(summed_ratios$sum_ratios_by_ha)]
 
-  # Manual visualizations of hydrofabric overlaps with HydroATLAS basins
-  viz_idx <- grep(hybas_max_frac, div_hf_hab$HYBAS_ID)#1302 # 1301 is an interior basin in PR
-  viz_idx <- grep(hybas_min_frac,div_hf_hab$HYBAS_ID)
-  plot_hf_ha(div_hf_hab, viz_idx, total_vpu=FALSE)
+  if(FALSE){
+    # Manual visualizations of hydrofabric overlaps with HydroATLAS basins
+    viz_idx <- grep(hybas_max_frac, div_hf_hab$HYBAS_ID)#1302 # 1301 is an interior basin in PR
+    viz_idx <- grep(hybas_min_frac,div_hf_hab$HYBAS_ID)
+    proc.attr.hydfab:::plot_hf_ha(div_hf_hab, viz_idx, total_vpu=FALSE)
+  }
 
   # -------------- FLOWPATH
   # TODO DO WE EVEN NEED THE flowpath network table????
@@ -177,6 +152,9 @@ for(path_hfab in paths_hfab){
     data.table::as.data.table()
   # The common columns
   common_cols <- base::intersect(names(dt_div_hf_hab),names(dt_fp_hfab_val))
+  # Remove common cols from the left df, except for the identifier!
+  common_cols <- base::setdiff( common_cols,"HYBAS_ID")
+
 
   div_fp_hf_hab <- base::merge(dt_div_hf_hab, dt_fp_hfab_val,by='divide_id',all.x = TRUE)
   div_fp_hf_hab$ratio_area_hf_to_ha <- div_fp_hf_hab$areasqkm.x/div_fp_hf_hab$UP_AREA
@@ -188,7 +166,11 @@ for(path_hfab in paths_hfab){
 
   # ----------------------------------------------------------------------------
   # ------------------------      INTERSECTION       --------------------------
-  if(proc_ntrsct){
+  # TODO: This intersection approach isn't great due to the coarse HydroATLAS
+  #. basin boundaries. This needs adapted to focus on HydroATLAS basin locations
+  #. representing outflow/inflow locations to a basin, and the fraction that e/
+  #. outflow/inflow basin covers a hydrofabric divide at the HydroATLAS inlet/outlet.
+  if(proc_ntrsct){ # INTERSECTING CATCHMENT BOUNDARIES PROCESSING
     # Loop over the hydrofabric catchments and find intersections with hydroatlas
     ls_ntrsct_ha_hfab <- list()
     ls_ntrsct_intrmediate <- list()
@@ -223,7 +205,7 @@ for(path_hfab in paths_hfab){
         ls_ntrsct_intrmediate <- list() # reset the intermediate list for future file saving
       }
     }
-  } # End process intersection approach
+
   #--------------------------   Save binary file   --------------------------- #
   base::saveRDS(ls_ntrsct_ha_hfab, file = path_save_ls_ntrsct)
   print(glue::glue("Wrote {path_save_ls_ntrsct}"))
@@ -254,40 +236,42 @@ for(path_hfab in paths_hfab){
                delete_layer=TRUE)
   sf::st_write(st_mlti, path_save_ntrsct_gpkg,layer = "multipolygon_intersects",
                delete_layer=TRUE)
+  } # END PROCESSING USING INTERSECTING BASINS APPROACH
 }
 # ---------------------------------------------------------------------------- #
 ######################## 2. QA/QC: Hydrofabric Gaps? ###########################
 # ---------------------------------------------------------------------------- #
-# QA/QC check: Any gaps to fill from downscaling hydroatlas to hydrofabric?
-for(path_hfab in paths_hfab){
-  if(base::grepl("ak",path_hfab)){
-    vpu <- "ak"
-  } else if (base::grepl("prvi", path_hfab)){
-    vpu <- "prvi"
-  }
-  hab_shp <- proc.attr.hydfab:::read_hydatl_by_vpu_val(vpu,dir_base_hydatl)
-
-  # Read in the hydrofabric data
-  div_hfab_val <- proc.attr.hydfab:::read_hfab_lyr_val(path_hfab,lyr='divides')
-
-  path_ntrsct_rds <- proc.attr.hydfab:::std_paths_ntrsct(path_hfab)$rds
-  ls_ntr <- base::readRDS(path_save_ls_ntrsct)
-
-  # Which divide ids have not been accounted for with hydroatlas downscaling?:
-  need_divs <- div_hfab_val$divide_id[which(!div_hfab_val$divide_id %in% names(ls_ntr))]
-  if(length(need_divs) > 0){
-    stop("TODO Missing some hydrofabric divides. Implement a gap-filling solution here.")
-    for(divid in need_divs){
-      print(glue::glue("Processing {div_id}"))
-      sub_hfab <- div_hfab_val[div_hfab_val$divide_id == div_id,]
-      ntrsct <- try(sf::st_intersection(sub_hfab,hab_shp_sub))
+if(proc_ntrsct){ # INTERSECTING CATCHMENT BOUNDARIES PROCESSING
+  # QA/QC check: Any gaps to fill from downscaling hydroatlas to hydrofabric?
+  for(path_hfab in paths_hfab){
+    if(base::grepl("ak",path_hfab)){
+      vpu <- "ak"
+    } else if (base::grepl("prvi", path_hfab)){
+      vpu <- "prvi"
     }
-  } else{
-    message(glue::glue("All hydrofabric divides from {path_hfab} have been succeessfully
-            mapped to hydroatlas attributes!"))
+    hab_shp <- proc.attr.hydfab:::read_hydatl_by_vpu_val(vpu,dir_base_hydatl)
+
+    # Read in the hydrofabric data
+    div_hfab_val <- proc.attr.hydfab:::read_hfab_lyr_val(path_hfab,lyr='divides')
+
+    path_ntrsct_rds <- proc.attr.hydfab:::std_paths_ntrsct(path_hfab)$rds
+    ls_ntr <- base::readRDS(path_save_ls_ntrsct)
+
+    # Which divide ids have not been accounted for with hydroatlas downscaling?:
+    need_divs <- div_hfab_val$divide_id[which(!div_hfab_val$divide_id %in% names(ls_ntr))]
+    if(length(need_divs) > 0){
+      stop("TODO Missing some hydrofabric divides. Implement a gap-filling solution here.")
+      for(divid in need_divs){
+        print(glue::glue("Processing {div_id}"))
+        sub_hfab <- div_hfab_val[div_hfab_val$divide_id == div_id,]
+        ntrsct <- try(sf::st_intersection(sub_hfab,hab_shp_sub))
+      }
+    } else{
+      message(glue::glue("All hydrofabric divides from {path_hfab} have been succeessfully
+              mapped to hydroatlas attributes!"))
+    }
   }
 }
-
 
 # ---------------------------------------------------------------------------- #
 ######################## 3. HYDROATLAS ATTRIBUTES  #############################
@@ -326,7 +310,6 @@ hydatl_catg <- yaml::read_yaml(path_hydatl_catg)
 
 ls_all_attrs <- list()
 for(path_hfab in paths_hfab){
-
   if(base::grepl("ak",path_hfab)){
     df_haa <- df_haa_ak # Define the hydroatlas attribute data of interest
     vpu <- "ak"
@@ -336,72 +319,92 @@ for(path_hfab in paths_hfab){
   }
 
   path_ntrsct_gpkg <- proc.attr.hydfab:::std_paths_ntrsct(path_hfab)$gpkg
+  if(!proc_ntrsct){
+    # TODO match the
 
-  # Read in the geopackage intersection data
-  st_poly <- sf::st_read(path_ntrsct_gpkg,layer = "polygon_intersects")
-  st_mlti <- sf::st_read(path_ntrsct_gpkg,layer = "multipolygon_intersects")
-  st_ntrsct <- base::rbind(st_poly,st_mlti)
+    # To ease join, remove common cols from the left df, except for the id col!
+    common_cols <- base::intersect(names(df_haa), names(div_hf_hab))
+    common_cols <- base::setdiff( common_cols,"HYBAS_ID")
+    df_haa_sub <- df_haa %>% dplyr::select(-dplyr::all_of(common_cols)) %>%
+                    sf::st_drop_geometry()
 
-  # Layers in the domain hydrofabric
-  hfab_layrs <- sf::st_layers(path_hfab)
-  # Get the hydrofabric column names
-  hfab_div <- sf::st_read(path_hfab,layer = "divides")
-  names_hfab_div <- names(hfab_div)
+    dt_hf_div_haa <- dplyr::left_join(div_hf_hab,df_haa_sub, by = "HYBAS_ID")#, left=TRUE)
+    # TODO need to perform corrections for attributes that MUST scale by basin size
+    #.  (e.g. total runoff, m^3)
 
-  ls_wt_mean <- list()
-  for(divid in unique(st_ntrsct$divide_id)){
-    sub_ntrsct <- st_ntrsct %>% subset(divide_id == divid)
 
-    # Total coverage of hydroatlas dataset over hydrofabric divide:
-    totl_coverage <- base::sum(sub_ntrsct$frac_overlaps)
-    totl_area_ntrsct_km2 <- base::sum(sub_ntrsct$area_intersect)/1E6
 
-    sub_df_haa <- df_haa %>% base::subset(HYBAS_ID %in% sub_ntrsct$HYBAS_ID)
 
-    cols_to_average <- hydatl_catg$avg_cols
-    df_cmbo <- merge(data.table::as.data.table(sub_ntrsct),
-                     data.table::as.data.table(sub_df_haa),by="HYBAS_ID")
-    # Weighted mean, divided by the total coverage fraction. E.g., if only
-    # the weighted mean only accounts for 74% of divide id, extrapolate the
-    # under-estimated fraction to the total fraction
-    df_wt_mean <- df_cmbo %>%
-      dplyr::summarize_at(dplyr::vars(cols_to_average),
-                          list(~ weighted_mean(., frac_overlaps)/totl_coverage))
-    df_wt_mean$divide_id <- divid
-    df_wt_mean$vpu <- vpu
-    df_wt_mean$id <- base::unique(sub_ntrsct$id)
-    # Refer to proc.attr.hydfab::retr_hfab_id_wrap()
-    df_wt_mean$hf_uid <- proc.attr.hydfab::custom_hf_id(df_wt_mean, col_vpu = "vpu",col_id = "id")
-    df_wt_mean$totl_hydatl_locs <- nrow(sub_ntrsct)
-    df_wt_mean$total_coverage <- totl_coverage
-    df_wt_mean$area_ntrsct_covered_sqkm <- base::sum(sub_ntrsct$area_intersect)/1E6
-    df_wt_mean$area_estimated_tot_sqkm <- df_wt_mean$area_ntrsct_covered_sqkm/totl_coverage
-    ls_wt_mean[[divid]] <- df_wt_mean
+    dt_hf_div_haa %>% View()
 
-    if(totl_coverage < 0.99){ # >99% hydroatlas coverage
-      # Situations where the weighted mean would be an extrapolation:
-      warning(glue::glue("Total hydroatlas coverage for {divid} only {totl_coverage}.
-      The weighted mean values are an extrapolation!"))
+
+  } else if(proc_ntrsct){ # INTERSECTING CATCHMENT BOUNDARIES PROCESSING
+    # Read in the geopackage intersection data
+    st_poly <- sf::st_read(path_ntrsct_gpkg,layer = "polygon_intersects")
+    st_mlti <- sf::st_read(path_ntrsct_gpkg,layer = "multipolygon_intersects")
+    st_ntrsct <- base::rbind(st_poly,st_mlti)
+
+    # Layers in the domain hydrofabric
+    hfab_layrs <- sf::st_layers(path_hfab)
+    # Get the hydrofabric column names
+    hfab_div <- sf::st_read(path_hfab,layer = "divides")
+    names_hfab_div <- names(hfab_div)
+
+    ls_wt_mean <- list()
+    for(divid in unique(st_ntrsct$divide_id)){
+      sub_ntrsct <- st_ntrsct %>% subset(divide_id == divid)
+
+      # Total coverage of hydroatlas dataset over hydrofabric divide:
+      totl_coverage <- base::sum(sub_ntrsct$frac_overlaps)
+      totl_area_ntrsct_km2 <- base::sum(sub_ntrsct$area_intersect)/1E6
+
+      sub_df_haa <- df_haa %>% base::subset(HYBAS_ID %in% sub_ntrsct$HYBAS_ID)
+
+      cols_to_average <- hydatl_catg$avg_cols
+      df_cmbo <- merge(data.table::as.data.table(sub_ntrsct),
+                       data.table::as.data.table(sub_df_haa),by="HYBAS_ID")
+      # Weighted mean, divided by the total coverage fraction. E.g., if only
+      # the weighted mean only accounts for 74% of divide id, extrapolate the
+      # under-estimated fraction to the total fraction
+      df_wt_mean <- df_cmbo %>%
+        dplyr::summarize_at(dplyr::vars(cols_to_average),
+                            list(~ weighted_mean(., frac_overlaps)/totl_coverage))
+      df_wt_mean$divide_id <- divid
+      df_wt_mean$vpu <- vpu
+      df_wt_mean$id <- base::unique(sub_ntrsct$id)
+      # Refer to proc.attr.hydfab::retr_hfab_id_wrap()
+      df_wt_mean$hf_uid <- proc.attr.hydfab::custom_hf_id(df_wt_mean, col_vpu = "vpu",col_id = "id")
+      df_wt_mean$totl_hydatl_locs <- nrow(sub_ntrsct)
+      df_wt_mean$total_coverage <- totl_coverage
+      df_wt_mean$area_ntrsct_covered_sqkm <- base::sum(sub_ntrsct$area_intersect)/1E6
+      df_wt_mean$area_estimated_tot_sqkm <- df_wt_mean$area_ntrsct_covered_sqkm/totl_coverage
+      ls_wt_mean[[divid]] <- df_wt_mean
+
+      if(totl_coverage < 0.99){ # >99% hydroatlas coverage
+        # Situations where the weighted mean would be an extrapolation:
+        warning(glue::glue("Total hydroatlas coverage for {divid} only {totl_coverage}.
+        The weighted mean values are an extrapolation!"))
+      }
     }
-  }
 
-  # Compile weighted mean attributes
-  dt_wt_mean <- data.table::rbindlist(ls_wt_mean)
-  # Reorder the column names
-  new_cols <- c("hf_uid","divide_id","id","vpu","totl_hydatl_locs","total_coverage",
-                "area_ntrsct_covered_sqkm","area_estimated_tot_sqkm")
-  dt_wt_mean <- data.table::setcolorder(dt_wt_mean,
-                 base::c(new_cols, base::setdiff(names(dt_wt_mean),new_cols)))
+    # Compile weighted mean attributes
+    dt_wt_mean <- data.table::rbindlist(ls_wt_mean)
+    # Reorder the column names
+    new_cols <- c("hf_uid","divide_id","id","vpu","totl_hydatl_locs","total_coverage",
+                  "area_ntrsct_covered_sqkm","area_estimated_tot_sqkm")
+    dt_wt_mean <- data.table::setcolorder(dt_wt_mean,
+                   base::c(new_cols, base::setdiff(names(dt_wt_mean),new_cols)))
 
-  # Create path to hydrofabric's hydroatlas attributes and write to file as .csv
-  path_attrs <- proc.attr.hydfab:::std_paths_attrs(dir_base_hfab, vpu = vpu)
-  utils::write.csv(dt_wt_mean,file = path_attrs)
+    # Create path to hydrofabric's hydroatlas attributes and write to file as .csv
+    path_attrs <- proc.attr.hydfab:::std_paths_attrs(dir_base_hfab, vpu = vpu)
+    utils::write.csv(dt_wt_mean,file = path_attrs)
 
-  # Update hydrofabric geopackage with the downscaled hydroatlas attributes as a new layer
-  sf::st_write(dt_wt_mean,dsn=path_hfab,layer="hydroatlas_attributes",append=FALSE)
-  base::message(glue::glue("Updated {path_hfab} with hydroatlas attributes"))
+    # Update hydrofabric geopackage with the downscaled hydroatlas attributes as a new layer
+    sf::st_write(dt_wt_mean,dsn=path_hfab,layer="hydroatlas_attributes",append=FALSE)
+    base::message(glue::glue("Updated {path_hfab} with hydroatlas attributes"))
 
-  ls_all_attrs[[vpu]] <- dt_wt_mean
+    ls_all_attrs[[vpu]] <- dt_wt_mean
+  } # END INTERSECTION PROCESSING: We shouldn't use this approach.
 }
 
 dt_all_attrs <- data.table::rbindlist(ls_all_attrs)
