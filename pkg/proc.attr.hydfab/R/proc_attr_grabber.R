@@ -348,7 +348,6 @@ retr_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
       dat_ha <- proc.attr.hydfab::retr_attr_hydatl(hf_id=hf_ids,
                                   path_ha=path_ha,ha_vars=ha_vars,
                                   hf_id_col=hf_id_col)
-
       # Standardize to the featureID/featureSource format
       dat_ha <- proc.attr.hydfab::std_feat_id(df=dat_ha,
                                               name_featureSource ="COMID",
