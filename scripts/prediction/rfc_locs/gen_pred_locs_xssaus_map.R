@@ -9,15 +9,11 @@
 #' https://github.com/bolotinl/NWM_process_mapping/blob/guy/flow.comid.terminal.R
 #' @reference https://www.nature.com/articles/s41467-022-28010-7
 #' @param path_cfig_pred The path to the prediction configuration yaml file. May use glue formatting for {home_dir}
+#' @param dir_base_huc08 The directory containing analyses on HUC08 data. Created using https://github.com/bolotinl/NWM_process_mapping
 #' @examples
-#' \dontrun{Rscript gen_pred_locs_xssaus_map.R --path_cfig_pred "{home_dir}/git/formulation-selector/scripts/eval_ingest/xssa_us/xssaus_pred_config.yaml".yaml"
+#' \dontrun{Rscript gen_pred_locs_xssaus_map.R "{home_dir}/git/formulation-selector/scripts/eval_ingest/xssa_us/xssaus_pred_config.yaml" "{home_dir}/noaa/regionalization/data/analyses/basin_selection"
 #' }
-#' # When wanting to randomly subsample from a dataset, set the total # of samples and optionally the seed number
-#' \dontrun{Rscript gen_pred_locs_xssaus_map.R --path_cfig_pred "{home_dir}/git/formulation-selector/path/to/pred_config.yaml"
-#'                                       --subsamp_n 20
-#'                                       --subsamp_seed 123
-#' }
-#'
+
 
 library(dplyr)
 library(glue)
@@ -30,12 +26,13 @@ library(future.apply) #IMPORTANT Must call to avoid import error
 main <- function(){
   args <- commandArgs(trailingOnly = TRUE)
   # Check if the input argument is provided
-  if (length(args) < 1) {
+  if (length(args) < 2) {
     stop("Input prediction configuration file must be specified")
   }
   # Define args supplied to command line
   home_dir <- Sys.getenv("HOME")
   path_cfig_pred <- glue::glue(as.character(args[1])) # path_cfig_pred <- glue::glue("{home_dir}/git/formulation-selector/scripts/eval_ingest/xssa_us/xssaus_pred_config.yaml")
+  dir_base_huc08 <- glue::glue(as.character(args[2]))# dir_base_huc08 <- "~/noaa/regionalization/data/analyses/basin_selection" 
   # Read in config file
   if(!base::file.exists(path_cfig_pred)){
     stop(glue::glue("The provided path_cfig_pred does not exist: {path_cfig_pred}"))
