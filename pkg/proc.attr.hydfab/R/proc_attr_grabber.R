@@ -1919,6 +1919,7 @@ retr_comids <- function(gage_ids,featureSource,featureID,dir_db_attrs,
     } else if(base::any(df_comid_featid$featureID == nldi_feat$featureID)){
       # Check the comid-featureID mapped database first
       comid <- df_comid_featid$comid[df_comid_featid$featureID == nldi_feat$featureID]
+      if(base::length())
 
       if(base::length(comid)>1){
         stop(glue::glue("Problem with comid database logic. Look at how many
