@@ -11,7 +11,8 @@
 #' @param path_cfig_pred The path to the prediction configuration yaml file. May use glue formatting for {home_dir}
 #' @param dir_base_huc08 The directory containing analyses on HUC08 data. Created using https://github.com/bolotinl/NWM_process_mapping
 #' @examples
-#' \dontrun{Rscript gen_pred_locs_xssaus_map.R "{home_dir}/git/formulation-selector/scripts/eval_ingest/xssa_us/xssaus_pred_config.yaml" "{home_dir}/noaa/regionalization/data/analyses/basin_selection"
+#' \dontrun{Rscript gen_pred_locs_xssaus_map.R "{home_dir}/git/formulation-selector/scripts/eval_ingest/xssa_us/xssaus_pred_config.yaml" 
+#' "{home_dir}/noaa/regionalization/data/analyses/basin_selection" "{home_dir}/git/formulation-selector/"
 #' }
 
 
@@ -32,7 +33,8 @@ main <- function(){
   # Define args supplied to command line
   home_dir <- Sys.getenv("HOME")
   path_cfig_pred <- glue::glue(as.character(args[1])) # path_cfig_pred <- glue::glue("{home_dir}/git/formulation-selector/scripts/eval_ingest/xssa_us/xssaus_pred_config.yaml")
-  dir_base_huc08 <- glue::glue(as.character(args[2]))# dir_base_huc08 <- "~/noaa/regionalization/data/analyses/basin_selection"  
+  dir_base_huc08 <- glue::glue(as.character(args[2]))# dir_base_huc08 <- dir_repo <- glue::glue("{home_dir}/noaa/regionalization/data/analyses/basin_selection" 
+  dir_repo <- glue::glue(as.character(args[3])) #dir_repo <- glue::glue("{home_dir}/git/formulation-selector/")
   # Read in config file
   if(!base::file.exists(path_cfig_pred)){
     stop(glue::glue("The provided path_cfig_pred does not exist: {path_cfig_pred}"))
@@ -226,7 +228,7 @@ main <- function(){
                                               filename_str=paste0(glue::glue("{datasets}_{ds_type}")),
                                               id_type = "comid",
                                               keep_cols="all",
-                                              seq_size = 390,
+                                              seq_size = 391,
                                               overwrite_chunk=FALSE)
 
     base::message(glue::glue(
