@@ -24,9 +24,6 @@ library(tibble)
 library(stringr)
 library(fs)
 
-
-
-
 attr_cfig_parse <- function(path_attr_config){
   #' @title Read and parse the attribute config yaml file to create parameter
   #' list object
@@ -1312,7 +1309,7 @@ retr_comids <- function(gage_ids,featureSource,featureID,dir_db_attrs,
   #' @export
   #'
   # Changelog/Contributions
-  #  2025-03-07 Refactor: add in the geometry retrsieval & return nested list
+  #  2025-03-07 Refactor: add in the geometry retrieval & return nested list
   #   with sf_comid from fs_retr_nhdp_comids_geom_wrap, GL
   # ---------------- COMID & COORDINATE RETRIEVAL ---------------- #
   # Populate the comids & coordinates for each gage_id
@@ -2333,7 +2330,5 @@ fs_attrs_miss_mlti_wrap <- function(path_attr_config){
     message("No missing comid-attribute pairings.")
   }
 }
-
-
 
 
