@@ -1914,11 +1914,13 @@ retr_comids <- function(gage_ids,featureSource,featureID,dir_db_attrs,
                             featureID = as.character(glue::glue(featureID)) # This should expect {'gage_id'} as a variable!
     )
     ls_featid[[i]] <- nldi_feat
-
-    if(base::any(df_comid_featid$featureID == nldi_feat$featureID)){
+    if(nldi_feat$featureSource == 'comid'){ # A simple case that may not off
+      comid <- nldi_feat$featureID
+    } else if(base::any(df_comid_featid$featureID == nldi_feat$featureID)){
       # Check the comid-featureID mapped database first
       comid <- df_comid_featid$comid[df_comid_featid$featureID == nldi_feat$featureID]
-      if(base::length(comid)!=1){
+
+      if(base::length(comid)>1){
         stop(glue::glue("Problem with comid database logic. Look at how many
         entries exist for comid {comid} in the comid_featID_map.csv"))
       }
@@ -1956,7 +1958,7 @@ retr_comids <- function(gage_ids,featureSource,featureID,dir_db_attrs,
     ls_comid[[i]] <- comid
   }
 
-  # Combine the custom mapper and write to file:
+  # Combine/Update the custom mapper and write to file:
   df_featid_new <- data.frame(featureID = as.character(unlist(base::lapply(ls_featid, function(x) (x$featureID)))),
                               featureSource = as.character(featureSource),
                               gage_id = base::as.character(gage_ids))
