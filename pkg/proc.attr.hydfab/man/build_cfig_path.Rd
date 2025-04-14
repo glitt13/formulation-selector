@@ -5,6 +5,8 @@
 \title{Build a standardized path for every config file used in RaFTS}
 \usage{
 build_cfig_path(path_known_config, path_or_name_cfig)
+
+build_cfig_path(path_known_config, path_or_name_cfig)
 }
 \arguments{
 \item{path_known_config}{The full filepath of a known configuration file}
@@ -13,10 +15,16 @@ build_cfig_path(path_known_config, path_or_name_cfig)
 }
 \description{
 Build a standardized path for every config file used in RaFTS
+
+Build a standardized path for every config file used in RaFTS
 }
 \details{
 Ensure the 'path_known_config' exists
+
+Ensure the 'path_known_config' exists
 }
 \seealso{
+\code{fs_algo.build_cfig_path} The python equivalent of this function
+
 \code{fs_algo.build_cfig_path} The python equivalent of this function
 }

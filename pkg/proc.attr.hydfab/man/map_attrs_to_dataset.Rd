@@ -5,10 +5,14 @@
 \title{Match the variable names to the data source}
 \usage{
 map_attrs_to_dataset(vars)
+
+map_attrs_to_dataset(vars)
 }
 \arguments{
 \item{vars}{List of variable names, possibly mixed across different data sources}
 }
 \description{
+Match the variable names to the data source
+
 Match the variable names to the data source
 }

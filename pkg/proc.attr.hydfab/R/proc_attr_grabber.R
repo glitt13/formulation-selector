@@ -276,6 +276,88 @@ map_attrs_to_dataset <- function(vars){
   return(ls_attrs_name)
 }
 
+build_cfig_path <- function(path_known_config, path_or_name_cfig) {
+  #' @title Build a standardized path for every config file used in RaFTS
+  #' @param path_known_config The full filepath of a known configuration file
+  #' @param path_or_name_cfig Path or name of configuration file. If only name provided, it's assumed it resides in same directory as `path_known_config`
+  #' @details Ensure the 'path_known_config' exists
+  #' @seealso `fs_algo.build_cfig_path` The python equivalent of this function
+  #' @export
+  if (!base::file.exists(path_known_config)) {
+    stop(glue::glue("The provided 'known' configuration file does not exist: \n
+                    {path_known_config}"))
+  }
+
+  # Determine the parent directory
+  dir_parent_cfig <- base::dirname(path_known_config)
+
+  # Check if the configuration path or name was provided
+  if (!base::is.null(path_or_name_cfig)) {
+    path_cfig <- base::file.path(dir_parent_cfig, path_or_name_cfig)
+
+    # Check if the constructed path exists
+    if (!base::file.exists(path_cfig)) {
+      path_cfig <- base::file.path(path_or_name_cfig)
+      if (!base::file.exists(path_cfig)) {
+        stop(glue::glue("The following configuration file could not be found: \n
+        {path_or_name_cfig}"))
+      }
+    }
+  } else {
+    warning("The configuration file may not have specified the path or file name.")
+    path_cfig <- NULL
+  }
+  return(path_cfig)
+}
+
+map_attrs_to_dataset <- function(vars){
+  #' @title Match the variable names to the data source
+  #' @param vars List of variable names, possibly mixed across different data sources
+  #' @export
+  # Read in proc.attr.hydfab package's extdata describing attributes & data sources
+  dir_extdata <- system.file("extdata",package="proc.attr.hydfab")
+  path_attr_menu <- base::file.path(dir_extdata, "fs_attr_menu.yaml")
+  ls_attr_menu <- yaml::read_yaml(path_attr_menu)
+
+  path_attr_src_types <- base::file.path(dir_extdata,"attr_source_types.yml")
+  df_attr_src_types <- yaml::read_yaml(path_attr_src_types)
+  srce_types <- base::lapply(df_attr_src_types, function(x) base::unlist(x)) %>%
+    base::names()
+  ls_internal_vars <- base::list()
+  ls_internal_ds_names <- base::list()
+  ctr <- 0
+  for(x in df_attr_src_types){
+    ctr <- ctr+1
+    ls_internal_ds_names[[ctr]] <- base::lapply(x, function(j) j[['name']]) %>%
+      base::unlist()
+  }
+  # Map the names used in the menu to the names used in the attribute config file/RaFTS code
+  df_map <- data.frame(menu_name = base::unlist(srce_types),
+                       rafts_name = base::unlist(ls_internal_ds_names))
+
+  # Now figure out which variables correspond to which rafts_name
+  ls_attrs_name <- base::list()
+  for(i in 1:base::nrow(df_map)){
+    rafts_name <- df_map$rafts_name[i]
+    menu_name <- df_map$menu_name[i]
+    # subset menu to this variable:
+    attrs_in_menu_catg <- base::lapply(ls_attr_menu[[menu_name]],
+                                       function(x) names(x)) %>% base::unlist()
+    idxs_vars_in_this_catg <- base::which(vars %in% attrs_in_menu_catg)
+    if(base::length(idxs_vars_in_this_catg)>0){
+      ls_attrs_name[[rafts_name]] <- vars[idxs_vars_in_this_catg]
+    }
+  }
+
+  # Unit test expected total number of mapped variables based on input
+  if(base::length(base::unique(base::unlist(ls_attrs_name))) !=
+     base::length(base::unique(vars))){
+    stop("Total variables in should match total variables matched.")
+  }
+
+  return(ls_attrs_name)
+}
+
 proc_attr_std_hfsub_name <- function(comid,custom_name='', fileext='gpkg'){
   #' @title Standardidze hydrofabric subsetter's local filename
   #' @description Internal function that ensures consistent filename
@@ -340,17 +422,22 @@ retr_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
     } else if (base::is.na(hf_id_col)){
       stop(glue::glue("None of the expected column names present:
         {paste0(hf_id_cols,collapse=', ')}"))
+  if(base::grepl("s3",path_ha)){ # Run a check that the bucket connection works
+    bucket <- try(arrow::s3_bucket(path_ha),silent=TRUE)
+    if('try-error' %in% base::class(bucket)){
+      stop(glue::glue("Could not connect to an s3 bucket path for hydroatlas
+                      data retrieval. Reconsider the path_ha of {path_ha}"))
     }
-
-
-
-
-
+  } else { # presumed to be local path location
+    if(!file.exists(path_ha)){
+      warning(glue::glue(
+       "Local filepath does not exist for hydroatlas parquet file:\n{path_ha}
+       \nAssigning lynker-spatial s3 path:\n{s3_ha}"))
+      path_ha <- s3_ha
+    }
   }
-
-
 }
-
+}
 
 retr_attr_hydatl <- function(hf_ids, path_ha, ha_vars,hf_id_col=c("hf_uid","hf_id")[2],
                              s3_ha='s3://lynker-spatial/tabular-resources/hydroATLAS/hydroatlas_vars.parquet'){
@@ -906,8 +993,7 @@ retr_attr_new <- function(comids,need_vars,path_ha){
   #' @title Retrieve new attributes that haven't been acquired yet
   #' @param comids The list of of the comid identifier
   #' @param need_vars The needed attributes that haven't been acquired yet
-  #' @param path_ha character, the filepath where HydroATLAS data.
-  #' @param Retr_Params list. List of list structure with parameters/paths needed to acquire variables of interest
+  #' @param path_ha character, the filepath to hydroatlas data.
   #' @seealso \link[proc.attr.hydfab]{proc_attr_wrap}
   #' @seealso \link[proc.attr.hydfab]{proc_attr_mlti_wrap}
   #' @export
@@ -1442,12 +1528,12 @@ retr_comids <- function(gage_ids,featureSource,featureID,dir_db_attrs,
                             featureID = as.character(glue::glue(featureID)) # This should expect {'gage_id'} as a variable!
     )
     ls_featid[[i]] <- nldi_feat
-
-    if(base::any(df_comid_featid$featureID == nldi_feat$featureID)){
+    if(nldi_feat$featureSource == 'comid'){ # A simple case that may not off
+      comid <- nldi_feat$featureID
+    } else if(base::any(df_comid_featid$featureID == nldi_feat$featureID)){
       # Check the comid-featureID mapped database first
-
       comid <- df_comid_featid$comid[df_comid_featid$featureID == nldi_feat$featureID]
-      if(base::length(comid)!=1){
+      if(base::length(comid)>1){
         stop(glue::glue("Problem with comid database logic. Look at how many
         entries exist for comid {comid} in the comid_featID_map.csv"))
       }
@@ -1485,7 +1571,7 @@ retr_comids <- function(gage_ids,featureSource,featureID,dir_db_attrs,
     ls_comid[[i]] <- comid
   }
 
-  # Combine the custom mapper and write to file:
+  # Combine/Update the custom mapper and write to file:
   df_featid_new <- data.frame(featureID = as.character(unlist(base::lapply(ls_featid, function(x) (x$featureID)))),
                               featureSource = as.character(featureSource),
                               gage_id = base::as.character(gage_ids))
@@ -2422,4 +2508,4 @@ fs_attrs_miss_mlti_wrap <- function(path_attr_config){
   } else {
     message("No missing comid-attribute pairings.")
   }
-}
+}}
