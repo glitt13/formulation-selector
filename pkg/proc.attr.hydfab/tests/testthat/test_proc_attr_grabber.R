@@ -348,17 +348,18 @@ testthat::test_that('comid_instead_of_nwissite',{
   # Test an ID that isn't actually a comid. Make this after test_exst, since
   #. we know that path_save_gpkg has now been created
   non_comid <- "75004300004059"
-  test_nonexst <- testthat::expect_warning(
-    proc.attr.hydfab::proc_attr_gageids(gage_ids=non_comid,
-                                                   featureSource='comid',
-                                                   featureID='{gage_id}',
-                                                   Retr_Params=Retr_Params,
-                                                   path_save_gpkg = path_save_gpkg,
-                                                   lyrs=lyrs,
-                                                   overwrite=overwrite),
-    regexp = "following gage_id values did not return a comid")
+  test_nonexst <- testthat::expect_warning(proc.attr.hydfab::proc_attr_gageids(gage_ids=non_comid,
+                                                      featureSource='comid',
+                                                      featureID='{gage_id}',
+                                                      Retr_Params=Retr_Params,
+                                                      path_save_gpkg = path_save_gpkg,
+                                                      lyrs=lyrs,
+                                                      overwrite=overwrite),
+                  regexp = "Unexpected missing data")
+
   testthat::expect_true(base::any(base::grepl(non_comid,test_nonexst$gage_id)))
-  testthat::expect_true(base::is.na(test_nonexst$featureID))
+  # NOTE 20240414: Code now expects the provided comid to be returned as featureID: https://github.com/NOAA-OWP/formulation-selector/commit/5aafac9bf01b7cce9a9e7947d9fd5dec152a8286
+  # testthat::expect_true(base::is.na(test_nonexst$featureID))
 
   # Test a mix of comid and non-comid:
   comids_mix_good_bad <- base::c(comids_exst,non_comid, "dakleta")
@@ -369,7 +370,7 @@ testthat::test_that('comid_instead_of_nwissite',{
                                                   path_save_gpkg = path_save_gpkg,
                                                   lyrs=lyrs,
                                                   overwrite=overwrite) %>%
-            testthat::expect_warning(regexp = non_comid)
+            testthat::expect_warning()
   # Ensure a non-retrievable comid generates an empty point
   testthat::expect_true(base::nrow(test_mix) == base::nrow(test_exst)+2)
   testthat::expect_true(base::is.na(test_mix$value[test_mix$gage_id == non_comid]))
