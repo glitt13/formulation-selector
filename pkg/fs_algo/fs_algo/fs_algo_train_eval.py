@@ -249,9 +249,12 @@ def _check_attributes_exist(df_attr: pd.DataFrame, attrs_sel:pd.Series | Iterabl
     :seealso: :func:`fs_read_attr_comid()`
 
     """
+    print(f"type of attrs_sel: {type(attrs_sel)}")
     if not isinstance(attrs_sel,pd.Series):
         # Convert to a series for convenience of pd.Series.isin()
-        attrs_sel = pd.Series(attrs_sel)
+        attrs_sel = pd.Series(pd.Series(attrs_sel).unique())
+    else:
+        attrs_sel = pd.Series(attrs_sel.unique())
 
     # Run check that all attributes are present for all basins
     if df_attr.groupby('featureID')['attribute'].count().nunique() != 1:
@@ -274,7 +277,7 @@ def _check_attributes_exist(df_attr: pd.DataFrame, attrs_sel:pd.Series | Iterabl
 
         warn_msg_missing_attrs = "\
         \n Not all featureID groupings (i.e. COMID groups) contain the same number of catchment attributes. \
-        \n This could be problematic for model training. \
+        \n This could be problematic for model training and/or prediction. \
         \n Consider running attribute grabber with proc.attr.hydfab."
         warn_msg2 = "\nMissing attributes include: \n    " + str_missing
         warn_msg_3 = "\n COMIDs with missing attributes include: \n" + ', '.join(bad_comids)
@@ -300,12 +303,14 @@ def _id_attrs_sel_wrap(attr_cfig: AttrConfigAndVars,
     :rtype: list
 
     """
+    # Changelog / contributions
+    #  2024-04-15 Force into ensure uniqueness attributes, GL
     if name_attr_csv:
         path_attr_csv = build_cfig_path(path_cfig,name_attr_csv)
         attrs_sel = pd.read_csv(path_attr_csv)[colname_attr_csv].tolist()
     else:
         attrs_sel = attr_cfig.attrs_cfg_dict.get('attrs_sel', None)
-
+    attrs_sel = list(set(attrs_sel))
     return attrs_sel
 
 def _find_feat_srce_id(dat_resp: Optional[xr.core.dataset.Dataset] = None,
