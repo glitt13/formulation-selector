@@ -57,11 +57,6 @@ if __name__ == "__main__":
     write_type = pred_cfg.get('write_type')
     ds_type = pred_cfg.get('ds_type')
     
-    # f-string formatting of 
-    #path_pred_locs = f'{path_meta_pred}'
-
-    #comids_pred = fsate._read_pred_comid(path_pred_locs, comid_pred_col )
-
     #%% prediction config
     resp_vars = pred_cfg.get('algo_response_vars')
     algos = pred_cfg.get('algo_type')
