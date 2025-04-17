@@ -126,7 +126,8 @@ if __name__ == "__main__":
                             ds= ds, attr_config = attr_cfig.attr_config)
             dat_resp = dict_resp_gdf['dat_resp']
             gdf_comid = dict_resp_gdf['gdf_comid']
-
+            # Subset to the gage ids only selected for training (just in case some predictions make it into dat_resp)
+            gdf_comid = gdf_comid[gdf_comid['gage_id'].astype(str).isin(dat_resp['gage_id'].values)]
             comids_resp = gdf_comid['comid'].tolist()
         if not metrics:
             # The metrics approach. These are all xarray data variables of the response(s)

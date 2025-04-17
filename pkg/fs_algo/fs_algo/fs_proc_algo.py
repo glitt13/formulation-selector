@@ -88,7 +88,10 @@ if __name__ == "__main__":
         gdf_comid = fsate.fs_retr_nhdp_comids_geom(featureSource=featureSource,
                                             featureID=featureID,
                                             gage_ids=dat_resp['gage_id'].values)
+        # Subset to the gage ids only selected for training (just in case some predictions make it into dat_resp)
+        gdf_comid = gdf_comid[gdf_comid['gage_id'].astype(str).isin(dat_resp['gage_id'].values)]
         comids_resp = gdf_comid['comid']
+        
         dat_resp = dat_resp.assign_coords(comid = comids_resp)
         # Remove the unknown comids:
         dat_resp = dat_resp.dropna(dim='comid',how='any')
