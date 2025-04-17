@@ -4,7 +4,7 @@
 @description: Reads in the xSSA dataset, 
     subset xSSA data to just CAMELS basins, 
     and converts to a standard format expected by the formulation-selector tooling.
-@usage: python proc_xssa_metrics.py "/full/path/to/xssa_config.yaml"
+@usage: python prep_xssa_metrics.py "/full/path/to/xssa_prep_config.yaml"
 
 Changelog/contributions
     2024-07-02 Originally created, GL

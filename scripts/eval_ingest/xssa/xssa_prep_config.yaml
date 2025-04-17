@@ -1,4 +1,4 @@
-# setup for the Julie Mai xSSA datasets from 2022 Nature Comm pub
+# Prepare the Julie Mai xSSA metrics datasets from 2022 Nature Comm pub
 col_schema:   # required column mappings in the evaluation metrics dataset
   - 'gage_id': 'basin_id' # The basin identifier/gage id used for each modeled location in the evaluation metrics dataset
   - 'featureID': 'USGS-{gage_id}' # python f-string / R glue() format; converting the 'gage_id' to the standardized featureID used by nhdplusTools. Must use '{gage_id}' e.g. 'USGS-{gage_id}'
