@@ -78,7 +78,7 @@ if __name__ == "__main__":
         # Now we need to make sure we select the comids!
         all_uniq_comids = df_comids[colname_comid].unique()
         # Run check that no nwissite data are present
-        if df_comids[colname_comid].str.contains('USGS').any():
+        if df_comids[colname_comid].astype(str).str.contains('USGS').any():
             raise ValueError(f"\nUnexpected non-comid retrievals from reading\n{path_comid}\n\n"\
                             f"Hint: Reconsider the colname_comid in {path_tfrm_cfig}")
         ls_comid = ls_comid + list(df_comids[colname_comid].unique())
