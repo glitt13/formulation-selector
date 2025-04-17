@@ -18,7 +18,7 @@ DIR_R="${DIR_REPO}/pkg/proc.attr.hydfab/flow/"
 echo "Running processing from $DIR_CONFIG"
 
 # 1. Prepare the initial dataset here with a custom python script (only needs to happen once)
-# "${DIR_CONFIG}prep_xssa_metrics.py" "${DIR_CONFIG}xssa_prep_config.yaml"
+# "${DIR_CONFIG}prep_xssa_metrics.py" "${DIR_CONFIG}xssa co_prep_config.yaml"
 
 # The following steps do not require user-input (beyond defining the config files)
 # Print a message to indicate the script is running

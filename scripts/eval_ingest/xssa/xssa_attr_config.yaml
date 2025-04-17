@@ -22,7 +22,7 @@ file_io: # May define {home_dir} for python's '{home_dir}/string_path'.format(ho
   - dir_db_attrs: '{dir_base}/attributes' # Required. The parent dir where each comid's attribute parquet file is stored in the subdirectory 'comid/', and each dataset's aggregated parquet attributes are stored in the subdirectory '/{dataset_name}
   - ds_type: 'training' # Required string. Recommended to select 'training' or 'prediction', but any string will work. This string will be used in the filename of the output metadata describing each data point's identifer, COMID, lat/lon, reach name of the location. This string should differ from the string used in the prediction config yaml file. Filename: `"nldi_feat_{dataset}_{ds_type}.csv"` inside `dir_std_base / dataset / `
   - write_type: 'parquet' # Required filetype for writing NLDI feature metadata. Default 'parquet'. May also select 'csv'
-  - path_meta:  "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.{write_type}"  #Required. Training attribute metadata filepath formatted for R's glue or py f-string, as generated using `proc.attr.hydfab::write_meta_nldi_feat()`. Strongly suggested default:  "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.{write_type}"  
+  - path_meta:  "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.{write_type}"  #Required. Training attribute metadata filepath formatted for R's glue or py f-string, as generated using `proc.attr.hydfab::write_meta_nldi_feat()`. Strongly suggested default:  "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.{write_type}"
 formulation_metadata:
   - datasets: # Required. Must match directory name inside dir_std_base. May be a list of items, or simply sublist 'all' to select everything inside dir_std_base for attribute grabbing.
     - 'juliemai-xSSA' # Required. In this example case, it's a sublist of just one thing.
@@ -65,5 +65,3 @@ attr_select: # Required. The names of variable sublistings are standardized with
     - 'TOT_Intensity'
     - 'TOT_Wet'
     - 'TOT_Dry'
-  - sc_vars: # Streamcat variables of interest. #TODO add streamcat grabber capability to proc.attr.hydfab
-    - # In this example case, no streamcat variables selected

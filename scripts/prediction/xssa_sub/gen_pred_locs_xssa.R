@@ -52,7 +52,7 @@ main <- function(){
   dir_std_base <- glue::glue(base::unlist(io_cfig)[['dir_std_base']])
   dir_db_hydfab <- glue::glue(base::unlist(io_cfig)[['dir_db_hydfab']])
   dir_db_attrs <- glue::glue(base::unlist(io_cfig)[['dir_db_attrs']])
-  
+
   # ------------------------ ATTRIBUTE CONFIGURATION --------------------------- #
   hfab_cfg <- cfig_attr[['hydfab_config']]
 
@@ -92,7 +92,7 @@ main <- function(){
   )
   ###################### DATASET-SPECIFIC CUSTOM MUNGING #########################
   # USER INPUT: Paths to relevant config files
-  path_raw_config <- glue::glue("{home_dir}/git/formulation-selector/scripts/eval_ingest/xssa/xssa_config.yaml")
+  path_raw_config <- glue::glue("{home_dir}/git/formulation-selector/scripts/eval_ingest/xssa/xssa_prep_config.yaml")
 
 
 
@@ -127,17 +127,32 @@ main <- function(){
   }
   ############################ END CUSTOM MUNGING ##############################
 
+  dir_dataset <- proc.attr.hydfab::std_dir_dataset(Retr_Params$paths$dir_std_base,datasets)
+
+  # Retrieve the gage_ids, featureSource, & featureID from fs_proc standardized output
+  ls_fs_std <- proc.attr.hydfab::proc_attr_read_gage_ids_fs(dir_dataset)
+
+  # TODO add option to read in gage ids from a separate data source
+  #gage_ids <- ls_fs_std$gage_ids
+  featureSource <- ls_fs_std$featureSource
+  featureID <- ls_fs_std$featureID
+  fs_path <- ls_fs_std$path_dat_in
+
+  # The standardized geopackage filepath
+  path_save_gpkg <- proc.attr.hydfab:::std_path_retr_gpkg(fs_path)
+
+
+
   message(glue::glue("Processing {length(samp_locs)} locations"))
   # ---------------------- Grab all needed attributes ---------------------- #
   # Now acquire the attributes:
   dt_site_feat <- proc.attr.hydfab::proc_attr_gageids(gage_ids=samp_locs,
-                                                   featureSource='nwissite',
-                                                   featureID='USGS-{gage_id}',
+                                                      path_save_gpkg=path_save_gpkg,
+                                                   featureSource=featureSource,
+                                                   featureID=featureID,
                                                    Retr_Params=Retr_Params,
                                                    lyrs=lyrs,
                                                    overwrite=overwrite)
-
-
 
   for(ds in datasets){
     path_nldi_out <- glue::glue(path_meta)
