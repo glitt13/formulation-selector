@@ -1107,15 +1107,30 @@ fs_retr_nhdp_comids_geom <- function(gage_ids,featureSource='nwissite',
       stop(glue::glue("The following nldi features didn't work. You may need to
                  revisit the configuration yaml file that processes this dataset in
                 fs_proc: \n {featureSource}, and featureID={featureID}"))
-    } else if (base::is.null(site_feature)){ # Try again with discover_nhdplus_id
-      warning(glue::glue("^^ Could not retrieve geometry for {nldi_feat$featureID}."))
-      comid <- try(nhdplusTools::discover_nhdplus_id(point=site_feature$geometry))
-      if("try-error" %in% base::class(comid)){ # Assign NA values for everything
-        site_feature <- tibble::tibble(identifier=nldi_feat$featureID,comid=NA,
-                                 geometry=sf::st_sfc(sf::st_point(),crs=epsg))
-      } else { # Assign NA values for geometry
-        site_feature <- tibble::tibble(identifier=nldi_feat$featureID,comid=comid,
-                                 geometry = sf::st_sfc(sf::st_point(),crs=epsg))
+    } else if (base::is.null(site_feature)){
+      if(nldi_feat$featureSource=="nwissite"){
+        # Try manual api retrieval specific for nwissite (USGS-{gage_id})
+        message(glue::glue("Attempting manual connection to api for {nldi_feat$featureID}"))
+        url_build <- base::paste0("https://api.water.usgs.gov/nldi/linked-data/nwissite/",
+                                  nldi_feat$featureID,"?f=json")
+        json_file <- jsonlite::read_json(url_build)
+        site_feature <- tibble::tibble(identifier=nldi_feat$featureID,
+              comid=json_file$features[[1]]$properties$comid,
+              geometry=sf::st_sfc(sf::st_point(
+                base::c(json_file$features[[1]]$geometry$coordinates[[2]],
+                  json_file$features[[1]]$geometry$coordinates[[1]])),crs=epsg)
+              )
+      } else {
+        # Try again with discover_nhdplus_id
+        warning(glue::glue("^^ Could not retrieve geometry for {nldi_feat$featureID}."))
+        comid <- try(nhdplusTools::discover_nhdplus_id(point=site_feature$geometry))
+        if("try-error" %in% base::class(comid)){ # Assign NA values for everything
+          site_feature <- tibble::tibble(identifier=nldi_feat$featureID,comid=NA,
+                                   geometry=sf::st_sfc(sf::st_point(),crs=epsg))
+        } else { # Assign NA values for geometry
+          site_feature <- tibble::tibble(identifier=nldi_feat$featureID,comid=comid,
+                                   geometry = sf::st_sfc(sf::st_point(),crs=epsg))
+        }
       }
     }
     if("sfc_LINESTRING" %in% base::class(site_feature$geometry)){
