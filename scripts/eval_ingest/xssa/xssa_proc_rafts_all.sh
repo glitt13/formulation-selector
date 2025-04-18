@@ -55,5 +55,6 @@ echo "Transformed prediction location attribute data"
 
 # 4.3 Perform the prediction & plotting
 echo "Performing process predictions"
-python3 "${DIR_PY}fs_pred_algo_viz.py" "${DIR_CONFIG}xssa_pred_config.yaml"
+python3 "${DIR_PY}fs_pred_algo.py" "${DIR_CONFIG}xssa_pred_config.yaml"
 
+echo "RaFTS COMPLETED PROCESSING of xSSA performance metrics"
