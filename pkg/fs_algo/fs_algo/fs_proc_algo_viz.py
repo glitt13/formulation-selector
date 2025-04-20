@@ -261,43 +261,27 @@ if __name__ == "__main__":
                                 training_uncn = False
                                 )
 
-            # %% Calculate global min and max across all algorithms
-            min_err = float('inf')  # Initialize with a large value
-            max_err = float('-inf')  # Initialize with a small value
-            for algo_str in train_eval.algs_dict.keys():
-                y_pred = train_eval.preds_dict[algo_str]['y_pred']
-                y_pis = train_eval.preds_dict[algo_str]['y_pis']
-            
-                for alpha_val in next(d['alpha'] for d in uncertainty_cfg.get('mapie', [])):
-                    lower_err = y_pred - np.array([y_pis[i].loc['lower_limit', f'alpha_{alpha_val:.2f}'] for i in range(len(y_pred))])
-                    upper_err = np.array([y_pis[i].loc['upper_limit', f'alpha_{alpha_val:.2f}'] for i in range(len(y_pred))]) - y_pred
-                
-                    total_err = lower_err + upper_err  # Compute total error for this algorithm
-                
-                    # Update global min and max across all algorithms
-                    min_err = min(min_err, total_err.min())
-                    max_err = max(max_err, total_err.max())
-
-
             # %% Model testing results visualization
             # TODO extract y_pred for each model
             dict_test_gdf = dict()
             for algo_str in train_eval.algs_dict.keys():
 
                 #%% Evaluation: learning curves
-                y_pred = train_eval.preds_dict[algo_str]['y_pred']
+                y_pred = train_eval.preds_dict[algo_str].get('y_pred')
                 y_obs = train_eval.y_test.values
-                y_pis = train_eval.preds_dict[algo_str]['y_pis']
+                
                 if make_plots:
                     # Regression of testing holdout's prediction vs observation
-                    fsate.plot_pred_vs_obs_wrap(y_pred, y_obs, dir_out_viz_base,
-                            ds, metr, algo_str=algo_str,split_type=f'testing{test_size}')
-                    for alpha_val in next(d['alpha'] for d in uncertainty_cfg.get('mapie', [])):
-                        fsate.plot_pred_vs_obs_wrap_mapie(y_pred, y_obs, dir_out_viz_base,
-                                ds, metr, algo_str=algo_str,
-                                y_pis = y_pis, alpha_val = alpha_val,
-                                split_type=f'testing{test_size}')
-
+                    if train_eval.preds_dict[algo_str].get('y_pis',None) is not None:
+                        y_pis = train_eval.preds_dict[algo_str].get('y_pis')
+                        for alpha_val in next(d['alpha'] for d in uncertainty_cfg.get('mapie', [])):
+                            fsate.plot_pred_vs_obs_wrap_mapie(y_pred, y_obs, dir_out_viz_base,
+                                    ds, metr, algo_str=algo_str,
+                                    y_pis = y_pis, alpha_val = alpha_val,
+                                    split_type=f'testing{test_size}')
+                    else:
+                           fsate.plot_pred_vs_obs_wrap(y_pred, y_obs, dir_out_viz_base,
+                                ds, metr, algo_str=algo_str,split_type=f'testing{test_size}')
                 # PREPARE THE GDF TO ALIGN PREDICTION VALUES BY COMIDS/COORDS
                 test_gdf = gdf_comid.loc[test_ids.index]#[gdf_comid['comid'].isin(comids_test)].copy()
                 # Ensure test_gdf is ordered in the same order of comids as y_pred
@@ -306,7 +290,7 @@ if __name__ == "__main__":
                     # The comid can be used for sorting... see test_gdf.sort_values() below
                 else:
                     raise ValueError("Unable to ensure test_gdf is ordered in the same order of comids as y_pred")
-                test_gdf.loc[:,'performance'] = y_pred
+                test_gdf.loc[:,'prediction'] = y_pred
                 test_gdf.loc[:,'observed'] = y_obs
                 test_gdf.loc[:,'dataset'] = ds
                 test_gdf.loc[:,'metric'] = metr
@@ -321,16 +305,35 @@ if __name__ == "__main__":
                                     dir_out_viz_base, ds,
                                         metr,algo_str,
                                         split_type='test',
-                                        colname_data='performance')
-                    for alpha_val in next(d['alpha'] for d in uncertainty_cfg.get('mapie', [])):
-                        fsate.plot_map_pred_wrap_mapie(test_gdf,
-                                        dir_out_viz_base, ds,
-                                            metr,algo_str,
-                                            y_pis = y_pis, alpha_val = alpha_val,
-                                            min_err = min_err, max_err = max_err,
-                                            split_type='test',
-                                            colname_data='performance')                        
-            
+                                        colname_data='prediction')
+                    
+                    # %% Test Prediction Uncertainty Plotting 
+                    # Initialize min and max errors
+                    min_err = float('inf')  # Initialize with a large value
+                    max_err = float('-inf')  # Initialize with a small value
+                    for algo_str in train_eval.algs_dict.keys():
+                        if train_eval.preds_dict[algo_str].get('y_pis',None) is not None:
+                            y_pred = train_eval.preds_dict[algo_str].get('y_pred',None)
+                            y_pis = train_eval.preds_dict[algo_str].get('y_pis',None)
+                                            # Calculate the global min and max errors across all algorithms
+                            for alpha_val in next(d['alpha'] for d in uncertainty_cfg.get('mapie', [])):
+                                lower_err = y_pred - np.array([y_pis[i].loc['lower_limit', f'alpha_{alpha_val:.2f}'] for i in range(len(y_pred))])
+                                upper_err = np.array([y_pis[i].loc['upper_limit', f'alpha_{alpha_val:.2f}'] for i in range(len(y_pred))]) - y_pred
+                            
+                                total_err = lower_err + upper_err  # Compute total error for this algorithm
+                            
+                                # Update global min and max across all algorithms
+                                min_err = min(min_err, total_err.min())
+                                max_err = max(max_err, total_err.max())
+                                # Plot the prediction intervals
+                                fsate.plot_map_pred_wrap_mapie(test_gdf,
+                                                dir_out_viz_base, ds,
+                                                    metr,algo_str,
+                                                    y_pis = y_pis, alpha_val = alpha_val,
+                                                    min_err = min_err, max_err = max_err,
+                                                    split_type='test',
+                                                    colname_data='prediction')                        
+                                
             # Generate analysis path out:
             path_pred_obs = fsate.std_test_pred_obs_path(dir_out_anlys_base,ds, metr)
             # TODO why does test_gdf end up with a size larger than total comids? Should be the split test amount
