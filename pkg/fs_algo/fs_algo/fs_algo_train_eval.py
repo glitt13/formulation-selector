@@ -2393,7 +2393,7 @@ def plot_map_pred_mapie(geo_df:gpd.GeoDataFrame, states,title:str,metr:str,
         plt.scatter([], [], s=100, color='gray', label=f'{min_err:.2f}'),
         plt.scatter([], [], s=300, color='gray', label=f'{max_err:.2f}')
     ]
-    ax.legend(handles=legend_handles, title=f"{confidence_interval:.0f}% of Confidence Interval", 
+    ax.legend(handles=legend_handles, title=f"{confidence_interval:.0f}% Confidence Interval", 
               loc='lower left', fontsize=20, title_fontsize=22)
 
     fig = plt.gcf()
