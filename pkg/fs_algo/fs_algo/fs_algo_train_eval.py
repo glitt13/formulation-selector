@@ -1395,7 +1395,7 @@ class AlgoTrainEval:
             }
 
             # If mapie_alpha exists and is not empty, save mapie
-            if getattr(self, 'mapie_alpha', None):
+            if any('alpha' in d and d['alpha'] for d in self.uncertainty.get('mapie', [])):  #getattr(self, 'mapie_alpha', None):
                 pipeline_data['mapie'] = self.algs_dict[algo].get('mapie', None)
 
             joblib.dump(pipeline_data, path_algo)  # Save pipeline + X_train shape
