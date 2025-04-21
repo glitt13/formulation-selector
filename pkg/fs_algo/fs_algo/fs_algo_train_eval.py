@@ -924,7 +924,7 @@ class AlgoTrainEval:
         :type mapie_alpha: float, optional
         """
         # class args
-        self.df = df
+        self.df = df # NOTE: df MUST NEVER CHANGE!! df represents the original data, and is used as an index reference in the algo-train script (e.g. fs_proc_algo_viz.py)
         self.attrs = attrs
         self.algo_config = algo_config
         self.uncertainty = uncertainty

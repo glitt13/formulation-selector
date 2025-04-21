@@ -9,6 +9,7 @@ import geopandas as gpd
 from shapely import wkt
 import matplotlib.pyplot as plt
 import xarray as xr
+import warnings
 """Workflow script to train algorithms on catchment attribute data for predicting
     formulation metrics and/or hydrologic signatures.
 
@@ -218,18 +219,6 @@ if __name__ == "__main__":
                                         )
             train_eval.train_eval() # Train, test, eval wrapper
 
-            # Get the comids corresponding to the testing data/run QA checks
-            if train_eval.X_test.shape[0] + train_eval.X_train.shape[0] == df_pred_resp.shape[0]:
-                if all(np.sort(train_eval.X_test.index) == np.sort(test_ids.index)):
-                    df_pred_resp_test = df_pred_resp.iloc[train_eval.X_test.index]
-                    comids_test = df_pred_resp_test['comid'].values
-                    if not all(np.sort(comids_test) == np.sort(test_ids.values)): 
-                        raise ValueError("PROBLEM: the testing comids stored using AlgoTrainEval do not match the expected testing comids")
-                else:
-                    raise ValueError("Unexpected train/test split index corruption when using AlgoTrainEval.train_eval().")
-            else:
-                raise ValueError("Problem with expected dimensions. Consider how missing data may be handled with AlgoTrainEval.train_eval()")
-
             # Retrieve evaluation metrics dataframe & write to file
             rslt_eval[metr] = train_eval.eval_df
             path_eval_metr = fsate.std_eval_metrs_path(dir_out_viz_base, ds,metr)
@@ -282,24 +271,26 @@ if __name__ == "__main__":
                     else:
                            fsate.plot_pred_vs_obs_wrap(y_pred, y_obs, dir_out_viz_base,
                                 ds, metr, algo_str=algo_str,split_type=f'testing{test_size}')
+                           
                 # PREPARE THE GDF TO ALIGN PREDICTION VALUES BY COMIDS/COORDS
-                test_gdf = gdf_comid.loc[test_ids.index]#[gdf_comid['comid'].isin(comids_test)].copy()
-                # Ensure test_gdf is ordered in the same order of comids as y_pred
-                if all(np.sort(test_gdf['comid'].values) == np.sort(comids_test)):             
-                    test_gdf['id'] = pd.Categorical(test_gdf['comid'], categories=np.unique(comids_test), ordered=True) 
-                    # The comid can be used for sorting... see test_gdf.sort_values() below
-                else:
-                    raise ValueError("Unable to ensure test_gdf is ordered in the same order of comids as y_pred")
-                test_gdf.loc[:,'prediction'] = y_pred
-                test_gdf.loc[:,'observed'] = y_obs
+                # Get the comids corresponding to the testing data/run QA checks
+                comids_test = train_eval.df['comid'].iloc[train_eval.X_test.index].values
+                test_gdf = gdf_comid[gdf_comid['comid'].isin(comids_test)].copy()
+                # The comid-y_pred/y_obs mapping:
+                df_test = train_eval.df.iloc[train_eval.y_test.index][['comid',metr]].rename(columns={metr:'observed'})
+                df_test['prediction'] = y_pred
+                df_test.head()
+                # Merge the test_gdf with the prediction dataframe
+                test_gdf = test_gdf.merge(df_test, left_on='comid', right_on='comid', how='left')
+                # TODO oconus: once comid is no longer a column, make sure that gdf featureID corresponds to appropriate featureSource
+                # Add details on dataset, response variable, and algorithm
                 test_gdf.loc[:,'dataset'] = ds
                 test_gdf.loc[:,'metric'] = metr
                 test_gdf.loc[:,'algo'] = algo_str
-                if test_gdf.shape[0] != len(comids_test):
-                    raise ValueError("Problem with dataset size")
-                test_gdf = test_gdf.sort_values('id').reset_index(drop=True)
-                dict_test_gdf[algo_str] = test_gdf.drop('id',axis=1)
 
+                test_gdf.drop_duplicates(subset=['comid','observed','prediction'],inplace=True)
+
+                dict_test_gdf[algo_str] = test_gdf
                 if make_plots:
                     fsate.plot_map_pred_wrap(test_gdf,
                                     dir_out_viz_base, ds,
