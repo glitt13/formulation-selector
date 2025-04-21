@@ -653,6 +653,7 @@ def _read_pred_comid(path_pred_locs: str | os.PathLike, comid_pred_col:str ) -> 
     """
     # Changelog/contributions
     # 2025-03-30 Add in drop_duplicates(), GL
+    # 2025-04-21 drop_duplicates after column selection, GL
     if not Path(path_pred_locs).exists():
         FileNotFoundError(f"The path to prediction location data could not be found: \n{path_pred_locs} ")
     if '.csv' in Path(path_pred_locs).suffix:
@@ -785,26 +786,8 @@ def combine_resp_gdf_comid_wrap(dir_std_base:str|os.PathLike,ds:str,
                                 featureSource=featureSource, featureID=featureID)
    
     # --- response data identifier alignment with comids & na removal --- #
-    # Subset gdf to the gage_ids that are present in the standardized response variable
-    sub_gdf_comid = gdf_comid[gdf_comid['gage_id'].isin(dat_resp['gage_id'].values)]
-    if sub_gdf_comid.shape[0] != len(dat_resp['gage_id']):
-        warnings.warn(f"Warning: The number of gage_ids in the response variable ({len(dat_resp['gage_id'])}) does not match the number of gage_ids in the geodataframe ({sub_gdf_comid.shape[0]}).")
-        # TODO consider dropping the gage_ids that are not present in the geodataframe
-        if sub_gdf_comid.shape[0] < len(dat_resp['gage_id']):
-            raise ValueError(f"The number of gage_ids in the response variable ({len(dat_resp['gage_id'])}) is less than the number of gage_ids in the geodataframe ({sub_gdf_comid.shape[0]}).")
-            # TODO consider dropping the gage_ids that are not present in the geodataframe
-    
-    gage_to_comid_map = sub_gdf_comid.set_index('gage_id')['comid']
-    mapped_comids = pd.Series(dat_resp['gage_id'].values).map(gage_to_comid_map)
-    dat_resp = dat_resp.assign_coords(comid=("gage_id", mapped_comids.values))
-    # Assign the comid coordinate to dat_resp
-    #dat_resp1 = dat_resp.assign_coords(comid=('gage_id', dat_resp['gage_id'].values.map(gage_to_comid_map)))
-    #dat_resp = dat_resp.assign_coords(comid = sub_gdf_comid['comid'].values)
-        # dat_resp = dat_resp.isel(gage_id=~dat_resp['gage_id'].isin(sub_gdf_comid['gage_id'].values))
-    #dat_resp = dat_resp.assign_coords(comid = gdf_comid['comid'].values)
-    
-
-    idxs_na_comid = list(np.where(sub_gdf_comid['comid'].isna())[0])
+    dat_resp = dat_resp.assign_coords(comid = gdf_comid['comid'].values)
+    idxs_na_comid = list(np.where(gdf_comid['comid'].isna())[0])
     gage_id_mask = ~np.isin(np.arange(len(dat_resp['gage_id'])),idxs_na_comid)
     if len(idxs_na_comid) > 0:
         gage_ids_missing = dat_resp['gage_id'].isel(gage_id=~gage_id_mask).values
@@ -813,15 +796,15 @@ def combine_resp_gdf_comid_wrap(dir_std_base:str|os.PathLike,ds:str,
               \n{gage_ids_missing}")
         # Remove the unknown comids now that they've been matched up to the original dims in dat_resp:
         dat_resp = dat_resp.isel(gage_id=gage_id_mask)# remove NA vals from gage_id coord
-        #dat_resp = dat_resp.isel(comid=gage_id_mask) # remove NA vals from comid coord
+        dat_resp = dat_resp.isel(comid=gage_id_mask) # remove NA vals from comid coord
     
-    sub_gdf_comid = sub_gdf_comid.drop_duplicates().dropna()
-    if any(sub_gdf_comid['comid'].duplicated()):
+    gdf_comid = gdf_comid.drop_duplicates().dropna()
+    if any(gdf_comid['comid'].duplicated()):
         print("Note that some duplicated comids found in dataset based on initial location identifier, gage_id")
-    sub_gdf_comid['dataset'] = ds 
+    gdf_comid['dataset'] = ds 
 
     dict_resp_gdf = dict({'dat_resp':dat_resp,
-                        'gdf_comid': sub_gdf_comid})
+                        'gdf_comid': gdf_comid})
     return(dict_resp_gdf)
 
 def split_train_test_comid_wrap(dir_std_base:str|os.PathLike, 
@@ -924,7 +907,7 @@ class AlgoTrainEval:
         :type mapie_alpha: float, optional
         """
         # class args
-        self.df = df # NOTE: df MUST NEVER CHANGE!! df represents the original data, and is used as an index reference in the algo-train script (e.g. fs_proc_algo_viz.py)
+        self.df = df
         self.attrs = attrs
         self.algo_config = algo_config
         self.uncertainty = uncertainty
@@ -2393,7 +2376,7 @@ def plot_map_pred_mapie(geo_df:gpd.GeoDataFrame, states,title:str,metr:str,
         plt.scatter([], [], s=100, color='gray', label=f'{min_err:.2f}'),
         plt.scatter([], [], s=300, color='gray', label=f'{max_err:.2f}')
     ]
-    ax.legend(handles=legend_handles, title=f"{confidence_interval:.0f}% Confidence Interval", 
+    ax.legend(handles=legend_handles, title=f"{confidence_interval:.0f}% of Confidence Interval", 
               loc='lower left', fontsize=20, title_fontsize=22)
 
     fig = plt.gcf()
