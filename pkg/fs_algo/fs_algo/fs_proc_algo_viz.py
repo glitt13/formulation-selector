@@ -251,6 +251,27 @@ if __name__ == "__main__":
                                 )
 
             # %% Model testing results visualization
+
+            # Initialize min and max errors
+            if make_plots:
+                # Calculate global min and max for consistent uncertainty scaling across all algorithms (but unique scaling for e/ response variable/metric)
+                min_err = float('inf')  # Initialize with a large value
+                max_err = float('-inf')  # Initialize with a small value
+                for algo_str in train_eval.algs_dict.keys():
+                    if train_eval.preds_dict[algo_str].get('y_pis',None) is not None:
+                        y_pred = train_eval.preds_dict[algo_str].get('y_pred',None)
+                        y_pis = train_eval.preds_dict[algo_str].get('y_pis',None)
+                                        # Calculate the global min and max errors across all algorithms
+                        for alpha_val in next(d['alpha'] for d in uncertainty_cfg.get('mapie', [])):
+                            lower_err = y_pred - np.array([y_pis[i].loc['lower_limit', f'alpha_{alpha_val:.2f}'] for i in range(len(y_pred))])
+                            upper_err = np.array([y_pis[i].loc['upper_limit', f'alpha_{alpha_val:.2f}'] for i in range(len(y_pred))]) - y_pred
+                        
+                            total_err = lower_err + upper_err  # Compute total error for this algorithm
+                        
+                            # Update global min and max across all algorithms
+                            min_err = min(min_err, total_err.min())
+                            max_err = max(max_err, total_err.max())
+
             # TODO extract y_pred for each model
             dict_test_gdf = dict()
             for algo_str in train_eval.algs_dict.keys():
@@ -299,23 +320,12 @@ if __name__ == "__main__":
                                         colname_data='prediction')
                     
                     # %% Test Prediction Uncertainty Plotting 
-                    # Initialize min and max errors
-                    min_err = float('inf')  # Initialize with a large value
-                    max_err = float('-inf')  # Initialize with a small value
                     for algo_str in train_eval.algs_dict.keys():
                         if train_eval.preds_dict[algo_str].get('y_pis',None) is not None:
                             y_pred = train_eval.preds_dict[algo_str].get('y_pred',None)
                             y_pis = train_eval.preds_dict[algo_str].get('y_pis',None)
                                             # Calculate the global min and max errors across all algorithms
                             for alpha_val in next(d['alpha'] for d in uncertainty_cfg.get('mapie', [])):
-                                lower_err = y_pred - np.array([y_pis[i].loc['lower_limit', f'alpha_{alpha_val:.2f}'] for i in range(len(y_pred))])
-                                upper_err = np.array([y_pis[i].loc['upper_limit', f'alpha_{alpha_val:.2f}'] for i in range(len(y_pred))]) - y_pred
-                            
-                                total_err = lower_err + upper_err  # Compute total error for this algorithm
-                            
-                                # Update global min and max across all algorithms
-                                min_err = min(min_err, total_err.min())
-                                max_err = max(max_err, total_err.max())
                                 # Plot the prediction intervals
                                 fsate.plot_map_pred_wrap_mapie(test_gdf,
                                                 dir_out_viz_base, ds,
