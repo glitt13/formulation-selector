@@ -6,8 +6,8 @@ ds_type: 'prediction' # Required string. Strongly recommended to select 'predict
 write_type: 'parquet' # Required filetype for writing NLDI feature metadata. Default 'parquet'. May also select 'csv'
 path_meta: "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.{write_type}" # REQUIRED. Prediction attribute metadata filepath formatted for R's glue() & py f-strings as generated using `proc.attr.hydfab::write_meta_nldi_feat()`. Strongly suggested default format:  "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.{write_type}"  
 pred_file_comid_colname: 'featureID' # REQUIRED. The column name containing the location identifiers used for prediction in the prediction metadata file as defined above as path_meta.
-path_attr_config: "{home_dir}/git/formulation-selector/scripts/eval_ingest/xssa/xssa_attr_config.yaml"
-basepath_algos:
+path_tfrm_script: "{home_dir}/git/formulation-selector/pkg/fs_algo/fs_algo/fs_tfrm_attrs.py" # Required. The filepath to the transformation script, only used when attempting to run this python transformation script from R. Otherwise, if running transformations from python this does not get used.
+conda_env: 'py312' # Required. The anaconda environment with fs_algo installed so that the fs_tfrm_attrs.py script may run when attempting to run from R. Otherwise, if running transformations from python this does not get used.
 algo_response_vars: # List out the desired response variables (e.g. metrics, hydrologic signatures) for prediction. # TODO offer 'all'
   - 'NSE'
   - 'KGE'
