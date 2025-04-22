@@ -43,7 +43,8 @@ main <- function(){
   write_type <- base::unlist(cfig_pred)[['write_type']]
   path_meta <- base::unlist(cfig_pred)[['path_meta']] # The filepath of the file that generates the list of comids used for prediction
   # READ IN ATTRIBUTE CONFIG FILE
-  path_attr_config <- glue::glue(cfig_pred[['path_attr_config']])
+  name_attr_config <- cfig_pred$name_attr_config
+  path_attr_config <- proc.attr.hydfab::build_cfig_path(path_cfig_pred,name_attr_config)
   cfig_attr <- yaml::read_yaml(path_attr_config)
 
   # Defining directory paths as early as possible:
