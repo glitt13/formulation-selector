@@ -672,7 +672,7 @@ def _read_pred_comid(path_pred_locs: str | os.PathLike, comid_pred_col:str ) -> 
         FileNotFoundError(f"The path to prediction location data could not be found: \n{path_pred_locs} ")
     if '.csv' in Path(path_pred_locs).suffix:
         try:
-            comids_pred = pd.read_csv(path_pred_locs).drop_duplicates()[comid_pred_col].values            
+            comids_pred = pd.read_csv(path_pred_locs)[comid_pred_col].drop_duplicates().values            
         except:
             raise ValueError(f"Could not successfully read in {path_pred_locs} & select col {comid_pred_col}")
     elif '.parquet' in Path(path_pred_locs).suffix:
@@ -843,7 +843,7 @@ def combine_resp_gdf_comid_wrap(dir_std_base:str|os.PathLike,ds:str,
     sub_gdf_comid = sub_gdf_comid.drop_duplicates().dropna()
     if any(sub_gdf_comid['comid'].duplicated()):
         print("Note that some duplicated comids found in dataset based on initial location identifier, gage_id")
-    gdf_comid['dataset'] = ds 
+    sub_gdf_comid['dataset'] = ds 
 
     dict_resp_gdf = dict({'dat_resp':dat_resp,
                         'gdf_comid': sub_gdf_comid})
@@ -1247,19 +1247,13 @@ class AlgoTrainEval:
             pipe_rf = make_pipeline(rf)                       
             pipe_rf.fit(self.X_train, self.y_train)
             
-            # --- Make predictions using the RandomForest model ---
-            y_pred_rf = rf.predict(self.X_test)
-            
-            # --- Calculate confidence intervals ---
-            ci = self.calculate_rf_uncertainty(rf, self.X_train, self.X_test)
-
             # --- Compare predictions with confidence intervals ---
             self.algs_dict['rf'] = {'algo': rf,
                                     'pipeline': pipe_rf,
                                     'type': 'random forest regressor',
                                     'metric': self.metric,
-                                    'ci': ci}
-
+                                    'Uncertainty': {}
+                }
         if 'mlp' in self.algo_config:  # MULTI-LAYER PERCEPTRON
             if self.verbose:
                 print(f"      Performing Multilayer Perceptron Training")
@@ -1308,16 +1302,13 @@ class AlgoTrainEval:
             
             grid_rf.fit(self.X_train, self.y_train)
 
-            # calculate rf confidence intervals from the best rf estimator
-            ci = self.calculate_rf_uncertainty(grid_rf.best_estimator_.named_steps['randomforestregressor'],
-                                                self.X_train, self.X_test)
-
             self.algs_dict['rf'] = {'algo': grid_rf.best_estimator_.named_steps['randomforestregressor'],
                                     'pipeline': grid_rf.best_estimator_,
                                     'gridsearchcv': grid_rf,
                                     'type': 'random forest regressor',
                                     'metric': self.metric,
-                                    'ci': ci}
+                                    'Uncertainty': {}
+                                    }
         
         if 'mlp' in self.algo_config_grid:  # MULTI-LAYER PERCEPTRON
             if self.verbose:
@@ -1420,18 +1411,20 @@ class AlgoTrainEval:
             # path_algo = Path(self.dir_out_alg_ds) / Path(basename_alg_ds_metr + '.joblib')
             
             # write trained algorithm
-            # joblib.dump(self.algs_dict[algo]['pipeline'], path_algo)
+            joblib.dump(self.algs_dict[algo]['pipeline'], path_algo)
             
-            # --- Modified part: Combine rf model and ci into a single dictionary ---
-            pipeline_with_ci = {
-            'pipe': self.algs_dict[algo]['pipeline'],   # The trained model
-            'confidence_intervals': self.algs_dict[algo].get('ci',None)  # The ci object if it exists
+            # Save pipeline and metadata in a dictionary
+            pipeline_data = {
+                'pipeline': self.algs_dict[algo]['pipeline'],  # The trained model pipeline
+                'X_train_shape': self.X_train.shape,  # Store the shape of X_train
+                'Uncertainty': self.algs_dict[algo]['Uncertainty']
             }
-            
-            # print(self.algs_dict[algo].get('ci'))
-            
-            # Save the combined pipeline (model + ci) using joblib
-            joblib.dump(pipeline_with_ci, path_algo)
+
+            # If mapie_alpha exists and is not empty, save mapie
+            if any('alpha' in d and d['alpha'] for d in self.uncertainty.get('mapie', [])):  #getattr(self, 'mapie_alpha', None):
+                pipeline_data['mapie'] = self.algs_dict[algo].get('mapie', None)
+
+            joblib.dump(pipeline_data, path_algo)  # Save pipeline + X_train shape
             
             self.algs_dict[algo]['file_pipe'] = str(path_algo.name)
    

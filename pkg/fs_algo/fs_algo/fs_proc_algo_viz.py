@@ -9,6 +9,7 @@ import geopandas as gpd
 from shapely import wkt
 import matplotlib.pyplot as plt
 import xarray as xr
+import warnings
 """Workflow script to train algorithms on catchment attribute data for predicting
     formulation metrics and/or hydrologic signatures.
 
