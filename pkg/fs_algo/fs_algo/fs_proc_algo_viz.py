@@ -30,9 +30,8 @@ if __name__ == "__main__":
     
     # Ensure the string literal is converted to a tuple for `hidden_layer_sizes`
     algo_config = algo_cfg.get('algorithms')
-    if len(algo_config.get('mlp')[0].get('hidden_layer_sizes',None))>0: # purpose: evaluate string literal to a tuple
-        if not isinstance(algo_config.get('mlp')[0].get('hidden_layer_sizes',None), tuple):
-            algo_config.get('mlp')[0]['hidden_layer_sizes'] = ast.literal_eval(algo_config.get('mlp')[0]['hidden_layer_sizes'])
+    if algo_config['mlp'][0].get('hidden_layer_sizes',None): # purpose: evaluate string literal to a tuple
+        algo_config['mlp'][0]['hidden_layer_sizes'] = ast.literal_eval(algo_config['mlp'][0]['hidden_layer_sizes'])
     algo_config_og = algo_config.copy()
 
     verbose = algo_cfg.get('verbose',True)
