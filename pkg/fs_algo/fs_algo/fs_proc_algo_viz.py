@@ -29,7 +29,7 @@ if __name__ == "__main__":
         algo_cfg = yaml.safe_load(file)
     
     # Ensure the string literal is converted to a tuple for `hidden_layer_sizes`
-    algo_config = {k: algo_cfg['algorithms'][k] for k in algo_cfg['algorithms']}
+    algo_config = algo_cfg.get('algorithms')
     if algo_config['mlp'][0].get('hidden_layer_sizes',None): # purpose: evaluate string literal to a tuple
         algo_config['mlp'][0]['hidden_layer_sizes'] = ast.literal_eval(algo_config['mlp'][0]['hidden_layer_sizes'])
     algo_config_og = algo_config.copy()
