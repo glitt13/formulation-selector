@@ -9,6 +9,7 @@ import geopandas as gpd
 from shapely import wkt
 import matplotlib.pyplot as plt
 import xarray as xr
+import warnings
 """Workflow script to train algorithms on catchment attribute data for predicting
     formulation metrics and/or hydrologic signatures.
 
@@ -33,13 +34,15 @@ if __name__ == "__main__":
         algo_config['mlp'][0]['hidden_layer_sizes'] = ast.literal_eval(algo_config['mlp'][0]['hidden_layer_sizes'])
     algo_config_og = algo_config.copy()
 
-    verbose = algo_cfg['verbose']
-    test_size = algo_cfg['test_size']
-    seed = algo_cfg['seed']
+    verbose = algo_cfg.get('verbose',True)
+    test_size = algo_cfg.get('test_size',0.3)
+    seed = algo_cfg.get('seed',32)
     read_type = algo_cfg.get('read_type','all') # Arg for how to read attribute data using comids in fs_read_attr_comid(). May be 'all' or 'filename'.
     metrics = algo_cfg.get('metrics',None)
     make_plots = algo_cfg.get('make_plots',False)
     same_test_ids = algo_cfg.get('same_test_ids',True)
+    confidence_levels = algo_cfg.get('confidence_levels',95)
+    uncertainty_cfg = algo_cfg.get('uncertainty', {})
 
     #%% Attribute configuration
     name_attr_config = algo_cfg.get('name_attr_config', Path(path_algo_config).name.replace('algo','attr')) 
@@ -207,23 +210,13 @@ if __name__ == "__main__":
             train_eval = fsate.AlgoTrainEval(df=df_pred_resp,
                                         attrs=attrs_sel,
                                         algo_config=algo_config,
+                                        uncertainty=uncertainty_cfg,
                                         dir_out_alg_ds=dir_out_alg_ds, dataset_id=ds,
                                         metr=metr,test_size=test_size, rs = seed,
-                                        test_ids=test_ids,
-                                        verbose=verbose)
+                                        verbose=verbose,
+                                        confidence_levels=confidence_levels,
+                                        )
             train_eval.train_eval() # Train, test, eval wrapper
-
-            # Get the comids corresponding to the testing data/run QA checks
-            if train_eval.X_test.shape[0] + train_eval.X_train.shape[0] == df_pred_resp.shape[0]:
-                if all(train_eval.X_test.index == test_ids.index):
-                    df_pred_resp_test = df_pred_resp.iloc[train_eval.X_test.index]
-                    comids_test = df_pred_resp_test['comid'].values
-                    if not all(comids_test == test_ids.values): 
-                        raise ValueError("PROBLEM: the testing comids stored using AlgoTrainEval do not match the expected testing comids")
-                else:
-                    raise ValueError("Unexpected train/test split index corruption when using AlgoTrainEval.train_eval().")
-            else:
-                raise ValueError("Problem with expected dimensions. Consider how missing data may be handled with AlgoTrainEval.train_eval()")
 
             # Retrieve evaluation metrics dataframe & write to file
             rslt_eval[metr] = train_eval.eval_df
@@ -257,43 +250,90 @@ if __name__ == "__main__":
                                 )
 
             # %% Model testing results visualization
+
+            # Initialize min and max errors
+            if make_plots:
+                # Calculate global min and max for consistent uncertainty scaling across all algorithms (but unique scaling for e/ response variable/metric)
+                min_err = float('inf')  # Initialize with a large value
+                max_err = float('-inf')  # Initialize with a small value
+                for algo_str in train_eval.algs_dict.keys():
+                    if train_eval.preds_dict[algo_str].get('y_pis',None) is not None:
+                        y_pred = train_eval.preds_dict[algo_str].get('y_pred',None)
+                        y_pis = train_eval.preds_dict[algo_str].get('y_pis',None)
+                                        # Calculate the global min and max errors across all algorithms
+                        for alpha_val in next(d['alpha'] for d in uncertainty_cfg.get('mapie', [])):
+                            lower_err = y_pred - np.array([y_pis[i].loc['lower_limit', f'alpha_{alpha_val:.2f}'] for i in range(len(y_pred))])
+                            upper_err = np.array([y_pis[i].loc['upper_limit', f'alpha_{alpha_val:.2f}'] for i in range(len(y_pred))]) - y_pred
+                        
+                            total_err = lower_err + upper_err  # Compute total error for this algorithm
+                        
+                            # Update global min and max across all algorithms
+                            min_err = min(min_err, total_err.min())
+                            max_err = max(max_err, total_err.max())
+
             # TODO extract y_pred for each model
             dict_test_gdf = dict()
             for algo_str in train_eval.algs_dict.keys():
 
                 #%% Evaluation: learning curves
-                y_pred = train_eval.preds_dict[algo_str]['y_pred']
+                y_pred = train_eval.preds_dict[algo_str].get('y_pred')
                 y_obs = train_eval.y_test.values
+                
                 if make_plots:
                     # Regression of testing holdout's prediction vs observation
-                    fsate.plot_pred_vs_obs_wrap(y_pred, y_obs, dir_out_viz_base,
-                            ds, metr, algo_str=algo_str,split_type=f'testing{test_size}')
-
+                    if train_eval.preds_dict[algo_str].get('y_pis',None) is not None:
+                        y_pis = train_eval.preds_dict[algo_str].get('y_pis')
+                        for alpha_val in next(d['alpha'] for d in uncertainty_cfg.get('mapie', [])):
+                            fsate.plot_pred_vs_obs_wrap_mapie(y_pred, y_obs, dir_out_viz_base,
+                                    ds, metr, algo_str=algo_str,
+                                    y_pis = y_pis, alpha_val = alpha_val,
+                                    split_type=f'testing{test_size}')
+                    else:
+                           fsate.plot_pred_vs_obs_wrap(y_pred, y_obs, dir_out_viz_base,
+                                ds, metr, algo_str=algo_str,split_type=f'testing{test_size}')
+                           
                 # PREPARE THE GDF TO ALIGN PREDICTION VALUES BY COMIDS/COORDS
-                test_gdf = gdf_comid.loc[test_ids.index]#[gdf_comid['comid'].isin(comids_test)].copy()
-                # Ensure test_gdf is ordered in the same order of comids as y_pred
-                if all(test_gdf['comid'].values == comids_test):             
-                    test_gdf['id'] = pd.Categorical(test_gdf['comid'], categories=np.unique(comids_test), ordered=True) 
-                    # The comid can be used for sorting... see test_gdf.sort_values() below
-                else:
-                    raise ValueError("Unable to ensure test_gdf is ordered in the same order of comids as y_pred")
-                test_gdf.loc[:,'performance'] = y_pred
-                test_gdf.loc[:,'observed'] = y_obs
+                # Get the comids corresponding to the testing data/run QA checks
+                comids_test = train_eval.df['comid'].iloc[train_eval.X_test.index].values
+                test_gdf = gdf_comid[gdf_comid['comid'].isin(comids_test)].copy()
+                # The comid-y_pred/y_obs mapping:
+                df_test = train_eval.df.iloc[train_eval.y_test.index][['comid',metr]].rename(columns={metr:'observed'})
+                df_test['prediction'] = y_pred
+                df_test.head()
+                # Merge the test_gdf with the prediction dataframe
+                test_gdf = test_gdf.merge(df_test, left_on='comid', right_on='comid', how='left')
+                # TODO oconus: once comid is no longer a column, make sure that gdf featureID corresponds to appropriate featureSource
+                # Add details on dataset, response variable, and algorithm
                 test_gdf.loc[:,'dataset'] = ds
                 test_gdf.loc[:,'metric'] = metr
                 test_gdf.loc[:,'algo'] = algo_str
-                if test_gdf.shape[0] != len(comids_test):
-                    raise ValueError("Problem with dataset size")
-                test_gdf = test_gdf.sort_values('id').reset_index(drop=True)
-                dict_test_gdf[algo_str] = test_gdf.drop('id',axis=1)
 
+                test_gdf.drop_duplicates(subset=['comid','observed','prediction'],inplace=True)
+
+                dict_test_gdf[algo_str] = test_gdf
                 if make_plots:
                     fsate.plot_map_pred_wrap(test_gdf,
                                     dir_out_viz_base, ds,
                                         metr,algo_str,
                                         split_type='test',
-                                        colname_data='performance')
-            
+                                        colname_data='prediction')
+                    
+                    # %% Test Prediction Uncertainty Plotting 
+                    for algo_str in train_eval.algs_dict.keys():
+                        if train_eval.preds_dict[algo_str].get('y_pis',None) is not None:
+                            y_pred = train_eval.preds_dict[algo_str].get('y_pred',None)
+                            y_pis = train_eval.preds_dict[algo_str].get('y_pis',None)
+                                            # Calculate the global min and max errors across all algorithms
+                            for alpha_val in next(d['alpha'] for d in uncertainty_cfg.get('mapie', [])):
+                                # Plot the prediction intervals
+                                fsate.plot_map_pred_wrap_mapie(test_gdf,
+                                                dir_out_viz_base, ds,
+                                                    metr,algo_str,
+                                                    y_pis = y_pis, alpha_val = alpha_val,
+                                                    min_err = min_err, max_err = max_err,
+                                                    split_type='test',
+                                                    colname_data='prediction')                        
+                                
             # Generate analysis path out:
             path_pred_obs = fsate.std_test_pred_obs_path(dir_out_anlys_base,ds, metr)
             # TODO why does test_gdf end up with a size larger than total comids? Should be the split test amount

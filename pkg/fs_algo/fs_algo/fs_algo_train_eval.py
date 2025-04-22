@@ -3,7 +3,7 @@ from sklearn.ensemble import RandomForestRegressor
 from sklearn.neural_network import MLPRegressor
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.preprocessing import StandardScaler, FunctionTransformer
-from sklearn.pipeline import make_pipeline
+from sklearn.pipeline import make_pipeline, Pipeline
 from sklearn.model_selection import GridSearchCV,learning_curve
 import numpy as np
 import pandas as pd
@@ -32,6 +32,11 @@ import urllib
 import zipfile
 import re
 import forestci as fci
+from sklearn.utils import resample
+from mapie.regression import MapieRegressor, MapieQuantileRegressor
+from scipy.stats import norm
+import random
+import scipy.stats as st
 
 # %% BASIN ATTRIBUTES (PREDICTORS) & RESPONSE VARIABLES (e.g. METRICS)
 class AttrConfigAndVars:
@@ -597,21 +602,6 @@ def std_pred_path(dir_out: str | os.PathLike, algo: str, metric: str, dataset_id
     path_pred_rslt = Path(dir_preds_ds)/Path(basename_pred_alg_ds_metr)
     return path_pred_rslt
 
-def std_Xtrain_path(dir_out_alg_ds:str | os.PathLike, dataset_id: str
-                    ) -> pathlib.PosixPath:
-    """Standardize the algorithm save path
-    :param dir_out_alg_ds:  Directory where algorithm's output stored.
-    :type dir_out_alg_ds: str | os.PathLike
-    :param metric:  The metric or hydrologic signature identifier of interest
-    :type metric: str
-    :return: full save path for joblib object
-    :rtype: str
-    """
-    Path(dir_out_alg_ds).mkdir(exist_ok=True,parents=True)
-    basename_alg_ds = f'Xtrain__{dataset_id}'
-    path_Xtrain = Path(dir_out_alg_ds) / Path(basename_alg_ds + '.csv')
-    return path_Xtrain
-
 def std_eval_metrs_path(dir_out_viz_base: str|os.PathLike,
                       ds:str, metr:str
                       ) -> pathlib.PosixPath:
@@ -667,12 +657,12 @@ def _read_pred_comid(path_pred_locs: str | os.PathLike, comid_pred_col:str ) -> 
         FileNotFoundError(f"The path to prediction location data could not be found: \n{path_pred_locs} ")
     if '.csv' in Path(path_pred_locs).suffix:
         try:
-            comids_pred = pd.read_csv(path_pred_locs).drop_duplicates()[comid_pred_col].values            
+            comids_pred = pd.read_csv(path_pred_locs)[comid_pred_col].drop_duplicates().values            
         except:
             raise ValueError(f"Could not successfully read in {path_pred_locs} & select col {comid_pred_col}")
     elif '.parquet' in Path(path_pred_locs).suffix:
         try:
-            comids_pred = pd.read_parquet(path_pred_locs).drop_duplicates()[comid_pred_col].values
+            comids_pred = pd.read_parquet(path_pred_locs)[comid_pred_col].drop_duplicates().values
         except:
             raise ValueError(f"Could not successfully read in {path_pred_locs} & select col {comid_pred_col}")
     else:
@@ -795,8 +785,26 @@ def combine_resp_gdf_comid_wrap(dir_std_base:str|os.PathLike,ds:str,
                                 featureSource=featureSource, featureID=featureID)
    
     # --- response data identifier alignment with comids & na removal --- #
-    dat_resp = dat_resp.assign_coords(comid = gdf_comid['comid'].values)
-    idxs_na_comid = list(np.where(gdf_comid['comid'].isna())[0])
+    # Subset gdf to the gage_ids that are present in the standardized response variable
+    sub_gdf_comid = gdf_comid[gdf_comid['gage_id'].isin(dat_resp['gage_id'].values)]
+    if sub_gdf_comid.shape[0] != len(dat_resp['gage_id']):
+        warnings.warn(f"Warning: The number of gage_ids in the response variable ({len(dat_resp['gage_id'])}) does not match the number of gage_ids in the geodataframe ({sub_gdf_comid.shape[0]}).")
+        # TODO consider dropping the gage_ids that are not present in the geodataframe
+        if sub_gdf_comid.shape[0] < len(dat_resp['gage_id']):
+            raise ValueError(f"The number of gage_ids in the response variable ({len(dat_resp['gage_id'])}) is less than the number of gage_ids in the geodataframe ({sub_gdf_comid.shape[0]}).")
+            # TODO consider dropping the gage_ids that are not present in the geodataframe
+    
+    gage_to_comid_map = sub_gdf_comid.set_index('gage_id')['comid']
+    mapped_comids = pd.Series(dat_resp['gage_id'].values).map(gage_to_comid_map)
+    dat_resp = dat_resp.assign_coords(comid=("gage_id", mapped_comids.values))
+    # Assign the comid coordinate to dat_resp
+    #dat_resp1 = dat_resp.assign_coords(comid=('gage_id', dat_resp['gage_id'].values.map(gage_to_comid_map)))
+    #dat_resp = dat_resp.assign_coords(comid = sub_gdf_comid['comid'].values)
+        # dat_resp = dat_resp.isel(gage_id=~dat_resp['gage_id'].isin(sub_gdf_comid['gage_id'].values))
+    #dat_resp = dat_resp.assign_coords(comid = gdf_comid['comid'].values)
+    
+
+    idxs_na_comid = list(np.where(sub_gdf_comid['comid'].isna())[0])
     gage_id_mask = ~np.isin(np.arange(len(dat_resp['gage_id'])),idxs_na_comid)
     if len(idxs_na_comid) > 0:
         gage_ids_missing = dat_resp['gage_id'].isel(gage_id=~gage_id_mask).values
@@ -805,15 +813,15 @@ def combine_resp_gdf_comid_wrap(dir_std_base:str|os.PathLike,ds:str,
               \n{gage_ids_missing}")
         # Remove the unknown comids now that they've been matched up to the original dims in dat_resp:
         dat_resp = dat_resp.isel(gage_id=gage_id_mask)# remove NA vals from gage_id coord
-        dat_resp = dat_resp.isel(comid=gage_id_mask) # remove NA vals from comid coord
+        #dat_resp = dat_resp.isel(comid=gage_id_mask) # remove NA vals from comid coord
     
-    gdf_comid = gdf_comid.drop_duplicates().dropna()
-    if any(gdf_comid['comid'].duplicated()):
+    sub_gdf_comid = sub_gdf_comid.drop_duplicates().dropna()
+    if any(sub_gdf_comid['comid'].duplicated()):
         print("Note that some duplicated comids found in dataset based on initial location identifier, gage_id")
-    gdf_comid['dataset'] = ds 
+    sub_gdf_comid['dataset'] = ds 
 
     dict_resp_gdf = dict({'dat_resp':dat_resp,
-                        'gdf_comid': gdf_comid})
+                        'gdf_comid': sub_gdf_comid})
     return(dict_resp_gdf)
 
 def split_train_test_comid_wrap(dir_std_base:str|os.PathLike, 
@@ -869,10 +877,13 @@ def split_train_test_comid_wrap(dir_std_base:str|os.PathLike,
 
 class AlgoTrainEval:
     def __init__(self, df: pd.DataFrame, attrs: Iterable[str], algo_config: dict,
+                 uncertainty: dict,
                  dir_out_alg_ds: str | os.PathLike, dataset_id: str,
                  metr: str, test_size: float = 0.3,rs: int = 32,
                  test_ids = None,test_id_col:str = 'comid',
-                 verbose: bool = False):
+                 verbose: bool = False,
+                 confidence_levels: list[int] = [95],
+                 ):
         """The algorithm training and evaluation class.
 
         :param df: The combined response variable and predictor variables DataFrame.
@@ -884,6 +895,12 @@ class AlgoTrainEval:
             - `mlp`:  :class:`sklearn.neural_network.MLPRegressor` multilayer perceptron algorithm.
             Each algorithm key contains sub-dict keys for the parameters that may be passed to the corresponding :mod:`sklearn` algorithm. 
             If no parameters keys are passed, the :mod:`sklearn` algorithm's default arguments are used.
+        :type algo_config: dict
+        :param uncertainty: The uncertainty as read from the uncertainty yaml where each key is the uncertainty that will be run. Presently allowable keys include:
+            - `fci`:  :dict:Forestci uncertainty. Only if 'rf' algorithm is selected.
+            - `bagging`:  :dict:Configuration dictionary for Bagging-based confidence interval uncertainty estimation. Works for both `rf` and `mlp` algorithms.
+            - `mapie`:  :dict:Configuration dictionary for MAPIE prediction interval estimation. Works for both `rf` and `mlp` algorithms.
+            Each method contains sub-dict keys for the parameters that may be passed to the corresponding method.
         :type algo_config: dict
         :param dir_out_alg_ds: Directory where algorithm's output stored.
         :type dir_out_alg_ds: str | os.PathLike
@@ -901,11 +918,16 @@ class AlgoTrainEval:
         :type test_id_col: str
         :param verbose: Should print, defaults to False.
         :type verbose: bool, optional
+        :param: confidence_levels: confidence levels for ci calculation, defaults to 95
+        :type confidence_levels: int, optional
+        :param mapie_alpha: alpha for MAPIE, defaults to 0.05.
+        :type mapie_alpha: float, optional
         """
         # class args
-        self.df = df
+        self.df = df # NOTE: df MUST NEVER CHANGE!! df represents the original data, and is used as an index reference in the algo-train script (e.g. fs_proc_algo_viz.py)
         self.attrs = attrs
         self.algo_config = algo_config
+        self.uncertainty = uncertainty
         self.dir_out_alg_ds = dir_out_alg_ds
         self.metric = metr
         self.test_size = test_size
@@ -914,6 +936,7 @@ class AlgoTrainEval:
         self.rs = rs
         self.dataset_id = dataset_id
         self.verbose = verbose
+        self.confidence_levels = confidence_levels
 
         # train/test split
         self.X_train = pd.DataFrame()
@@ -1054,7 +1077,7 @@ class AlgoTrainEval:
             # e.g. {'activation':'relu'} becomes {'activation':['relu']}
             self.algo_config_grid  = self.convert_to_list(self.algo_config_grid)
 
-    def calculate_rf_uncertainty(self, forest, X_train, X_test):
+    def calculate_forestci_uncertainty(self, forest, X_train, X_test):
         """
         Calculate uncertainty using forestci for a Random Forest model.
     
@@ -1067,7 +1090,10 @@ class AlgoTrainEval:
         :return: Confidence intervals for each prediction.
         :rtype: ndarray
         """
-        ci = fci.random_forest_error(
+        # Compute standard deviation of prediction errors
+
+        confidence_levels = self.confidence_levels
+        ci_std = np.sqrt(fci.random_forest_error(
             forest=forest,
             X_train_shape=X_train.shape,
             X_test=np.array(X_test),
@@ -1075,10 +1101,103 @@ class AlgoTrainEval:
             calibrate=True, 
             memory_constrained=False, 
             memory_limit=None, 
-            y_output=0  # Change this if multi-output
-        )
-        return ci
+            y_output=0  
+        ))        
+    
+        # Compute confidence intervals for each level
+        ci_dict = {}
+        for alpha in confidence_levels:
+            z_value = st.norm.ppf(1 - (1 - alpha/100) / 2)  # Get z-score for two-tailed CI
+            ci_lower = -z_value * ci_std
+            ci_upper = z_value * ci_std
+            ci_dict[f'ci_{int(alpha)}'] = {
+                "lower_bound": ci_lower,
+                "upper_bound": ci_upper
+            }
+    
+        return ci_dict
 
+    def calculate_bagging_ci(self, algo_str,best_algo):
+        """
+        Generalized function to calculate Bagging confidence intervals for any model.
+        """
+        # algo_cfg = self.algo_config[algo_str]
+        algo_cfg = self.algo_config.get(algo_str, self.algo_config_grid.get(algo_str))
+        if algo_cfg is None:
+            raise KeyError(f"Algorithm {algo_str} not found in configurations.")
+
+        # n_algos = self.bagging_ci_params['n_algos']
+        n_algos = next(d['n_algos'] for d in self.uncertainty.get('bagging', []))
+        predictions = []
+        # Extract the model if it's inside a pipeline
+        if isinstance(best_algo, Pipeline):
+            # Try to find the model step
+            algo_step = None
+            for name, step in best_algo.named_steps.items():
+                if isinstance(step, (RandomForestRegressor, MLPRegressor)):  # Extend if more models are used
+                    algo_step = step
+                    break
+            if algo_step is None:
+                raise ValueError(f"Could not find '{algo_str}' in the pipeline steps.")
+        else:
+            algo_step = best_algo  # Direct model
+    
+        base_algo = algo_step  # Now we have the extracted model
+        
+        random.seed(self.rs)
+        random_states = [random.randint(1, 10000) for _ in range(n_algos)]
+    
+        for rand_state in random_states:
+            # Resample data with a fixed random state for reproducibility
+            X_train_resampled, y_train_resampled = resample(
+                self.X_train, self.y_train, random_state=rand_state
+            )
+    
+            # Create a new model with the same parameters but a different random_state
+            algo_tmp = type(base_algo)(**{**base_algo.get_params(), "random_state": rand_state})
+    
+            algo_tmp.fit(X_train_resampled, y_train_resampled)
+            predictions.append(algo_tmp.predict(self.X_test))        
+
+        predictions = np.array(predictions)
+        mean_pred = predictions.mean(axis=0)
+        std_pred = predictions.std(axis=0)
+        confidence_levels = self.confidence_levels 
+        confidence_intervals = {}
+
+        for cl in confidence_levels:
+            lower_bound, upper_bound = np.percentile(predictions, [(100 - cl) / 2, 100 - (100 - cl) / 2], axis=0)
+            confidence_intervals[f"confidence_level_{cl}"] = {
+                "lower_bound": lower_bound,
+                "upper_bound": upper_bound
+            }  
+
+        if 'Uncertainty' not in self.algs_dict[algo_str]:
+            self.algs_dict[algo_str]['Uncertainty'] = {}
+    
+        self.algs_dict[algo_str]['Uncertainty']['bagging_mean_pred'] = mean_pred
+        self.algs_dict[algo_str]['Uncertainty']['bagging_std_pred'] = std_pred
+        self.algs_dict[algo_str]['Uncertainty']['bagging_confidence_intervals'] = confidence_intervals
+    
+    def calculate_mapie(self):
+        """Generalized function to calculate prediction uncertainty using MAPIE."""
+        mapie_method = next((d['method'] for d in self.uncertainty.get('mapie', []) if 'method' in d), None)
+        mapie_cv = next((d['cv'] for d in self.uncertainty.get('mapie', []) if 'cv' in d), None)
+        mapie_agg_function = next((d['agg_function'] for d in self.uncertainty.get('mapie', []) if 'agg_function' in d), None)
+        try:
+            for algo_str, algo_data in self.algs_dict.items():
+                algo = algo_data['algo']
+                mapie = MapieRegressor(
+                    algo,
+                    method=mapie_method,
+                    cv=mapie_cv,
+                    agg_function=mapie_agg_function
+                )
+                mapie.fit(self.X_train, self.y_train)
+                self.algs_dict[algo_str]['mapie'] = mapie
+        except ValueError as e:
+            raise ValueError(f"Invalid MAPIE method '{mapie_method}'. Please choose either 'plus' or 'minmax'.") from e
+            
     def train_algos(self):
         """Train algorithms based on what has been defined in the algo config file
 
@@ -1102,19 +1221,14 @@ class AlgoTrainEval:
             pipe_rf = make_pipeline(rf)                       
             pipe_rf.fit(self.X_train, self.y_train)
             
-            # --- Calculate confidence intervals ---
-            ci = self.calculate_rf_uncertainty(rf, self.X_train, self.X_test)
-
             # --- Compare predictions with confidence intervals ---
             self.algs_dict['rf'] = {'algo': rf,
                                     'pipeline': pipe_rf,
                                     'type': 'random forest regressor',
                                     'metric': self.metric,
-                                    'ci': ci}
-
+                                    'Uncertainty': {}
+                }
         if 'mlp' in self.algo_config:  # MULTI-LAYER PERCEPTRON
-            
-            
             if self.verbose:
                 print(f"      Performing Multilayer Perceptron Training")
             mlpcfg = self.algo_config['mlp']
@@ -1129,10 +1243,13 @@ class AlgoTrainEval:
                                max_iter=mlpcfg.get('max_iter', 200))
             pipe_mlp = make_pipeline(StandardScaler(),mlp)
             pipe_mlp.fit(self.X_train, self.y_train)
+
             self.algs_dict['mlp'] = {'algo': mlp,
                                      'pipeline': pipe_mlp,
                                      'type': 'multi-layer perceptron regressor',
-                                     'metric': self.metric}
+                                     'metric': self.metric,
+                                     'Uncertainty': {}
+                                     }
 
     def train_algos_grid_search(self):
         """Train algorithms using GridSearchCV based on the algo config file.
@@ -1159,16 +1276,13 @@ class AlgoTrainEval:
             
             grid_rf.fit(self.X_train, self.y_train)
 
-            # calculate rf confidence intervals from the best rf estimator
-            ci = self.calculate_rf_uncertainty(grid_rf.best_estimator_.named_steps['randomforestregressor'],
-                                                self.X_train, self.X_test)
-
             self.algs_dict['rf'] = {'algo': grid_rf.best_estimator_.named_steps['randomforestregressor'],
                                     'pipeline': grid_rf.best_estimator_,
                                     'gridsearchcv': grid_rf,
                                     'type': 'random forest regressor',
                                     'metric': self.metric,
-                                    'ci': ci}
+                                    'Uncertainty': {}
+                                    }
         
         if 'mlp' in self.algo_config_grid:  # MULTI-LAYER PERCEPTRON
             if self.verbose:
@@ -1189,7 +1303,9 @@ class AlgoTrainEval:
             self.algs_dict['mlp'] = {'algo': grid_mlp.best_estimator_,
                                     'pipeline': grid_mlp,
                                     'type': 'multi-layer perceptron regressor',
-                                    'metric': self.metric}
+                                    'metric': self.metric,
+                                     'Uncertainty': {}
+                                     }
 
     def predict_algos(self) -> dict:
         """ Make predictions with trained algorithms   
@@ -1209,9 +1325,28 @@ class AlgoTrainEval:
                 print(f"      Generating predictions for {type_algo} algorithm.")   
             
             y_pred = pipe.predict(self.X_test)
-            self.preds_dict[k] = {'y_pred': y_pred,
-                             'type': v['type'],
-                             'metric': v['metric']}
+            if 'mapie' in v:
+                mapie_alpha = next((d['alpha'] for d in self.uncertainty.get('mapie', []) if 'alpha' in d), None)
+                y_test_pred, y_test_pis = v['mapie'].predict(self.X_test, alpha=mapie_alpha) 
+                
+                # Rename rows
+                row_labels = ['lower_limit', 'upper_limit']
+                
+                # Rename columns based on mapie_alpha values
+                col_labels = [f'alpha_{alpha:.2f}' for alpha in mapie_alpha]  
+                
+                # Convert to DataFrame
+                y_pis_list = [pd.DataFrame(y_test_pis[i], index=row_labels, columns=col_labels) for i in range(y_test_pis.shape[0])]
+                
+                self.preds_dict[k] = {'y_pred': y_pred,
+                                      'y_pis': y_pis_list,
+                                      'type': v['type'],
+                                      'metric': v['metric']}
+            else:
+                self.preds_dict[k] = {'y_pred': y_pred,
+                                 'type': v['type'],
+                                 'metric': v['metric']}
+                    
         return self.preds_dict
 
     def evaluate_algos(self) -> dict:
@@ -1250,18 +1385,20 @@ class AlgoTrainEval:
             # path_algo = Path(self.dir_out_alg_ds) / Path(basename_alg_ds_metr + '.joblib')
             
             # write trained algorithm
-            # joblib.dump(self.algs_dict[algo]['pipeline'], path_algo)
+            joblib.dump(self.algs_dict[algo]['pipeline'], path_algo)
             
-            # --- Modified part: Combine rf model and ci into a single dictionary ---
-            pipeline_with_ci = {
-            'pipe': self.algs_dict[algo]['pipeline'],   # The trained model
-            'confidence_intervals': self.algs_dict[algo].get('ci',None)  # The ci object if it exists
+            # Save pipeline and metadata in a dictionary
+            pipeline_data = {
+                'pipeline': self.algs_dict[algo]['pipeline'],  # The trained model pipeline
+                'X_train_shape': self.X_train.shape,  # Store the shape of X_train
+                'Uncertainty': self.algs_dict[algo]['Uncertainty']
             }
-            
-            # print(self.algs_dict[algo].get('ci'))
-            
-            # Save the combined pipeline (model + ci) using joblib
-            joblib.dump(pipeline_with_ci, path_algo)
+
+            # If mapie_alpha exists and is not empty, save mapie
+            if any('alpha' in d and d['alpha'] for d in self.uncertainty.get('mapie', [])):  #getattr(self, 'mapie_alpha', None):
+                pipeline_data['mapie'] = self.algs_dict[algo].get('mapie', None)
+
+            joblib.dump(pipeline_data, path_algo)  # Save pipeline + X_train shape
             
             self.algs_dict[algo]['file_pipe'] = str(path_algo.name)
    
@@ -1296,6 +1433,42 @@ class AlgoTrainEval:
 
         if self.algo_config: # Just run a single simulation for these algos
             self.train_algos()
+
+        # Calculate forestci uncertainty if enabled
+        # Determine the best Random Forest model
+        if 'rf' in self.algs_dict:  # Ensure 'rf' is in selected algorithms
+            if self.grid_search_algs and 'gridsearchcv' in self.algs_dict['rf']:
+                best_rf_algo = self.algs_dict['rf']['gridsearchcv'].best_estimator_.named_steps['randomforestregressor']
+            else:
+                best_rf_algo = self.algs_dict['rf']['algo']
+                
+            # Check if forestci is enabled in self.uncertainty
+            forestci_enabled = any(
+                d.get('forestci', False) for d in self.uncertainty.get('fci', [])
+            )
+            # Compute forestci uncertainty with the best RF model
+            if forestci_enabled:
+                self.algs_dict['rf']['Uncertainty']['forestci'] = self.calculate_forestci_uncertainty(
+                    best_rf_algo, np.array(self.X_train), np.array(self.X_test)
+                )
+
+        # Calculate Bagging uncertainty if enabled
+        if any('n_algos' in d and d['n_algos'] for d in self.uncertainty.get('bagging', [])):
+            for algo_dict in [self.algo_config, self.algo_config_grid]:  # Iterate over both configurations
+                for algo_str in algo_dict.keys():  # algo_str is the correct algorithm name
+                    # Select the best model if Grid Search was performed
+                    best_algo = (
+                        self.algs_dict[algo_str]['gridsearchcv'].best_estimator_
+                        if self.grid_search_algs and 'gridsearchcv' in self.algs_dict[algo_str]
+                        else self.algs_dict[algo_str]['algo']
+                    )
+    
+                    # Compute Bagging CI (pass correct algorithm name + best model)
+                    self.calculate_bagging_ci(algo_str, best_algo)
+                
+        # --- Calculate prediction intervals using MAPIE if enabled ---
+        if any('alpha' in d and d['alpha'] for d in self.uncertainty.get('mapie', [])): #getattr(self, 'mapie_alpha', None):
+            self.calculate_mapie()
 
         # Make predictions  (aka validation) 
         self.predict_algos()
@@ -1854,6 +2027,29 @@ def std_regr_pred_obs_path(dir_out_viz_base:str|os.PathLike, ds:str,
     path_regr_pred_plot.parent.mkdir(parents=True,exist_ok=True)
     return path_regr_pred_plot
 
+def std_regr_pred_obs_path_mapie(dir_out_viz_base:str|os.PathLike, ds:str,
+                            metr:str,algo_str:str,alpha_val:float,
+                            split_type:str='') -> pathlib.PosixPath:
+    """Generate a filepath of the predicted vs observed regresion plot
+
+    :param dir_out_viz_base: The base directory for saving plots
+    :type dir_out_viz_base: str | os.PathLike
+    :param ds: The unique dataset name
+    :type ds: str
+    :param metr: The metric/response variable of interest
+    :type metr: str
+    :param algo_str: The type of algorithm used to create predictions
+    :type algo_str: str
+    :param split_type: The type of data being displayed (e.g. training, testing), defaults to ''
+    :type split_type: str, optional
+    :return: The path to save the regression of predicted vs observed values.
+    :rtype: pathlib.PosixPath
+    """
+
+    path_regr_pred_plot = Path(f"{dir_out_viz_base}/{ds}/regr_pred_obs_{ds}_{metr}_{algo_str}_{split_type}_alpha{alpha_val}.png")
+    path_regr_pred_plot.parent.mkdir(parents=True,exist_ok=True)
+    return path_regr_pred_plot
+
 def _estimate_decimals_for_plotting(val:float)-> int:
     """Determine how many decimals should be used when rounding
     :param val: The value of interest for rounding
@@ -1937,6 +2133,79 @@ def plot_pred_vs_obs_wrap(y_pred: np.ndarray, y_obs:np.ndarray, dir_out_viz_base
     # Generate filepath for saving figure
     path_regr_plot = std_regr_pred_obs_path(dir_out_viz_base, ds,
                             metr,algo_str,split_type)
+    # Save the plot as a .png file
+    fig_regr.savefig(path_regr_plot, dpi=300, bbox_inches='tight')
+    plt.clf()
+    plt.close()
+
+def plot_pred_vs_obs_regr_mapie(y_pred: np.ndarray, y_obs: np.ndarray, ds:str,
+                                metr:str, y_pis: list, alpha_val:float)->Figure:
+    """Plot the observed vs. predicted module performance
+
+    :param y_pred: The predicted response variable
+    :type y_pred: np.ndarray
+    :param y_obs: The observed response variable
+    :type y_obs: np.ndarray
+    :param ds: The unique dataset name
+    :type ds: str
+    :param metr: The metric/response variable name of interest
+    :type metr: str
+    :return: THe predicted vs observed regression plot
+    :rtype: Figure
+    """
+    max_val = np.max([y_pred,y_obs])
+    tot_rnd_max = _estimate_decimals_for_plotting(max_val)
+    min_val = np.min([y_pred,y_obs])
+    tot_rnd_min = _estimate_decimals_for_plotting(min_val)
+    tot_rnd = np.max([tot_rnd_max,tot_rnd_min])
+    min_val_rnd = np.round(np.min([min_val,0]),tot_rnd)
+    max_val_rnd = np.round(max_val,tot_rnd)
+    min_vals = (min_val_rnd,min_val_rnd)
+    max_vals = (max_val_rnd,max_val_rnd)
+
+    # Extract error bars (lower and upper limits) for the first alpha value
+    lower_err = np.abs(y_pred - np.array([y_pis[i].loc['lower_limit', f'alpha_{alpha_val:.2f}'] for i in range(len(y_pred))]))
+    upper_err = np.abs(np.array([y_pis[i].loc['upper_limit', f'alpha_{alpha_val:.2f}'] for i in range(len(y_pred))]) - y_pred)
+    
+    # Adapted from plot in bolotinl's fs_perf_viz.py
+    plt.errorbar(y_obs, y_pred, yerr=[lower_err, upper_err], fmt='o', alpha=0.3, ecolor='gray', capsize=3)
+    plt.axline(min_vals, max_vals, color='black', linestyle='--')
+    plt.ylabel('Predicted {}'.format(metr))
+    plt.xlabel('Actual {}'.format(metr))
+    plt.title('Observed vs. RaFTS Predicted Values: {}'.format(ds))
+
+    # Add alpha values as text box
+    plt.gca().text(0.05, 0.95, f'alpha = {alpha_val:.2f}', transform=plt.gca().transAxes,
+                   fontsize=10, verticalalignment='top', bbox=dict(facecolor='white', alpha=0.5))
+
+    fig = plt.gcf()
+    return fig
+
+def plot_pred_vs_obs_wrap_mapie(y_pred: np.ndarray, y_obs:np.ndarray, dir_out_viz_base:str|os.PathLike,
+                           ds:str, metr:str, algo_str:str,y_pis: list, alpha_val:float,
+                           split_type:str=''):
+    """Wrapper to create & save predicted vs. observed regression plot
+
+    :param y_pred: The predicted response variable
+    :type y_pred: np.ndarray
+    :param y_obs: The observed response variable
+    :type y_obs: np.ndarray
+    :param dir_out_viz_base: The base directory for saving plots
+    :type dir_out_viz_base: str | os.PathLike
+    :param ds: The unique dataset name
+    :type ds: str
+    :param metr: The metric/response variable name of interest
+    :type metr: str
+    :param algo_str: The type of algorithm used to create predictions
+    :type algo_str: str
+    :param split_type: The type of data being displayed (e.g. training, testing), defaults to ''
+    :type split_type: str, optional
+    """
+    # Generate figure
+    fig_regr = plot_pred_vs_obs_regr_mapie(y_pred, y_obs, ds, metr, y_pis, alpha_val)
+    # Generate filepath for saving figure
+    path_regr_plot = std_regr_pred_obs_path_mapie(dir_out_viz_base, ds,
+                            metr,algo_str,alpha_val,split_type)
     # Save the plot as a .png file
     fig_regr.savefig(path_regr_plot, dpi=300, bbox_inches='tight')
     plt.clf()
@@ -2058,6 +2327,103 @@ def plot_map_pred_wrap(test_gdf,dir_out_viz_base, ds,
 
     # Save the plot as a .png file
     plot_pred_map.savefig(path_pred_map_plot, dpi=300, bbox_inches='tight')
+    print(f"Wrote prediction map to \n{path_pred_map_plot}")
+    plt.clf()
+    plt.close()
+
+
+def plot_map_pred_mapie(geo_df:gpd.GeoDataFrame, states,title:str,metr:str,
+                        y_pis: list, alpha_val:float,
+                        min_err: float, max_err: float,
+                        colname_data:str='performance'):
+    """Genereate a map of predicted response variables
+
+    :param geo_df: Geodataframe of response variable results
+    :type geo_df: gpd.GeoDataFrame
+    :param states: The states basemap
+    :type states: gpd.GeoDataFrame
+    :param title: Map title
+    :type title: str
+    :param metr: The metric/response variable of interest
+    :type metr: str
+    :param colname_data: The geo_df column name representing data of interest, defaults to 'performance'
+    :type colname_data: str, optional
+    :return: Map of predicted response variables
+    :rtype: Figure
+    """
+
+    # Compute error bars
+    lower_err = np.abs(geo_df[colname_data] - np.array([y_pis[i].loc['lower_limit', f'alpha_{alpha_val:.2f}'] for i in range(len(geo_df[colname_data]))]))
+    upper_err = np.abs(np.array([y_pis[i].loc['upper_limit', f'alpha_{alpha_val:.2f}'] for i in range(len(geo_df[colname_data]))]) - geo_df[colname_data])
+    total_err = lower_err + upper_err
+
+    # Normalize marker size (scale from 100 to 300)
+    # min_err, max_err = total_err.min(), total_err.max()
+    marker_sizes = 100 + 300 * (total_err - min_err) / (max_err - min_err)
+
+    fig, ax = plt.subplots(1, 1, figsize=(20, 24))
+    base = states.boundary.plot(ax=ax,color="#555555", linewidth=1)
+    # Points
+    geo_df.plot(column=colname_data, ax=ax, markersize=marker_sizes, cmap='viridis', legend=False, zorder=2) # delete zorder to plot points behind states boundaries
+    # States
+    states.boundary.plot(ax=ax, color="#555555", linewidth=1, zorder=1)  # Plot states boundary again with lower zorder
+    
+    # TODO: need to customize the colorbar min and max based on the metric
+    ## cbar = plt.cm.ScalarMappable(norm=matplotlib.colors.Normalize(vmin=0,vmax = 1), cmap='viridis')
+    cbar = plt.cm.ScalarMappable(cmap='viridis')
+    ax.tick_params(axis='x', labelsize= 24)
+    ax.tick_params(axis='y', labelsize= 24)
+    plt.xlabel('Latitude',fontsize = 26)
+    plt.ylabel('Longitude',fontsize = 26)
+    cbar_ax = plt.colorbar(cbar, ax=ax,fraction=0.02, pad=0.04)
+    cbar_ax.set_label(label=metr,size=24)
+    cbar_ax.ax.tick_params(labelsize=24)  # Set colorbar tick labels size
+    plt.title(title, fontsize = 28)
+    ax.set_xlim(-126, -66)
+    ax.set_ylim(24, 50)
+    
+    confidence_interval = (1 - alpha_val) * 100
+
+    # Add alpha values as text box
+    plt.gca().text(0.88, 0.05, f'alpha = {alpha_val:.2f}', transform=plt.gca().transAxes,
+                   fontsize=16, verticalalignment='top', bbox=dict(facecolor='white', alpha=0.5))
+
+    # Scale Legend (Two dots for min and max error)
+    legend_handles = [
+        plt.scatter([], [], s=100, color='gray', label=f'{min_err:.2f}'),
+        plt.scatter([], [], s=300, color='gray', label=f'{max_err:.2f}')
+    ]
+    ax.legend(handles=legend_handles, title=f"{confidence_interval:.0f}% Confidence Interval", 
+              loc='lower left', fontsize=20, title_fontsize=22)
+
+    fig = plt.gcf()
+    return fig
+
+def plot_map_pred_wrap_mapie(test_gdf,dir_out_viz_base, ds,
+                      metr,algo_str,
+                      y_pis: list, alpha_val:float,
+                      min_err: float, max_err: float,
+                      split_type='test',
+                      colname_data='performance'):
+
+    path_pred_map_plot = std_map_pred_path(dir_out_viz_base,ds,metr,algo_str,split_type)
+    new_filename = path_pred_map_plot.stem + f"_alpha{alpha_val:.2f}" + path_pred_map_plot.suffix
+    path_pred_map_plot_mapie = path_pred_map_plot.with_name(new_filename)
+    dir_out_basemap = path_pred_map_plot.parent.parent
+    states = gen_conus_basemap(dir_out_basemap = dir_out_basemap)
+
+    # Ensure the gdf matches the 4326 epsg used for states:
+    test_gdf = test_gdf.to_crs(4326)
+
+    # Generate the map
+    plot_title = f"Predicted Values: {metr} - {ds}"
+    plot_pred_map = plot_map_pred_mapie(geo_df=test_gdf, states=states,title=plot_title,
+                                  metr=metr,y_pis=y_pis, alpha_val=alpha_val,
+                                  min_err = min_err, max_err = max_err,
+                                  colname_data=colname_data)
+
+    # Save the plot as a .png file
+    plot_pred_map.savefig(path_pred_map_plot_mapie, dpi=300, bbox_inches='tight')
     print(f"Wrote prediction map to \n{path_pred_map_plot}")
     plt.clf()
     plt.close()
