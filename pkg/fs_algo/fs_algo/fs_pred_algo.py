@@ -46,9 +46,9 @@ if __name__ == "__main__":
     name_attr_csv = algo_cfg.get('name_attr_csv',None)
     colname_attr_csv = algo_cfg.get('colname_attr_csv',None)
     # Determine whether random forest confidence intervals computed during model training:
-    fci = algo_cfg.get('uncertainty',{}).get('fci',{})
-    if len(fci)>0:
-        forestci = fci[0].get('forestci',False)
+    forci = algo_cfg.get('uncertainty',{}).get('fci',{})
+    if len(forci)>0:
+        forestci = forci[0].get('forestci',False)
     else:
         forestci = False
     # Attributes needed for prediction:
