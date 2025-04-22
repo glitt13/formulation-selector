@@ -712,8 +712,8 @@ def fs_retr_nhdp_comids_geom_wrap(path_save_gpkg:str|os.PathLike,
         :mod:`nhdplusTools` :func:`get_nldi_features()`,defaults to 'nwissite'
     :type featureSource: str
     :param featureID: The conversion format of `gage_ids` into a recognizable string for
-      :mod:`nhdplusTools`, which is an f-string configured conversion of `gage_id`
-       defaults to 'USGS-{gage_id}'. Expected to contain the string `"{gage_id}"`
+        :mod:`nhdplusTools`, which is an f-string configured conversion of `gage_id`
+        defaults to 'USGS-{gage_id}'. Expected to contain the string `"{gage_id}"`
     :type featureID: str
     :return: Geodataframe with the columns 'comid', 'geometry', 'gage_id'
     :rtype: gpd.GeoDataFrame
