@@ -2440,18 +2440,4 @@ fs_attrs_miss_mlti_wrap <- function(path_attr_config){
   }
 }
 
-retr_noaa_gauges_meta <- function(gauge_ids,
-                             gauge_url_base = "https://api.water.noaa.gov/nwps/v1/gauges",
-                             retr_ids = c("lid","usgsId","name","latitude","longitude")){
-  #' @title Retrieve metadata based on a NOAA RFC gauge ID, aka lid
-  #' @description Uses the NWPS api to retrieve gauge metadata
-  #' @param gauge_ids list of NOAA gauge ids of interest
-  #' @param gauge_url_base the base api url for NWPS
-  #' @param retr_ids The desired data to retrieve from the api
-  #' @seealso \link[proc.attr.hydfab]{read_noaa_hads_sites}
-  #' @export
-  ls_all_resp <- list()
-  for(gid in gauge_ids){
-    url <- file.path(gauge_url_base,gid)
-    resp <- curl::curl_fetch_memory(url)
 
