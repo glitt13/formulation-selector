@@ -2,7 +2,7 @@
 % Please edit documentation in R/proc_hydatl_hydfab.R
 \name{std_path_attrs_all_parq}
 \alias{std_path_attrs_all_parq}
-\title{standardize path to they hydroatlas attributes for all OCONUS
+\title{standardize path to the HydroATLAS attributes for all OCONUS
 hydrofabric domains}
 \usage{
 std_path_attrs_all_parq(dir_base_hfab, ls_vpus = c("ak", "prvi"))
@@ -13,7 +13,7 @@ std_path_attrs_all_parq(dir_base_hfab, ls_vpus = c("ak", "prvi"))
 \item{ls_vpu}{the hydrofabric vpus of interest (e.g. \code{c('ak','prvi')})}
 }
 \description{
-standardize path to they hydroatlas attributes for all OCONUS
+standardize path to the HydroATLAS attributes for all OCONUS
 hydrofabric domains
 }
 \details{
