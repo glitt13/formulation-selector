@@ -2,10 +2,10 @@
 % Please edit documentation in R/proc_hydatl_hydfab.R
 \name{std_paths_ntrsct}
 \alias{std_paths_ntrsct}
-\title{Standardizing the paths to hydrofabric-hydroatlas intersection data}
+\title{Standardizing the paths to hydrofabric-HydroATLAS intersection data}
 \usage{
 std_paths_ntrsct(path_hfab)
 }
 \description{
-Standardizing the paths to hydrofabric-hydroatlas intersection data
+Standardizing the paths to hydrofabric-HydroATLAS intersection data
 }

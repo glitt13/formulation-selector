@@ -11,7 +11,7 @@ retr_attr_new(comids, need_vars, path_ha)
 
 \item{need_vars}{The needed attributes that haven't been acquired yet}
 
-\item{path_ha}{character, the filepath where hydroatlas data.}
+\item{path_ha}{character, the filepath where HydroATLAS data.}
 
 \item{Retr_Params}{list. List of list structure with parameters/paths needed to acquire variables of interest}
 }
