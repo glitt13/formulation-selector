@@ -41,7 +41,7 @@ main <- function(){
   dir_std_base <- glue::glue(base::unlist(io_cfig)[['dir_std_base']])
   dir_db_hydfab <- glue::glue(base::unlist(io_cfig)[['dir_db_hydfab']])
   dir_db_attrs <- glue::glue(base::unlist(io_cfig)[['dir_db_attrs']])
-  
+
   # ------------------------ ATTRIBUTE CONFIGURATION --------------------------- #
   hfab_cfg <- cfig_attr[['hydfab_config']]
   names_hfab_cfg <- unlist(lapply(hfab_cfg, function(x) names(x)))
@@ -98,7 +98,6 @@ main <- function(){
   # Define the standardized path to the geopackage based on the input dataset
   path_save_gpkg <- proc.attr.hydfab::std_path_retr_gpkg_wrap(
     dir_std_base = Retr_Params$paths$dir_std_base,ds = Retr_Params$datasets[[1]])
-<<<<<<< HEAD
 
   seq_nums <- c(seq(from=1,nrow(df),390),nrow(df))[-1]
   for(seq_num in seq_nums){
