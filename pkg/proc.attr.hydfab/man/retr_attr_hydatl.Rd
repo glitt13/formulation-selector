@@ -2,7 +2,7 @@
 % Please edit documentation in R/proc_attr_grabber.R
 \name{retr_attr_hydatl}
 \alias{retr_attr_hydatl}
-\title{Retrieve hydroatlas variables}
+\title{Retrieve HydroATLAS variables}
 \usage{
 retr_attr_hydatl(
   hf_ids,
@@ -16,15 +16,18 @@ retr_attr_hydatl(
 \item{hf_ids}{character or numeric, vector or atomic. The hydrofabric ids}
 
 \item{path_ha}{character. full path to the local parquet or s3 bucket's
-parquet holding the hydroatlas data as formatted for the hydrofabric.}
+parquet holding the HydroATLAS data as formatted for the hydrofabric.}
 
-\item{ha_vars}{list of characters. The variables of interest in the hydroatlas v1}
+\item{ha_vars}{list of characters. The variables of interest in the HydroATLAS v1}
 
 \item{hf_id_col}{Custom column name for hydrofabric id unique identifier}
 
 \item{s3_ha}{character. The s3 path containing original
-hydroatlas-hydrofabric dataset.}
+HydroATLAS-hydrofabric dataset.}
 }
 \description{
 retrieves hydrofabric variables from s3 bucket or a local file
+}
+\seealso{
+\link[proc.attr.hydfab]{retr_attr_hydatl_wrap}
 }

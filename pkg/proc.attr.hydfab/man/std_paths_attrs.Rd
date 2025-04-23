@@ -2,7 +2,7 @@
 % Please edit documentation in R/proc_hydatl_hydfab.R
 \name{std_paths_attrs}
 \alias{std_paths_attrs}
-\title{standardize path to the hydroatlas attributes corresponding to
+\title{standardize path to the HydroATLAS attributes corresponding to
 each hydrofabric divide, saved as a csv}
 \usage{
 std_paths_attrs(dir_base_hfab, vpu)
@@ -13,6 +13,6 @@ std_paths_attrs(dir_base_hfab, vpu)
 \item{vpu}{the hydrofabric vpu of interest (e.g. \code{'ak'} or \code{'prvi'})}
 }
 \description{
-standardize path to the hydroatlas attributes corresponding to
+standardize path to the HydroATLAS attributes corresponding to
 each hydrofabric divide, saved as a csv
 }
