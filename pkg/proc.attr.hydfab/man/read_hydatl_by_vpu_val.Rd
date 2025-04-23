@@ -2,7 +2,7 @@
 % Please edit documentation in R/proc_hydatl_hydfab.R
 \name{read_hydatl_by_vpu_val}
 \alias{read_hydatl_by_vpu_val}
-\title{Collection of functions for processing hydrofabric data with hydroatlas data}
+\title{Collection of functions for processing hydrofabric data with HydroATLAS data}
 \usage{
 read_hydatl_by_vpu_val(vpu, dir_base_hydatl)
 }
@@ -11,14 +11,16 @@ read_hydatl_by_vpu_val(vpu, dir_base_hydatl)
 }
 \description{
 These are not fully formalized functions! Serving a quick-and-dirty
-geospatial processing need that maps hydroatlas attributes to OCONUS
+geospatial processing need that maps HydroATLAS attributes to OCONUS
 hydrofabrics locations across AK and PR
 
-Define Paths to hydroatlas data downloaded from hydroatlas website
+Define Paths to HydroATLAS data downloaded from HydroATLAS website
 based on the hydrofabric vpu identifiers. Make geometries valid.
 }
 \details{
-Functions that are internal to proc.attr.hydfab, not intended for general use
+Functions that are internal to proc.attr.hydfab,
+not intended for general use
+intended to run very infrequently - only when HydroATLAS or hydrofabric datasets change
 }
 \seealso{
 proc.attr.hydfab/flow/prep_oconus_hydroatlas.R, the script that calls these functions

@@ -2,7 +2,7 @@
 % Please edit documentation in R/proc_hydatl_hydfab.R
 \name{subset_hydatl_by_hydfab}
 \alias{subset_hydatl_by_hydfab}
-\title{Subset the hydroatlas data to a buffered hydrofabric extent}
+\title{Subset the HydroATLAS data to a buffered hydrofabric extent}
 \usage{
 subset_hydatl_by_hydfab(div_hfab_val, hab_shp_val, buff_dist = 50000)
 }
@@ -10,12 +10,12 @@ subset_hydatl_by_hydfab(div_hfab_val, hab_shp_val, buff_dist = 50000)
 \item{div_hfab_val}{validated hydrofabric divides of interest.
 Presumed to be the smaller spatial extent, sf object}
 
-\item{hab_shp_val}{validated hydroatlas basin.
+\item{hab_shp_val}{validated HydroATLAS basin.
 Presumed to be the larger spatial extent, sf object}
 
 \item{buff_dist}{The distance for a buffer around the hydrofabric to ensure
-full hydroatlas coverage}
+full HydroATLAS coverage}
 }
 \description{
-Subset the hydroatlas data to a buffered hydrofabric extent
+Subset the HydroATLAS data to a buffered hydrofabric extent
 }

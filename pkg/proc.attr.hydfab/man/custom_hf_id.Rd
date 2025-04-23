@@ -2,9 +2,9 @@
 % Please edit documentation in R/proc_hydfab.R
 \name{custom_hf_id}
 \alias{custom_hf_id}
-\title{Build a custom hydrofabric id that is unique to place}
+\title{Build a custom hydrofabric id that is unique to place across all domains}
 \usage{
-custom_hf_id(df, col_vpu = "vpu", col_id = "id")
+custom_hf_id(df, col_vpu = "vpu", col_id = "divide_id")
 }
 \arguments{
 \item{df}{The dataframe for a specific location corresponding to the}
@@ -12,8 +12,9 @@ custom_hf_id(df, col_vpu = "vpu", col_id = "id")
 \item{col_vpu}{The column in df representing the vpu}
 
 \item{col_id}{The column in df representing the hydrofabric id
-hydrofabric 'network'}
+hydrofabric 'network'. Default 'divide_id' e.g. cat-447 avoids the
+common possibility of NA values in the 'id' column}
 }
 \description{
-Build a custom hydrofabric id that is unique to place
+Build a custom hydrofabric id that is unique to place across all domains
 }
