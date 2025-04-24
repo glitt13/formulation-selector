@@ -8,7 +8,7 @@ setup(
     include_package_data=True,
     package_data={'' : ['./data/*.yaml']},
     name="fs_prep",
-    version="0.1.5",
+    version="0.1.4",
     author="Guy Litt, Ben Choat, Lauren Bolotin",
     author_email="guy.litt@noaa.gov",
     description="A simple package for processing data in the formulation selection decision support tool",
