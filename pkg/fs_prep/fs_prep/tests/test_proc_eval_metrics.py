@@ -3,7 +3,7 @@ Unit tests for the fs_prep package
 
 example::
 > cd /path/to/fs_prep/fs_prep/tests/
-> python -m unittest test_proc_eval_metrics.py
+> python -m unittest test_proc_eval
 or if interested in unit testing coverage:
 > python -m coverage run -m unittest
 > python -m coverage report 
