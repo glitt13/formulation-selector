@@ -67,7 +67,7 @@ main <- function(){
     # name includes 'path'. Same for directory having variable name with 'dir'
     dir_db_hydfab=dir_db_hydfab,
     dir_db_attrs=dir_db_attrs,
-    s3_path_hydatl = s3_path_hydatl,
+    paths_ha = s3_path_hydatl,
     dir_std_base = dir_std_base,
     path_meta=path_meta),
     vars = vars_ls,

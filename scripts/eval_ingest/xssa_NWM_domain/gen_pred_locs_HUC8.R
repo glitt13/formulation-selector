@@ -60,7 +60,7 @@ Retr_Params <- list(paths = list(# Note that if a path is provided, ensure the
   # name includes 'path'. Same for directory having variable name with 'dir'
   dir_db_hydfab=dir_db_hydfab,
   dir_db_attrs=dir_db_attrs,
-  s3_path_hydatl = s3_path_hydatl,
+  paths_ha = s3_path_hydatl,
   dir_std_base = dir_std_base,
   path_meta=path_meta),
   vars = vars_ls,
@@ -84,14 +84,14 @@ comids <- unique(highest_hs$hf_id)
 # For some reason, running the following got this working
 library(future)
 library(future.apply)
-dt_site_feat <- proc_attr_mlti_wrap(comids = comids, Retr_Params = Retr_Params, 
+dt_site_feat <- proc_attr_mlti_wrap(comids = comids, Retr_Params = Retr_Params,
                     lyrs = "network", overwrite = FALSE)
 # Run this^^, run attribute transformation, and then run it again???
 
 
 for(ds in datasets){
   path_nldi_out <- glue::glue(path_meta)
-  
+
   proc.attr.hydfab::write_meta_nldi_feat(dt_site_feat=dt_site_feat,
                                          path_meta = path_nldi_out)
 }
