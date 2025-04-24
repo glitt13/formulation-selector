@@ -52,7 +52,7 @@ usgs_vars <- c('TOT_TWI','TOT_PRSNOW')#,'TOT_POPDENS90','TOT_EWT','TOT_RECHG')
 
 Retr_Params <- list(paths = list(dir_db_hydfab=dir_db_hydfab,
                                  dir_db_attrs=dir_db_attrs,
-                                 s3_path_hydatl = s3_path_hydatl,
+                                 path_ha = s3_path_hydatl,
                                  dir_std_base = dir_user,
                                  path_meta=path_meta),
                     vars = list(usgs_vars = usgs_vars,
@@ -164,7 +164,7 @@ testthat::test_that("retr_attr_new",{
   need_vars <- list(usgs_vars = c("CAT_TWI","CAT_BFI"))
 
   rslt <- proc.attr.hydfab::retr_attr_new(locids = comids, need_vars=need_vars,
-                                          paths_ha = Retr_Params$paths$s3_path_hydatl)
+                                          paths_ha = Retr_Params$paths$path_ha)
 
   testthat::expect_contains(rslt[['usgs_nhdplus__v2']]$featureID,comids)
   testthat::expect_contains(rslt[['usgs_nhdplus__v2']]$attribute,need_vars$usgs_vars)
@@ -179,7 +179,7 @@ testthat::test_that("check_miss_attrs_comid_io",{
   Retr_Params_pkg <- Retr_Params
   Retr_Params_pkg$paths$dir_db_attrs <- dir_db_attrs_pkg
   dt_all <- proc.attr.hydfab::retr_attr_new(locids = comids, need_vars=need_vars,
-                                            paths_ha = Retr_Params_pkg$paths$s3_path_hydatl)[['usgs_nhdplus__v2']]
+                                            paths_ha = Retr_Params_pkg$paths$path_ha)[['usgs_nhdplus__v2']]
   # Add in an extra usgs var that wasn't retrieved, TOT_ELEV_MAX
   attr_vars <- list(usgs_vars = c("TOT_TWI","TOT_PRSNOW","TOT_ELEV_MAX"))
   rslt <- testthat::capture_warning(proc.attr.hydfab::check_miss_attrs_comid_io(dt_all,
@@ -601,7 +601,7 @@ testthat::test_that("grab_attrs_datasets_fs_wrap", {
 testthat::test_that("retr_attr_hydatl", {
   ha_vars <- c("pet_mm_s01","cly_pc_sav","cly_pc_uav")
   exp_dat_ha <- readRDS(system.file("extdata", paste0("ha_18094981.Rds"), package="proc.attr.hydfab"))
-  ha <- proc.attr.hydfab::retr_attr_hydatl(comid,s3_path_hydatl,
+  ha <- proc.attr.hydfab::retr_attr_hydatl(comid,path_ha=s3_path_hydatl,
                                            ha_vars=ha_vars)
   # saveRDS(ha,paste0("~/git/fsds/pkg/proc.attr.hydfab/inst/extdata/ha_",comid,".Rds"))
   # Wide data expected
@@ -609,14 +609,14 @@ testthat::test_that("retr_attr_hydatl", {
 
   # Run with a list of comids:
   mlti_comids <- base::c(comid,1022566,1702414)
-  ha_mlti <- proc.attr.hydfab::retr_attr_hydatl(hf_ids=mlti_comids,s3_path_hydatl,
+  ha_mlti <- proc.attr.hydfab::retr_attr_hydatl(hf_ids=mlti_comids,path_ha=s3_path_hydatl,
                                                 ha_vars=ha_vars)
   testthat::expect_equal(base::length(mlti_comids),base::nrow(ha_mlti))
   testthat::expect_true(base::all(ha_vars %in% base::colnames(ha_mlti)))
 
   # Run this with a bad s3 bucket
   testthat::expect_error(proc.attr.hydfab::retr_attr_hydatl(comid="18094981",
-                                                          s3_path_hydatl ='https://s3.notabucket',
+                                                          path_ha ='https://s3.notabucket',
                                                           ha_vars = Retr_Params$vars$ha_vars))
 
 
