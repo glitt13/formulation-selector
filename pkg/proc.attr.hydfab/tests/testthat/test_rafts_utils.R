@@ -48,7 +48,7 @@ usgs_vars <- c('TOT_TWI','TOT_PRSNOW')#,'TOT_POPDENS90','TOT_EWT','TOT_RECHG')
 
 Retr_Params <- list(paths = list(dir_db_hydfab=dir_db_hydfab,
                                  dir_db_attrs=dir_db_attrs,
-                                 s3_path_hydatl = s3_path_hydatl,
+                                 paths_ha = s3_path_hydatl,
                                  dir_std_base = dir_user,
                                  path_meta=path_meta),
                     vars = list(usgs_vars = usgs_vars,

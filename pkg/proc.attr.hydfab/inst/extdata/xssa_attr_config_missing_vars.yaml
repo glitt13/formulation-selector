@@ -40,7 +40,8 @@ hydfab_config: # Required section describing hydrofabric connection details and 
    - 'network'
  - source: "s3://lynker-spatial/hydrofabric"
 attr_select: # The names of variable sublistings are standardized with _vars, e.g. ha_vars, usgs_vars, sc_vars
-  - 's3_path_hydatl': '{s3_base}/hydroATLAS/hydroatlas_vars.parquet' # path to hydroatlas data formatted for hydrofabric. Required only if hydroatlas variables desired.
+  - paths_ha: # Paths to tabular HydroATLAS variables downscaled to hydrofabric divide
+    - '{s3_base}/hydroATLAS/hydroatlas_vars.parquet' # path to hydroatlas data formatted for hydrofabric. Required only if hydroatlas variables desired.
   - 'ha_vars':  # hydroatlas variables. Must specify s3_path_hydatl if desired.
     - 'pet_mm_s01'
     - 'cly_pc_sav'

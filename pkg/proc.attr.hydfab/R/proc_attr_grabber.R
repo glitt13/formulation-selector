@@ -75,11 +75,12 @@ attr_cfig_parse <- function(path_attr_config){
   s3_base <- base::unlist(raw_config$hydfab_config)[['s3_base']]#s3://lynker-spatial/tabular-resources" # s3 path containing hydrofabric-formatted attribute datasets
   s3_bucket <- base::unlist(raw_config$hydfab_config)[['s3_bucket']] #'lynker-spatial' # s3 bucket containing hydrofabric data
 
-  # s3 path to HydroATLAS data formatted for hydrofabric (may also be a local path)
-  if ("s3_path_hydatl" %in% names(base::unlist(raw_config$attr_select))){
-    s3_path_hydatl <- glue::glue(base::unlist(raw_config$attr_select)[['s3_path_hydatl']])  # glue::glue('{s3_base}/hydroATLAS/hydroatlas_vars.parquet')
+  # Path(s) to HydroATLAS data downscaled to hydrofabric (may be local &/or s3 paths)
+  if(base::any(base::grepl("paths_ha", names(base::unlist(raw_config$attr_select))))){
+    idxs_paths_ha <- grep("paths_ha",names(base::unlist(raw_config$attr_select)))
+    paths_ha <- base::unlist(raw_config$attr_select)[idxs_paths_ha] %>% unname()
   } else {
-    s3_path_hydatl <- NULL
+    paths_ha <- NULL
   }
 
   # Additional config options
@@ -139,7 +140,7 @@ attr_cfig_parse <- function(path_attr_config){
     # name includes 'path'. Same for directory having variable name with 'dir'
     dir_db_hydfab=dir_db_hydfab,
     dir_db_attrs=dir_db_attrs,
-    s3_path_hydatl = s3_path_hydatl,
+    paths_ha = paths_ha,
     dir_std_base = dir_std_base,
     home_dir = home_dir,
     path_meta = path_meta),
@@ -313,6 +314,8 @@ retr_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
   #' @seealso \link[proc.attr.hydfab]{retr_attr_hydatl}
   #' @seealso \link[proc.attr.hydfab]{custom_hf_id} for a custom hydrofabric ID with vpu in the identifier
   #' @export
+  #'
+
   ls_dat_ha <- list()
   ctr <- 0
   for(path_ha in paths_ha){
@@ -987,7 +990,7 @@ retr_attr_new <- function(locids,need_vars,paths_ha){
   #' @title Retrieve new attributes that haven't been acquired yet
   #' @param locids The list of of the comid or hydrofabric unique location identifier
   #' @param need_vars The needed attributes that haven't been acquired yet
-  #' @param path_ha character, the filepath where HydroATLAS data.
+  #' @param paths_ha vector, the filepath(s) to HydroATLAS data downscaled to Hydrofabric, in tabular form
   #' @param Retr_Params list. List of list structure with parameters/paths needed to acquire variables of interest
   #' @seealso \link[proc.attr.hydfab]{proc_attr_wrap}
   #' @seealso \link[proc.attr.hydfab]{proc_attr_mlti_wrap}
@@ -1004,7 +1007,8 @@ retr_attr_new <- function(locids,need_vars,paths_ha){
         hf_ids = locids,
         paths_ha=paths_ha,
         ha_vars=need_vars$ha_vars)
-
+    # NOTE proc.attr.hydfab::std_feat_id is called inside retr_attr_hydatl_wrap
+    #. And does not need to be called here
     attr_data[['hydroatlas__v1']] <- dt_hydatl
 
   }
@@ -1018,17 +1022,16 @@ retr_attr_new <- function(locids,need_vars,paths_ha){
     # Standardize into featureSource and featureID columns
     df_nhd_std <- proc.attr.hydfab::std_feat_id(df=df_nhd,col_featureID="COMID")
     attr_data[['usgs_nhdplus__v2']] <- df_nhd_std
-
   }
 
   ########## May add more data sources here and append to attr_data ###########
 
   # ----------- dataset standardization ------------ #
-  # TODO mar25 CHANGE THIS!!! We don't want COMID as a column
   if (!base::all(base::unlist(( # A qa/qc check
     base::lapply(attr_data, function(x)
-      base::any(base::grepl("COMID", base::colnames(x)))))))){
-    stop("Expecting 'COMID' as a column name identifier in every dataset")
+      base::any(base::grepl("featureID", base::colnames(x)))
+      ))))){
+    stop("Expecting 'featureID' as a column name identifier in every dataset")
   }
 
   # Convert from wide to long format
@@ -1190,7 +1193,7 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
     ls_attr_data[['new_comid']] <- proc.attr.hydfab::retr_attr_new(
                                           locids=comids_attrs_need,
                                           need_vars=Retr_Params$vars,
-                                          paths_ha=Retr_Params$paths$s3_path_hydatl)
+                                          paths_ha=Retr_Params$paths$paths_ha)
     # Compile all locations into a single datatable
     dt_new_dat <- data.table::rbindlist(ls_attr_data[['new_comid']],
                                         use.names = TRUE,fill=TRUE)
@@ -1390,7 +1393,7 @@ proc_attr_wrap <- function(comid, Retr_Params, lyrs='network',overwrite=FALSE,hf
   # if (('ha_vars' %in% base::names(need_vars)) &&
   #     (base::all(!base::is.na(need_vars$ha_vars)))){
   #   # Hydroatlas variable query; list name formatted as {dataset_name}__v{version_number}
-  #   attr_data[['hydroatlas__v1']] <- proc.attr.hydfab::retr_attr_hydatl(path_ha=Retr_Params$paths$s3_path_hydatl,
+  #   attr_data[['hydroatlas__v1']] <- proc.attr.hydfab::retr_attr_hydatl(path_ha=Retr_Params$paths$paths_ha,
   #                                         hf_id=net$hf_id,
   #                                         ha_vars=need_vars$ha_vars) %>%
   #                               # ensures 'COMID' exists as colname
@@ -1403,7 +1406,7 @@ proc_attr_wrap <- function(comid, Retr_Params, lyrs='network',overwrite=FALSE,hf
   #                                                               usgs_vars=need_vars$usgs_vars)
   # }
   attr_data <- proc.attr.hydfab::retr_attr_new(locids=net$hf_id,need_vars=need_vars,
-                             paths_ha=Retr_Params$paths$s3_path_hydatl)
+                             paths_ha=Retr_Params$paths$paths_ha)
 
   ########## May add more data sources here and append to attr_data ###########
   # ----------- dataset standardization ------------ #
@@ -1633,7 +1636,7 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
   #'  \item \code{paths} list of directories or paths used to acquire and save data These include the following:
   #'  \item \code{paths$dir_db_hydfab} the local path to where hydrofabric data are saved
   #'  \item \code{path$dir_db_attrs} local path for saving catchment attributes as parquet files
-  #'  \item \code{path$s3_path_hydatl} the s3 location where hydroatlas data exist
+  #'  \item \code{path$paths_ha} the local or s3 location(s) of tabular data file with HydroATLAS downscaled to hydrofabric divide
   #'  \item \code{path$dir_std_base} the location of user_data_std containing dataset that were standardized by \pkg{fs_prep}.
   #'  \item \code{datasets} character vector. A list of datasets of interest inside \code{paths$dir_std_base}. Not used in \code{proc_attr_gageids}
   #'  }
@@ -1826,7 +1829,7 @@ grab_attrs_datasets_fs_wrap <- function(Retr_Params,lyrs="network",overwrite=FAL
   #'  \item \code{paths} list of directories or paths used to acquire and save data These include the following:
   #'  \item \code{paths$dir_db_hydfab} the local path to where hydrofabric data are saved
   #'  \item \code{path$dir_db_attrs} local path for saving catchment attributes as parquet files
-  #'  \item \code{path$s3_path_hydatl} the s3 location where hydroatlas data exist
+  #'  \item \code{path$path_ha} the local or s3 location(s) of tabular data file with HydroATLAS downscaled to hydrofabric divide
   #'  \item \code{path$dir_std_base} the location of user_data_std containing dataset that were standardized by \pkg{fs_prep}.
   #'  \item \code{datasets} character vector. A list of datasets of interest inside \code{paths$dir_std_base}. If 'all' is specified, then all datasets in the directory are processed.
   #'  \item \code{ds_type} character. The identifier to use in filename when writing attribute location metadata retrieved from nhdplusTools::get_nldi_feature()
