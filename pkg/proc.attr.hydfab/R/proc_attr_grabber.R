@@ -594,30 +594,30 @@ std_dir_dataset <- function(dir_std_base, ds,mkdir=FALSE){
   }
   return(dir_dataset)
 }
-std_path_retr_gpkg <- function(path_fs_proc){
+std_path_retr_gpkg <- function(path_fs_prep){
   #' @title Create the standardized gpkg path for coordinate data & id mapping
   #'. corresponding to the standardized input data
   #' @details The python companion function is
-  #'. `fs_algo.fs_algo_train_eval._std_fs_proc_ds_companion_gpkg_path`
-  #' @param path_fs_proc Path used for the standardized dataset created using
-  #' [`fs_proc.proc_eval_metrics.proc_col_schema`]
-  #' @seealso `fs_algo.fs_algo_train_eval._std_fs_proc_ds_companion_gpkg_path`
+  #'. `fs_algo.fs_algo_train_eval._std_fs_prep_ds_companion_gpkg_path`
+  #' @param path_fs_prep Path used for the standardized dataset created using
+  #' [`fs_prep.proc_eval_metrics.proc_col_schema`]
+  #' @seealso `fs_algo.fs_algo_train_eval._std_fs_pre[_ds_companion_gpkg_path`
   #' @seealso  \link[proc.attr.hydfab]{read_fs_retr_gpkg}
   #' @seealso \link[proc.attr.hydfab]{std_dir_dataset}
   #' @export
-  path_fs_proc <- fs::path(path_fs_proc)
-  sub_name_loc <- fs::path_ext_remove(path_fs_proc)
+  path_fs_prep <- fs::path(path_fs_prep)
+  sub_name_loc <- fs::path_ext_remove(path_fs_prep)
   new_name_loc <- base::paste0(fs::path_file(sub_name_loc), "_loc")
   new_name_gpkg <- fs::path_ext_set(new_name_loc, "gpkg")
   # Create the new path with the updated name
-  path_gpkg_fs_proc <- fs::path(fs::path_dir(path_fs_proc), new_name_gpkg)
-  return(path_gpkg_fs_proc)
+  path_gpkg_fs_prep <- fs::path(fs::path_dir(path_fs_prep), new_name_gpkg)
+  return(path_gpkg_fs_prep)
 }
 
 std_path_retr_gpkg_wrap <- function(dir_std_base,ds){
   #' @title Wrapper to create the standardized geopackage path for coordinate
   #'. data and id mapping corresponding to the standardized input data from
-  #' the `fs_proc` python processing steps
+  #' the `fs_prep` python processing steps
   #' @description Given the standardized base directory and the dataset name,
   #' generate the standardized geopackage
   #' @details These same steps happen inside \code{grab_attrs_datasets_fs_wrap}
@@ -626,7 +626,7 @@ std_path_retr_gpkg_wrap <- function(dir_std_base,ds){
   #' @export
 
   dir_dataset <- proc.attr.hydfab::std_dir_dataset(dir_std_base,ds)
-  # Retrieve path_dat_in from fs_proc standardized output
+  # Retrieve path_dat_in from fs_prep standardized output
   fs_path <- proc.attr.hydfab::proc_attr_read_gage_ids_fs(dir_dataset)$path_dat_in
   path_save_gpkg <- proc.attr.hydfab:::std_path_retr_gpkg(fs_path)
   return(path_save_gpkg)
@@ -1103,7 +1103,7 @@ fs_retr_nhdp_comids_geom <- function(gage_ids,featureSource='nwissite',
     if('try-error' %in% base::class(site_feature)){
       stop(glue::glue("The following nldi features didn't work. You may need to
                  revisit the configuration yaml file that processes this dataset in
-                fs_proc: \n {featureSource}, and featureID={featureID}"))
+                fs_prep: \n {featureSource}, and featureID={featureID}"))
     } else if (base::is.null(site_feature)){
       if(nldi_feat$featureSource=="nwissite"){
         # Try manual api retrieval specific for nwissite (USGS-{gage_id})
@@ -2151,8 +2151,8 @@ std_path_dataset <- function(dir_dataset, ds_filenames = ''){
   #' @export
   # Changelog/contributions
   #. 2025-02-21 Refactored from proc_attr_read_gage_ids_fs
-  # ----  Read in a standard format filename and file type from fs_proc ---- #
-  # TODO make this more adaptable so that it doesn't depend on running python fs_proc beforehand
+  # ----  Read in a standard format filename and file type from fs_prep ---- #
+  # TODO make this more adaptable so that it doesn't depend on running python fs_prep beforehand
   dir_ds <- base::file.path(dir_dataset)
   files_ds <- base::list.files(dir_ds)
   fns <- base::lapply(ds_filenames,
@@ -2168,7 +2168,7 @@ std_path_dataset <- function(dir_dataset, ds_filenames = ''){
     print(paste0("The following contents inside \n",dir_ds,
                  "\n do not match expected format:\n", paste0(fns, collapse = ", ")))
     stop("Create a different file format reader here that generates everything in the return list.")
-    # TODO make this more adaptable so that it doesn't depend on running python fs_proc beforehand
+    # TODO make this more adaptable so that it doesn't depend on running python fs_prep beforehand
     # Idea: e.g. read in user-defined gage_id data as a .csv
     # Idea: read in gage_id data inside a non-standard netcdf file, then define featureSource and featureID from a separate yaml file
   }
@@ -2177,7 +2177,7 @@ std_path_dataset <- function(dir_dataset, ds_filenames = ''){
 
 proc_attr_read_gage_ids_fs <- function(dir_dataset, ds_filenames=''){
   #' @title Read in standardized formulation-selector gage_id location identifiers
-  #' @description Reads output generated using \pkg{fs_proc} python package and
+  #' @description Reads output generated using \pkg{fs_prep} python package and
   #' selects the gage_id location identifier(s) and the
   #' featureSource & featureID that correspond to the gage_id
   #' @param dir_dataset directory path to the dataset
@@ -2193,7 +2193,7 @@ proc_attr_read_gage_ids_fs <- function(dir_dataset, ds_filenames=''){
   #  2024-07-29 Originally created, GL
   #. 2025-02-21 Refactor with std_path_dataset
   #. 2025-03-07 Add path_dat_in as additional return object
-  # ----  Read in a standard format filename and file type from fs_proc ---- #
+  # ----  Read in a standard format filename and file type from fs_prep ---- #
   path_dat_in <- proc.attr.hydfab:::std_path_dataset(dir_dataset, ds_filenames)
   # Read the netcdf
   nc <- ncdf4::nc_open(path_dat_in)
@@ -2235,7 +2235,7 @@ grab_attrs_datasets_fs_wrap <- function(Retr_Params,lyrs="network",overwrite=FAL
   #' comid/gage_id/coords. Default NULL means that the path is automated based
   #' on the standardized input dataset location \link[proc.attr.hydfab]{std_path_retr_gpkg}
   #' @details Runs two proc.attr.hydfab functions:
-  #'  \link[proc.attr.hydfab]{proc_attr_read_gage_ids_fs} - retrieves the gage_ids generated by \pkg{fs_proc}
+  #'  \link[proc.attr.hydfab]{proc_attr_read_gage_ids_fs} - retrieves the gage_ids generated by \pkg{fs_prep}
   #'  \link[proc.attr.hydfab]{proc_attr_gageids} - retrieves the attributes for all provided gage_ids
   #'
   #' @export
@@ -2266,10 +2266,6 @@ grab_attrs_datasets_fs_wrap <- function(Retr_Params,lyrs="network",overwrite=FAL
   ls_sitefeat_all <- base::list()
   for(ds in datasets){ # Looping by dataset
     message(glue::glue("--- PROCESSING {ds} DATASET ---"))
-
-    dir_dataset <- proc.attr.hydfab::std_dir_dataset(Retr_Params$paths$dir_std_base,ds)
-
-    dir_dataset <- proc.attr.hydfab::std_dir_dataset(Retr_Params$paths$dir_std_base,ds)
 
     dir_dataset <- proc.attr.hydfab::std_dir_dataset(Retr_Params$paths$dir_std_base,ds)
 
