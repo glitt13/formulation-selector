@@ -289,25 +289,37 @@ proc_attr_std_hfsub_name <- function(comid,custom_name='', fileext='gpkg'){
   return(hfsub_fn)
 }
 
-# TODO accommodate multiple id locations:
-ha_vars <- c("ari_ix_sav","cly_pc_sav","snw_pc_uyr")
-hf_ids <- base::c("ak-wb-15164", NA,"hi-wb-2629","hi-wb-1365","prvi-wb-752",9250320)
-hf_ids <- c(1022566, 1702414)
 
 retr_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
-                                  hf_id_cols = c("hf_uid","hf_id","id")){
+                                  hf_id_cols = c("hf_uid","hf_id","id"),
+                                  colname_featID = "hf_uid"){
   #' @title Process HydroATLAS attributes wrapper
+  #' @description Finds the attributes from a variety of HydroATLAS files, and
+  #' allows different location identifiers. Specifically, CONUS hydrofabric
+  #' locations use the comid in the 'id' column, whereas the oCONUS hydrofabric
+  #' locations may be a custom identifier hf_uid to distinguish between different
+  #' vpus such as AK and PRVI.
   #' @param hf_id_cols Possible hydrofabric id columns, *listed in priority*, meaning
   #' the `'hf_uid'` is the most important column to find, and if that is not
   #' present, move on to the `'hf_id'` and finally to `'id'`
+  #' @param paths_ha The local filepaths/s3 paths containing the HydroATLAS
+  #' data downscaled to hydrofabric divides. For more details, refer to
+  #' [hydrofabric data portal](https://www.lynker-spatial.com/data/tabular-resources/hydroATLAS/)
+  #' @param ha_vars They HydroATLAS variables of interest
+  #' @param colname_featID The standard column name for location id in the output datatable
   #' @details The hf_ids may contain 1) a COMID, corresponding to CONUS, &/or
   #' 2) a hydrofabric id for OCONUS
   # We want to make sure the hydrofabric id is a unique id
   #' @seealso \link[proc.attr.hydfab]{retr_attr_hydatl}
+  #' @seealso \link[proc.attr.hydfab]{custom_hf_id} for a custom hydrofabric ID with vpu in the identifier
   #' @export
   ls_dat_ha <- list()
+  ctr <- 0
   for(path_ha in paths_ha){
-
+    ctr <- ctr + 1
+    if(!base::file.exists(path_ha)){
+      stop(glue::glue("The HydroATLAS attributes file does not exist: {path_ha}"))
+    }
     # TODO how do we split the hf_ids into COMIDs and non-COMIDs??
     #.  - attempt retr_attr_hydatl() for each path_ha,generate NA empties, then merge back into the appropriate order?
 
@@ -318,37 +330,81 @@ retr_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
       base::unlist()
     hf_id_col <- hf_id_cols[bool_ids][1] # Use the highest priority id detected
 
-    if (hf_id_col == "hf_uid"){ # Expected to be OCONUS
+    if (hf_id_col == "hf_uid"){ # Expected to be OCONUS per proc.attr.hydfab::custom_hf_id
       # The uid is already created - use it
       dat_ha <- retr_attr_hydatl(hf_ids, path_ha, ha_vars,hf_id_col=hf_id_col)
-        # TODO consider identifying an s3_ha path specific for this one
+      # TODO consider identifying an s3_ha path specific for this one
 
+      # Standardize to the featureID/featureSource format
+      dat_ha <- proc.attr.hydfab::std_feat_id(df=dat_ha,
+                                              name_featureSource ="custom_hf",
+                                              col_featureID = "hf_uid")
     } else if(hf_id_col == "hf_id"){ # Expected to be CONUS
       # The case used for the CONUS hydrofabric ids, which are actually COMIDs
       # DO NOT need to create a custom hydrofabric uid
-      hf_id_num <- as.numeric(hf_ids)[6]
-      dat_ha <- retr_attr_hydatl(hf_id=hf_id_num, path_ha, ha_vars,hf_id_col=hf_id_col)
+      dat_ha <- proc.attr.hydfab::retr_attr_hydatl(hf_id=hf_ids,
+                                  path_ha=path_ha,ha_vars=ha_vars,
+                                  hf_id_col=hf_id_col)
 
+      # Standardize to the featureID/featureSource format
+      dat_ha <- proc.attr.hydfab::std_feat_id(df=dat_ha,
+                                              name_featureSource ="COMID",
+                                              col_featureID = "hf_id")
     } else if(hf_id_col == "id"){
       # TODO add in the standardization hf_uid approach here
       stop("TODO: Add standardization for hf_uid")
       # TODO should we allow 'hf_id' for col_id
       # TODO
 
-      proc.attr.hydfab::custom_hf_id(df, col_vpu = "vpu",col_id = "id")
+      proc.attr.hydfab::custom_hf_id(df=todo_define_here, col_vpu = "vpu",col_id = "id")
       hf_id_col <- "hf_uid"
+
+      # Standardize to the featureID/featureSource format
+      dat_ha <- proc.attr.hydfab::std_feat_id(df=dat_ha,
+                                              name_featureSource ="COMID",
+                                              col_featureID = "hf_id")
+
     } else if (base::is.na(hf_id_col)){
       stop(glue::glue("None of the expected column names present:
         {paste0(hf_id_cols,collapse=', ')}"))
     }
+    # RENAME id column to hf_uid standard:
+    dat_ha <- dat_ha %>% dplyr::rename(!!colname_featID:=!!hf_id_col)
 
 
 
 
 
+    # For rows with all NA values, remove them because those locations may exist
+    #. in a different HydroATLAS dataset path, path_ha (e.g.  CONUS vs oCONUS)
+    tot_na <- base::rowSums(base::is.na(dplyr::select(dat_ha,dplyr::all_of(ha_vars))))
+    idxs_rm <- base::which(tot_na == base::length(ha_vars))
+    if(base::length(idxs_rm)>0){
+      dat_ha <- dat_ha[-idxs_rm,]
+    }
+
+    # Build out standardized list of data.table
+    ls_dat_ha[[ctr]] <- data.table::data.table(dat_ha)
+  } # End loop over all possible hydroatlas dataset locations
+  # Compile all data from all possible HydroATLAS filepaths
+  dt_hydatl <- data.table::rbindlist(ls_dat_ha,fill=TRUE,
+                                     ignore.attr = TRUE,use.names = TRUE)
+
+  if(base::length(hf_ids) > base::nrow(dt_hydatl)){
+    have_ids_char <- dt_hydatl[['hf_uid']] %>% base::as.character()
+    reqd_ids_char <- base::as.character(hf_ids)
+    missing_ids <- reqd_ids_char[which(!reqd_ids_char %in% have_ids_char)]
+    msg_missing_ids <- glue::glue(
+      "The following hydrofabric ids could not be found in the HydroATLAS data:",
+       "\n{paste0(missing_ids,collapse='\n')}")
+    warning(msg_missing_ids)
+    # TODO add write path for missing HydroATLAS ids (should this happen elsewhere?)
+
+    # TODO create reader/writer of missing HydroATLAS ids
+
+    # TODO add write path for missing HydroATLAS variables:
   }
-
-
+  return(dt_hydatl)
 }
 
 
@@ -365,13 +421,12 @@ retr_attr_hydatl <- function(hf_ids, path_ha, ha_vars,hf_id_col=c("hf_uid","hf_i
   #' HydroATLAS-hydrofabric dataset.
   #' @seealso \link[proc.attr.hydfab]{retr_attr_hydatl_wrap}
   #' @export
-  #'
-  #'
   # Reads HydroATLAS variables https://data.hydrosheds.org/file/technical-documentation/HydroATLAS_TechDoc_v10_1.pdf
   #  in a form adapted to the hydrofabric
   # Changelog / contributions
   #. 2024 Originally created, GL
   #. 2025-02-25 fix: don't force numeric hf_ids, allow custom hf_id column name
+  #. 2025-04-24 feat: fill in full tibble with NA based on missing hf_ids
   if(base::grepl("s3",path_ha)){ # Run a check that the bucket connection works
     bucket <- try(arrow::s3_bucket(path_ha),silent=TRUE)
     if('try-error' %in% base::class(bucket)){
@@ -385,26 +440,33 @@ retr_attr_hydatl <- function(hf_ids, path_ha, ha_vars,hf_id_col=c("hf_uid","hf_i
       if(domain == 'conus'){
         path_ha <- s3_ha
       }
-
   } # presumed to be local path location
 
   # Determine whether id should be numeric or character class
-  check_first_val <- arrow::open_dataset(path_ha) %>% select(hf_id_col) %>%
-    head(n=1) %>% collect()
+  check_first_val <- arrow::open_dataset(path_ha) %>%
+    dplyr::select(hf_id_col) %>% utils::head(n=1) %>% dplyr::collect()
   if(base::is.numeric(check_first_val[[hf_id_col]])){
-    hf_ids <- base::as.numeric(hf_ids)
-  } else {
+    hf_ids <- base::as.numeric(hf_ids) %>% # e.g. numeric comids
+      stats::na.omit() %>% base::as.numeric() %>%
+      pkgcond::suppress_warnings(pattern = "NAs introduced by coercion")
+  } else { # e.g. custom hf_uid
     hf_ids <- base::as.character(hf_ids)
   }
-
+  # Retrieve the hydroatlas variables of interest for all comids
   ha <- arrow::open_dataset(path_ha) %>%
       dplyr::filter(!!dplyr::sym(hf_id_col) %in% hf_ids) %>%
       dplyr::select(hf_id_col, dplyr::all_of(ha_vars)) %>%
       dplyr::collect()
 
-  # TODO fill in the full tibble based on the provided hf_ids
-  hf_ids
-
+  # Fill in the full tibble based on the provided hf_ids
+  missing_ids <- base::which(!hf_ids %in% ha[[hf_id_col]])
+  if(base::length(missing_ids)>0){
+    ha_add <- base::data.frame(base::matrix(nrow=base::length(missing_ids),
+                                            ncol=base::ncol(ha)))
+    base::names(ha_add) <- base::names(ha)
+    ha_add[[hf_id_col]] <- hf_ids[missing_ids]
+    ha <- base::rbind(ha,ha_add)
+  }
   return(ha)
 }
 
@@ -921,9 +983,9 @@ std_attr_data_fmt <- function(attr_data){
   return(attr_data_ls)
 }
 
-retr_attr_new <- function(comids,need_vars,path_ha){
+retr_attr_new <- function(locids,need_vars,paths_ha){
   #' @title Retrieve new attributes that haven't been acquired yet
-  #' @param comids The list of of the comid identifier
+  #' @param locids The list of of the comid or hydrofabric unique location identifier
   #' @param need_vars The needed attributes that haven't been acquired yet
   #' @param path_ha character, the filepath where HydroATLAS data.
   #' @param Retr_Params list. List of list structure with parameters/paths needed to acquire variables of interest
@@ -938,19 +1000,12 @@ retr_attr_new <- function(comids,need_vars,path_ha){
   if (('ha_vars' %in% base::names(need_vars)) &&
       (base::all(!base::is.na(need_vars$ha_vars)))){
     # Hydroatlas variable query; list name formatted as {dataset_name}__v{ver_num}
-    attr_data[['hydroatlas__v1']] <- proc.attr.hydfab::retr_attr_hydatl(
-        path_ha=path_ha,
-        hf_id=comids,
+    dt_hydatl <- proc.attr.hydfab::retr_attr_hydatl_wrap(
+        hf_ids = locids,
+        paths_ha=paths_ha,
         ha_vars=need_vars$ha_vars)
 
-    # TODO handle the COMID thing
-      # ensures 'COMID' exists as colname
-      #dplyr::rename("COMID" = "hf_id")
-    # Standardize into featureSource and featureID columns
-    df_hydatl_std <- proc.attr.hydfab::std_feat_id(df=df_hydatl,
-                                  name_featureSource)
-
-    attr_data[['hydroatlas__v1']] <- df_hydatl_std
+    attr_data[['hydroatlas__v1']] <- dt_hydatl
 
   }
 
@@ -958,7 +1013,7 @@ retr_attr_new <- function(comids,need_vars,path_ha){
   if( (base::any(base::grepl("usgs_vars", base::names(need_vars)))) &&
       (base::all(!base::is.na(need_vars$usgs_vars))) ){
     # USGS nhdplusv2 query; list name formatted as {dataset_name}__v{ver_number}
-    df_nhd <- proc.attr.hydfab::proc_attr_usgs_nhd(comid=comids,
+    df_nhd <- proc.attr.hydfab::proc_attr_usgs_nhd(comid=locids,
                               usgs_vars=need_vars$usgs_vars)
     # Standardize into featureSource and featureID columns
     df_nhd_std <- proc.attr.hydfab::std_feat_id(df=df_nhd,col_featureID="COMID")
@@ -1133,9 +1188,9 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
     # We'll need all variables for these new locations that don't have data
     # Grab all the attribute data for these comids that don't exist yet
     ls_attr_data[['new_comid']] <- proc.attr.hydfab::retr_attr_new(
-                                          comids=comids_attrs_need,
+                                          locids=comids_attrs_need,
                                           need_vars=Retr_Params$vars,
-                                          path_ha=Retr_Params$paths$s3_path_hydatl)
+                                          paths_ha=Retr_Params$paths$s3_path_hydatl)
     # Compile all locations into a single datatable
     dt_new_dat <- data.table::rbindlist(ls_attr_data[['new_comid']],
                                         use.names = TRUE,fill=TRUE)
@@ -1347,8 +1402,8 @@ proc_attr_wrap <- function(comid, Retr_Params, lyrs='network',overwrite=FALSE,hf
   #   attr_data[['usgs_nhdplus__v2']] <- proc.attr.hydfab::proc_attr_usgs_nhd(comid=net$hf_id,
   #                                                               usgs_vars=need_vars$usgs_vars)
   # }
-  attr_data <- proc.attr.hydfab::retr_attr_new(comids=net$hf_id,need_vars=need_vars,
-                             path_ha=Retr_Params$paths$s3_path_hydatl)
+  attr_data <- proc.attr.hydfab::retr_attr_new(locids=net$hf_id,need_vars=need_vars,
+                             paths_ha=Retr_Params$paths$s3_path_hydatl)
 
   ########## May add more data sources here and append to attr_data ###########
   # ----------- dataset standardization ------------ #
