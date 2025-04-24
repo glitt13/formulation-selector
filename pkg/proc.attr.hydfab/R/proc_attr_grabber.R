@@ -314,8 +314,6 @@ retr_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
   #' @seealso \link[proc.attr.hydfab]{retr_attr_hydatl}
   #' @seealso \link[proc.attr.hydfab]{custom_hf_id} for a custom hydrofabric ID with vpu in the identifier
   #' @export
-  #'
-
   ls_dat_ha <- list()
   ctr <- 0
   for(path_ha in paths_ha){
@@ -348,6 +346,7 @@ retr_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
       dat_ha <- proc.attr.hydfab::retr_attr_hydatl(hf_id=hf_ids,
                                   path_ha=path_ha,ha_vars=ha_vars,
                                   hf_id_col=hf_id_col)
+
       # Standardize to the featureID/featureSource format
       dat_ha <- proc.attr.hydfab::std_feat_id(df=dat_ha,
                                               name_featureSource ="COMID",
@@ -1225,7 +1224,6 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
                                                 locids=comids_attrs_still_need,
                                                  need_vars=still_need_vars,
                                                  paths_ha=Retr_Params$paths$paths_ha)
-
     dt_prexst_dat <- data.table::rbindlist(ls_attr_data[['pre-exist']],
                                            use.names = TRUE,fill=TRUE )
 
