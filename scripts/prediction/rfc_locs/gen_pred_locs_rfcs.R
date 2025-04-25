@@ -32,15 +32,8 @@ main <- function(){
   write_type <- base::unlist(cfig_pred)[['write_type']]
   path_meta <- base::unlist(cfig_pred)[['path_meta']] # The filepath of the file that generates the list of comids used for prediction
   # READ IN ATTRIBUTE CONFIG FILE
-  path_attr_config <- glue::glue(cfig_pred[['path_attr_config']])
-  cfig_attr <- yaml::read_yaml(path_attr_config)
-
-  # Defining directory paths as early as possible:
-  io_cfig <- cfig_attr[['file_io']]
-  dir_base <- glue::glue(base::unlist(io_cfig)[['dir_base']])
-  dir_std_base <- glue::glue(base::unlist(io_cfig)[['dir_std_base']])
-  dir_db_hydfab <- glue::glue(base::unlist(io_cfig)[['dir_db_hydfab']])
-  dir_db_attrs <- glue::glue(base::unlist(io_cfig)[['dir_db_attrs']])
+  name_attr_config <- cfig_pred[['name_attr_config']]
+  path_attr_config <- proc.attr.hydfab::build_cfig_path(path_cfig_pred,name_attr_config)
 
   # ------------------------ ATTRIBUTE CONFIGURATION --------------------------- #
   hfab_cfg <- cfig_attr[['hydfab_config']]
@@ -63,18 +56,9 @@ main <- function(){
   vars_ls <- base::lapply(ls_vars, function(x) base::unlist(base::lapply(cfig_attr[['attr_select']], function(y) y[[x]])))
   names(vars_ls) <- ls_vars
   # The attribute retrieval parameters
-  Retr_Params <- list(paths = list(# Note that if a path is provided, ensure the
-    # name includes 'path'. Same for directory having variable name with 'dir'
-    dir_db_hydfab=dir_db_hydfab,
-    dir_db_attrs=dir_db_attrs,
-    paths_ha = s3_path_hydatl,
-    dir_std_base = dir_std_base,
-    path_meta=path_meta),
-    vars = vars_ls,
-    datasets = datasets,
-    ds_type = ds_type,
-    write_type = write_type
-  )
+  Retr_Params <- proc.attr.hydfab::attr_cfig_parse(path_attr_config)
+  datasets <- Retr_Params$datasets
+
   ###################### DATASET-SPECIFIC CUSTOM MUNGING #########################
   # USER INPUT: Paths to relevant config files
   # Read file and remove poorly-parsed rows
