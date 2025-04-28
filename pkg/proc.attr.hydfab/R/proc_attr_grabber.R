@@ -482,7 +482,7 @@ std_dir_dataset <- function(dir_std_base, ds){
 
   dir_dataset <- base::file.path(dir_std_base,ds)
   if(!base::any(dir.exists(dir_dataset))){
-    mssng_ds <- dir_dataset[base::which(!base::dir.exists(dir_base))]
+    mssng_ds <- dir_dataset[base::which(!base::dir.exists(dir_dataset))]
     stop(glue::glue("The dataset directory {mssng_ds} does not exist.
     Double check config file defining dir_std_base and dataset names"))
   }
