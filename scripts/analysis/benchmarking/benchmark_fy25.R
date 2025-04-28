@@ -99,6 +99,8 @@ if(data_source == "nwps"){
   dt_sub <-dt_hads_sub
 }
 
+write.csv("/")
+
 # Populate standardized featureID and featureSource unique identifiers
 dt_meta <- proc.attr.hydfab::std_feat_id(df=dt_sub,
                                         name_featureSource ="COMID",
@@ -167,17 +169,17 @@ ls_fs_std <- proc.attr.hydfab::proc_attr_read_gage_ids_fs( proc.attr.hydfab::std
 # WORKAROUND: make a list of networks using standardized options e.g.
 # TODO implement a standardization of hydrofabric ids in the fs_proc Step 1 approach.
 # Idea: Generate a separate .nc file for hydrofabric formatting & separate for nhdplus fomratting
-# Idea: Generate a separate 
+# Idea: Generate a separate
 
 
 ls_fs_std_ntwk <- list()
 # TODO determine how to split up data between network options:
 # 1) conus vs. 2) oconus?
-# 2) networks: 1) nhdplus (aka conus) vs 2) hydrofabric (oconus) vs 3) HydroATLAS networks (global) 
+# 2) networks: 1) nhdplus (aka conus) vs 2) hydrofabric (oconus) vs 3) HydroATLAS networks (global)
 # What are acceptable location identifiers?
 #. 1) RFC IDs : convert to hydrofabric id
 #. 2) USGS gage ids : convert to hydrofabric id (or comid??)
-#. 3) coordinates  
+#. 3) coordinates
 #. 4) hydrofabric location ids
 
 ls_fs_std_ntwk[['nhdplus']] <- ls_fs_std # valid with historic versions of proc.attr.hydfab, specific to NHDPlus comid locations
