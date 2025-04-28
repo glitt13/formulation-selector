@@ -2318,7 +2318,7 @@ grab_attrs_datasets_fs_wrap <- function(Retr_Params,lyrs="network",overwrite=FAL
       # path_save_gpkg <- proc.attr.hydfab:::std_path_retr_gpkg(fs_path)
       if(base::is.null(path_save_gpkg_cstm)){
         warning("STRONGLY RECOMMENDED that user provide path_save_gpkg_cstm to
-                grab_attrs_datasets_fs_wrap().")
+                proc.attr.hydfab::grab_attrs_datasets_fs_wrap.")
       } else {
         path_save_gpkg <- path_save_gpkg_cstm
       }
