@@ -2256,7 +2256,11 @@ def gen_conus_basemap(dir_out_basemap:str | os.PathLike, # This should be the da
 
     if not Path(path_zip_basemap).exists():
         print('Downloading shapefile...')
-        urllib.request.urlretrieve(url, path_zip_basemap)
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req) as response, open(path_zip_basemap, 'wb') as out_file:
+            out_file.write(response.read())
+        print('Shapefile downloaded.')
     if not Path(path_shp_basemap).exists():
         with zipfile.ZipFile(path_zip_basemap, 'r') as zip_ref:
             zip_ref.extractall(f'{path_shp_basemap}')
