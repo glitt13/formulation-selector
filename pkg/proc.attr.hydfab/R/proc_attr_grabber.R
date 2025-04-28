@@ -473,18 +473,23 @@ retr_attr_hydatl <- function(hf_ids, path_ha, ha_vars,hf_id_col=c("hf_uid","hf_i
   return(ha)
 }
 
-std_dir_dataset <- function(dir_std_base, ds){
+std_dir_dataset <- function(dir_std_base, ds,mkdir=FALSE){
   #' @title Generate the standardized dataset directory
   #' @param dir_std_base The standardized base directory
   #' @param ds The dataset name (aka dir name)
+  #' @param mkdir boolean. If missing, should the missing directory be created? Default FALSE.
   #' @seealso \link[proc.attr.hydfab]{std_path_retr_gpkg}
   #' @export
 
   dir_dataset <- base::file.path(dir_std_base,ds)
   if(!base::any(dir.exists(dir_dataset))){
     mssng_ds <- dir_dataset[base::which(!base::dir.exists(dir_dataset))]
-    stop(glue::glue("The dataset directory {mssng_ds} does not exist.
-    Double check config file defining dir_std_base and dataset names"))
+    if(mkdir){
+      base::dir.create(dir_dataset, recursive=TRUE)
+    } else {
+      stop(glue::glue("The dataset directory {mssng_ds} does not exist.
+      Double check config file defining dir_std_base and dataset names"))
+    }
   }
   return(dir_dataset)
 }
