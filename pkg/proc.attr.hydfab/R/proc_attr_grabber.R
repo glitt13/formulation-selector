@@ -823,6 +823,10 @@ std_attr_data_fmt <- function(attr_data){
     } else {
       # Even though COMID always expected, use featureSource and featureID for
       #.  full compatibility with potential custom datasets
+
+
+      # TODO oconus: Should COMID always be expected now??
+
       sub_dt_dat$featureID <- base::as.character(sub_dt_dat$COMID)
       sub_dt_dat$featureSource <- "COMID"
       sub_dt_dat$data_source <- base::as.character(dat_srce)
@@ -1749,7 +1753,7 @@ grab_attrs_datasets_fs_wrap <- function(Retr_Params,lyrs="network",overwrite=FAL
       # path_save_gpkg <- proc.attr.hydfab:::std_path_retr_gpkg(fs_path)
       if(base::is.null(path_save_gpkg_cstm)){
         warning("STRONGLY RECOMMENDED that user provide path_save_gpkg_cstm to
-                grab_attrs_datasets_fs_wrap().")
+                proc.attr.hydfab::grab_attrs_datasets_fs_wrap.")
       } else {
         path_save_gpkg <- path_save_gpkg_cstm
       }
