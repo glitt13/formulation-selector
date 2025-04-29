@@ -40,8 +40,11 @@ dir_std_base <- file.path(glue::glue(unlist(dat_rfc_prep$file_io)[['dir_save']])
                           "user_data_std")
 ds <- dat_rfc_prep$formulation_metadata[[1]]$dataset_name
 dir_dataset <- proc.attr.hydfab::std_dir_dataset(dir_std_base,ds,mkdir=TRUE )
-
-path_save_fake_file <- file.path(dir_dataset,"bm25test_fake_data.csv")
+dir_data_in <- glue::glue(unlist(dat_rfc_prep$file_io)[['path_data']])
+if(!dir.exists(dir_data_in)){
+  dir.create(dir_data_in,recursive = TRUE)
+}
+path_save_fake_file <- file.path(dir_data_in,"bm25test_fake_data.csv")
 
 
 path_oconus_hfab_config <- "~/git/formulation-selector/scripts/eval_ingest/bm_test25/bm_oconus_config.yaml"
@@ -114,4 +117,5 @@ if(data_source == "nwps"){
   dt_sub <-dt_hads_sub
 }
 dt_sub$false_data <- 0.5
+dt_sub <- dt_sub %>% dplyr::select(dplyr::all_of(c("lid","usgsId","name","false_data")))
 write.csv(dt_sub,file = path_save_fake_file)
