@@ -44,7 +44,8 @@ if __name__ == "__main__":
     # BEGIN CUSTOMIZED DATASET MUNGING
 
     # list files from xssa analysis:
-    dir_xssa = Path('/Users/laurenbolotin/noaa/regionalization/data/julemai-xSSA/scripts/data/xSSA_analysis')
+    if 'bolotin' in Path.home():
+        dir_xssa = Path('/Users/laurenbolotin/noaa/regionalization/data/julemai-xSSA/scripts/data/xSSA_analysis')
     names_xssa = [x.name for x in dir_xssa.iterdir()]
     def _select_numeric_prefix(strings):
         selected_strings = []
@@ -107,23 +108,6 @@ if __name__ == "__main__":
 
     df_all_locs_mean_wt = pd.concat(dict_mean_xssa_wt)
 
-
-
-    # # ---- Read in Julie Mai's 2022 Nat Comm xSSA results
-    # print("Custom code: Reading/formatting non-standardized input datasets")
-    # df_all_data = pd.read_csv(path_data,sep = '; ',dtype={col_schema_df['gage_id'].loc[0] :str})
-
-    # # Ensure appropriate str formats & remove extraneous spaces that exist in this particular dataset
-    # df_all_data.columns = df_all_data.columns.str.replace(' ','')
-    # df_all_data[col_schema_df['gage_id'].loc[0]] = df_all_data[col_schema_df['gage_id'].loc[0]].str.replace(' ','')
-
-    # # Read in CAMELS data (simply to retrieve the gauge_ids)
-    # df_camlh = pd.read_csv(path_camels,sep=';',dtype={'gauge_id' :str})
-    
-    # # Subset the xssa dataset to CAMELS basins
-    # print(f"Subsetting the dataset {col_schema_df['dataset_name']} to CAMELS basins")
-    # df_camls_merge = df_camlh.merge(df_all_data, left_on= 'gauge_id', right_on = col_schema_df['gage_id'].loc[0], how='inner')
-    # df = df_camls_merge.drop(columns = df_camlh.columns)
     # END CUSTOMIZED DATASET MUNGING
 
     # ------ Extract metric data and write to file
