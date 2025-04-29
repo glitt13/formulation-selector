@@ -13,7 +13,7 @@ proc_attr_read_gage_ids_fs(dir_dataset, ds_filenames = "")
 inside \code{dir_dataset}}
 }
 \description{
-Reads output generated using \pkg{fs_proc} python package and
+Reads output generated using \pkg{fs_prep} python package and
 selects the gage_id location identifier(s) and the
 featureSource & featureID that correspond to the gage_id
 }
