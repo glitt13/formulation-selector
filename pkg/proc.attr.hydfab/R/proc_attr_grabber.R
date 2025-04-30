@@ -2174,13 +2174,13 @@ hfab_config_opt <- function(hfab_config,
   for(n in names_sub_hfab){
     x <- sub_hfab_config[[n]]
     if(base::is.null(x)){
-      # Is this an argument inside proc_attr_hf()?
+      # Is this an argument inside proc_attr_hf?
       bool_in_proc_attr_hf <- n %in%
         base::names(base::formals(proc.attr.hydfab::proc_attr_hf))
-      # Is this an argument inside proc_attr_wrap()?
+      # Is this an argument inside proc_attr_wrap?
       bool_in_proc_attr_wrap <- n %in%
         base::names(base::formals(proc.attr.hydfab::proc_attr_wrap))
-      # Is this an argument inside hsubsetR::get_subset()?
+      # Is this an argument inside hsubsetR::get_subset?
       bool_in_get_subset <- n %in%
         base::names(base::formals(hfsubsetR::get_subset))
 
