@@ -1,4 +1,6 @@
 #' @title Spatially weight hydroatlas attributes across hydrofabric divides
+#' @note This approach will not be officially used. The hydrofabric team
+#' will come up with a durable solution for hydrofabric v3 in 2025.
 #' @author Guy Litt
 #' @description Determine the spatial coverage of each hydroatlas basin upon
 #' the smaller-scale hydrofabric divide.
