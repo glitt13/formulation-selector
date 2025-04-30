@@ -118,4 +118,4 @@ if(data_source == "nwps"){
 }
 dt_sub$false_data <- 0.5
 dt_sub <- dt_sub %>% dplyr::select(dplyr::all_of(c("lid","usgsId","name","false_data")))
-write.csv(dt_sub,file = path_save_fake_file)
+write.csv(dt_sub,file = path_save_fake_file,row.names = FALSE)
