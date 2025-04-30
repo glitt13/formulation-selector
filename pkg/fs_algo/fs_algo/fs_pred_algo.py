@@ -133,8 +133,8 @@ if __name__ == "__main__":
                 resp_pred = pipe.predict(df_attr_sub_rmna)
 
                 # Initialize DataFrame for storing results
-                df_pred = pd.DataFrame({'featureID': comids_pred, 'prediction': resp_pred, 'metric': metric, 'dataset': ds, 'algo': algo, 'name_algo': Path(path_algo).name})
-        
+                #df_pred = pd.DataFrame({'featureID': comids_pred, 'prediction': resp_pred, 'metric': metric, 'dataset': ds, 'algo': algo, 'name_algo': Path(path_algo).name})
+                df_pred = pd.DataFrame({'featureID': df_attr_sub_rmna.index.astype(str), 'prediction': resp_pred, 'metric': metric, 'dataset': ds, 'algo': algo, 'name_algo': Path(path_algo).name})
                 # If using RandomForest, calculate confidence intervals using forestci
                 if algo == 'rf' and forestci:
                     rf_model = pipe.named_steps['randomforestregressor']  # Use the correct step name
