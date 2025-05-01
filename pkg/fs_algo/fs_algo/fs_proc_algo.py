@@ -133,7 +133,7 @@ if __name__ == "__main__":
                                         verbose=verbose,
                                         confidence_levels=confidence_levels,
                                         )
-            train_eval.train_eval() # Train, test, eval wrapper
+            train_eval.train_eval() # Train, test, eval wrapper       
 
             # Retrieve evaluation metrics dataframe
             rslt_eval[metr] = train_eval.eval_df
