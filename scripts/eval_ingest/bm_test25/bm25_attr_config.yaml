@@ -24,6 +24,7 @@ file_io: # May define {home_dir} for python's '{home_dir}/string_path'.format(ho
   - write_type: 'parquet' # Required filetype for writing NLDI feature metadata. Default 'parquet'. May also select 'csv'
   - path_meta:  "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.{write_type}"  #Required. Training attribute metadata filepath formatted for R's glue or py f-string, as generated using `proc.attr.hydfab::write_meta_nldi_feat()`. Strongly suggested default:  "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.{write_type}"
   - name_tform_config:  'bm25_attrs_tform.yaml' #Optional. The name of the transformation config file (if transformations desired). If specified, read the attribute requirements for transformation and ensure they are acquired as well.
+  - name_oconus_hfab_config: 'bm_oconus_config.yaml' #Required when working with OCONUS locations/explicit hydrofabric networking, otherwise not needed. The filename of the oconus config file mapping hydrofabric domains to the paths in the geopackage. This file must be in the same directory as this attribute config file.
 formulation_metadata:
   - datasets: # Required. Must match directory name inside dir_std_base. May be a list of items, or simply sublist 'all' to select everything inside dir_std_base for attribute grabbing.
     - 'bm25_test' # Required. In this example case, it's a sublist of just one thing.
