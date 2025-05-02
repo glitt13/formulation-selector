@@ -14,17 +14,17 @@ library(dplyr)
 library(tidyr)
 
 # Standardize data to featureID & featureSource
-std_feat_id <- function(df, name_featureSource = c("COMID","custom_hf")[1],
+std_feat_id <- function(df, name_featureSource = c("COMID","custom_hfuid")[1],
                         col_featureID = NULL, vals_featureID = NULL){
   #' @title Generate the standardized format of featureID and featureSource
   #' @param df The data.frame of interest containing an identifier
-  #' @param name_featureSource The expected name of the feature source. Default "COMID" expected for CONUS, but OCONUS will use "custom_hf"
+  #' @param name_featureSource The expected name of the feature source. Default "COMID" expected for CONUS, but OCONUS will use "custom_hfuid"
   #' @param col_featureID The column name inside `df` containing featureID of interest. Must provide if `vals_featureID` empty.
   #' @param vals_featureID The unique identifiers to populate featureID of interest. Must provide if `col_featureID` empty.
   #' @export
 
   # Check expected featureSource names
-  allowed_names <- c("COMID","custom_hf")
+  allowed_names <- c("COMID","custom_hfuid")
   if(!name_featureSource %in% allowed_names){
     str_allowed <- base::paste0(allowed_names,collapse='\n')
     warning(paste0("The name_featureSource {name_featureSource} is not in",
@@ -55,6 +55,12 @@ parse_hfab_oconus_config <- function(path_oconus_config){
   #' format and the expected CRS of each hydrofabric file as of v2.2
   #' @param path_oconus_config filepath to the yaml configuration file
   #' @export
+  #'
+  if(!base::file.exists(path_oconus_config)){
+    stop(glue::glue("The `path_oconus_config` does not exist.
+    Please reconsider how this path is defined in the attribute config file:
+    {path_oconus_config}"))
+  }
   cfig <- yaml::read_yaml(path_oconus_config)
   dir_base_hfab <- cfig$dir_base_hfab
   srces <- base::names(cfig)[base::grep("source_map",base::names(cfig))]
@@ -359,7 +365,7 @@ retr_hfab_id_wrap <- function(dt_need_hf, path_oconus_hfab_config,
                               col_lat='latitude',epsg_coords=4326){
   #' @title Retrieve hydrofabric IDs wrapper
   #' @details Intended for situations when comids unavailable, generally as OCONUS
-  #' @param dt_need_hf data.table of needed
+  #' @param dt_need_hf data.table of needed locations
   #' @param path_oconus_config File path to yaml config mapping of OCONUS
   #' hydrofabric locations, postal codes, and expected CRS geopackage filepaths
   #' @param col_usgsId column name inside `dt_need_hf` for the USGS gage ID
@@ -457,11 +463,103 @@ retr_hfab_id_wrap <- function(dt_need_hf, path_oconus_hfab_config,
 
   # Standardize the unique identifiers to the format used across formulation-selector
   dt_have_hf <- proc.attr.hydfab::std_feat_id(df=dt_need_hf_mrge,
-                                              name_featureSource ="custom_hf",
+                                              name_featureSource ="custom_hfuid",
                                               col_featureID = "hf_uid")
 
   return(dt_have_hf)
 }
+
+
+
+retr_hfuids <- function(loc_ids,
+                        path_oconus_hfab_config, # e.g. "~/git/formulation-selector/scripts/eval_ingest/bm_test25/bm_oconus_config.yaml"
+                        featureSource = c("nwissite","wqp","comid","location")[1]
+  ){
+  #' @title Retrieve the hydrofabric unique id
+  #' @description Intended for oCONUS locations, whereas
+  #' \link[proc.attr.hydfab]{retr_comids} can grab the comids from CONUS
+  #' locations. Thus this function is intended to fill the gaps after
+  #'  \link[proc.attr.hydfab]{retr_comids} has run.
+  #' @param loc_ids The location identifier whose form is described by
+  #' \code{featureSource}
+  #' @param path_oconus_hfab_config Path to the config file defining where
+  #' the hydrofabric files are stored.
+  #' @param featureSource The \link[nhdplusTools]{get_nldi_feature}
+  #' featureSource, which is attempted to be translated into the
+  #' \link[dataRetrieval]{findNLDI} featureSource types. Default 'nwissite'
+  #' means the argument `nwis` is used in \code{findNLDI}, which is likely the
+  #' best option in the case of USGS gage ids. Other options include 'wqp',
+  #' for the water quality portal (fewer locations means less data returned),
+  #' 'comid', and 'location'. Location values in \code{loc_ids}
+  #' would need to be defined as two points (e.g. \code{c(-115,40)})
+  #'
+  #' @seealso \link[proc.attr.hydfab]{retr_comids} Companion function for retrieiving comids across CONUS
+  #' @seealso \link[proc.attr.hydfab]{retr_hfab_id_wrap} Specifically designed for retrieving the hydrofabric unique id, intended for oCONUS
+  #' @seealso \link[proc.attr.hydfab]{proc_attr_gage_ids}
+  #' @export
+  # Changelog / contributions
+  #. 2025-05-02 Originally created, GL
+
+  # Find the NLDI location from an identifier or coordinates, with the goal to acquire a network geometry point
+  if(base::grepl("nwissite",featureSource)){ # Cases where USGS- is not prepended
+    # The nwis argument in findNLDI tends to work better than wqp, so convert USGS-{gage_id} to {gage_id}
+    loc_ids_num <- base::lapply(loc_ids,function(x)
+      base::gsub(pattern = "USGS-",replacement = "",x)) %>% base::unlist()
+    ls_data_retr_usgs <- base::lapply(loc_ids_num, function(y)
+      tryCatch(dataRetrieval::findNLDI(nwis=y)$origin,error = function(e) {
+        base::data.frame(sourceName="NWIS Surface Water Sites",
+                         identifier=x,comid=NA,name=NA,X=NA,Y=NA,geometry=NA)}))
+  } else if (base::grepl("comid",featureSource)){
+    ls_data_retr_usgs <-  base::lapply(loc_ids, function(x)
+      tryCatch(dataRetrieval::findNLDI(comid=x)$origin,error = function(e) {
+      base::data.frame(sourceName="NHDPlus comid",
+                       identifier=x,comid=NA,name=NA,X=NA,Y=NA,geometry=NA)}))
+  } else if(featureSource=='wqp'){ # The water-quality portal query doesn't include all NWIS sites
+    if(!base::any(base::grepl("USGS-", loc_ids))){
+      stop("Expecting loc_id format to follow 'USGS_{gage_id}'")
+    } else {
+      ls_data_retr_usgs <-  base::lapply(loc_ids, function(x)
+        tryCatch(dataRetrieval::findNLDI(wqp=x)$origin,error = function(e) {
+        base::data.frame(sourceName="Water Quality Portal",
+                         identifier=x,comid=NA,name=NA,X=NA,Y=NA,geometry=NA)}))
+    }
+  } else if (base::grepl("loc",featureSource)){ # Working with coordinates
+    # e.g. where findNLDI(location= c(-115,40))
+    ls_data_retr_usgs <- base::lapply(loc_ids, function(x)
+      tryCatch(dataRetrieval::findNLDI(nwis=x)$origin,error = function(e) {
+        base::data.frame(sourceName="NHDPlus comid",
+                         identifier=x,comid=NA,name=NA,X=NA,Y=NA,geometry=NA)}))
+  } else {
+    stop("Add another type of featureSource retrieval option here.")
+  }
+
+  dt_retr_usgs <- ls_data_retr_usgs %>%
+    data.table::rbindlist(ignore.attr=TRUE,fill = TRUE,use.names = TRUE)
+  if(base::all(base::is.na(dt_retr_usgs$X)) && base::length(loc_ids)>3){
+    warning(glue::glue(
+    "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    All {length(loc_ids)} provided loc_ids returned NA values for locations in retr_hfuids.
+    Are the provided loc_ids in the correct format? Is the featureSource
+    correct? Inspect proc.attr.hydfab::retr_hfuids."))
+  }
+
+  # Generate coordinates from sf geometry
+  coords <- dt_retr_usgs %>% sf::st_as_sf() %>% sf::st_coordinates()
+  # Rename coordinates to latitude and longitude
+  dt_retr_usgs <- dt_retr_usgs %>%
+    dplyr::mutate(longitude= coords[,1], latitude = coords[,2])
+
+  # Retrieve standardized unique location identifier, hf uid
+  dt_hfuid <- proc.attr.hydfab::retr_hfab_id_wrap(dt_need_hf=dt_retr_usgs,
+                                                    path_oconus_hfab_config,
+                                                    col_usgsId="identifier", # specific to returned object from dataRetrieval::findNLDI
+                                                    col_lon='longitude',
+                                                    col_lat='latitude',
+                                                    epsg_coords=4326 # presumed to be standard from dataRetrieval::findNLDI
+  )
+  return(dt_hfuid)
+}
+
 
 ######## NOAA DATA SOURCES
 read_noaa_nwps_gauges <- function(
