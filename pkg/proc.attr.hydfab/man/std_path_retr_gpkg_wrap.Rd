@@ -7,6 +7,8 @@
 the \code{fs_prep} python processing steps}
 \usage{
 std_path_retr_gpkg_wrap(dir_std_base, ds)
+
+std_path_retr_gpkg_wrap(dir_std_base, ds)
 }
 \arguments{
 \item{dir_std_base}{The standardized base directory}
@@ -16,7 +18,12 @@ std_path_retr_gpkg_wrap(dir_std_base, ds)
 \description{
 Given the standardized base directory and the dataset name,
 generate the standardized geopackage
+
+Given the standardized base directory and the dataset name,
+generate the standardized geopackage
 }
 \details{
+These same steps happen inside \code{grab_attrs_datasets_fs_wrap}
+
 These same steps happen inside \code{grab_attrs_datasets_fs_wrap}
 }

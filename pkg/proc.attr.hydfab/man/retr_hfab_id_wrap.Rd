@@ -14,7 +14,7 @@ retr_hfab_id_wrap(
 )
 }
 \arguments{
-\item{dt_need_hf}{data.table of needed}
+\item{dt_need_hf}{data.table of needed locations}
 
 \item{col_usgsId}{column name inside \code{dt_need_hf} for the USGS gage ID}
 
