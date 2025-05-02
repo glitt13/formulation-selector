@@ -71,19 +71,19 @@ testthat::test_that("std_feat_id",{
 #   usgs_ids_oconus <- c("15056210","16704000","50147800") # AK, HI, PR
 #   dt_need_hf <- dt_hads %>% dplyr::filter(usgsId %in% usgs_ids_oconus)
 #
-#   dt_have_hf <- proc.attr.hydfab::retr_hfab_id_wrap(dt_need_hf,path_oconus_hfab_config = ) %>%
+#   dt_hfuid <- proc.attr.hydfab::retr_hfab_id_wrap(dt_need_hf,path_oconus_hfab_config = ) %>%
 #     pkgcond::suppress_warnings() %>% pkgcond::suppress_messages()
 #
 #
-#   testthat::expect_true(base::nrow(dt_have_hf) == nrow(dt_need_hf))
+#   testthat::expect_true(base::nrow(dt_hfuid) == nrow(dt_need_hf))
 #   expect_new_cols <- c("featureID","featureSource","crs_hfab")
-#   testthat::expect_true(base::all(expect_new_cols %in% base::names(dt_have_hf)))
+#   testthat::expect_true(base::all(expect_new_cols %in% base::names(dt_hfuid)))
 #
 #   # columns using wb ids:
-#   idxs_cstm_hfab <- grep("-wb-",dt_have_hf$featureID)
-#   testthat::expect_true(all(dt_have_hf$featureSource[idxs_cstm_hfab] == "custom_hf"))
+#   idxs_cstm_hfab <- grep("-wb-",dt_hfuid$featureID)
+#   testthat::expect_true(all(dt_hfuid$featureSource[idxs_cstm_hfab] == "custom_hfuid"))
 #
-#   testthat::expect_true(all(names(dt_need_hf) %in% names(dt_have_hf)))
+#   testthat::expect_true(all(names(dt_need_hf) %in% names(dt_hfuid)))
 #
 # })
 
@@ -239,10 +239,86 @@ testthat::test_that("retr_hfab_id_wrap correctly retrieves hydrofabric IDs", {
 
   # columns using wb ids:
   idxs_cstm_hfab <- base::grep("-wb-",result$featureID)
-  testthat::expect_true(base::all(result$featureSource[idxs_cstm_hfab] == "custom_hf"))
+  testthat::expect_true(base::all(result$featureSource[idxs_cstm_hfab] == "custom_hfuid"))
 
   testthat::expect_true(base::all(base::names(dt_need_hf) %in% base::names(result)))
 })
+# ---
+test_that("retr_hfuids returns correct structure with mock retr_hfab_id_wrap", {
+  # Load necessary packages
+  library(testthat)
+  library(mockery)
+  library(sf)
+  library(data.table)
+
+  # ---- Mock input values ----
+  gage_ids <- c("USGS-12345678")
+  mock_path <- "mock/path/config.yaml"
+
+  # ---- Mock return from dataRetrieval::findNLDI ----
+  fake_sf <- sf::st_sf(
+    sourceName = "NWIS Surface Water Sites",
+    identifier = gage_ids,
+    comid= NA,
+    name = "TakeMeToTheRiver",
+    X = -120.5,
+    Y= 35.7,
+    geometry = sf::st_sfc(sf::st_point(c(-120.5, 35.7)), crs = 4326)
+  )
+
+  mock_findNLDI <- function(wqp = NULL, nwis = NULL, comid = NULL, location = NULL) {
+    list(origin = fake_sf)
+  }
+
+  # ---- Mock retr_hfab_id_wrap return ----
+  mock_return_df <- base::data.frame(
+
+    identifier = gage_ids,
+    domain = "AK",
+    sourceName = "NWIS Surface Water Sites",
+    comid= NA,
+    name = "TakeMeToTheRiver",
+    X = 35.7,
+    Y = -120.5,
+    geometry = fake_sf$geometry,
+    X = -120.5,
+    Y= 35.7,
+    path = "/path/to/ak_nextgen.gpkg",
+    crs_hfab = "EPSG:3338",
+    hf_uid = "mock-cat-001",
+    featureID = "mock-cat-001",
+    featureSource = "custom_hfuid"
+  )
+
+
+
+  mock_retr_hfab_id_wrap <- mockery::mock(mock_return_df)
+
+  # ---- Apply mocks ----
+  mockery::stub(
+    where = retr_hfuids,
+    what = "dataRetrieval::findNLDI",
+    how = mock_findNLDI
+  )
+  mockery::stub(
+    where = retr_hfuids,
+    what = "proc.attr.hydfab::retr_hfab_id_wrap",
+    how = mock_retr_hfab_id_wrap
+  )
+
+  # ---- Run function ----
+  result <- proc.attr.hydfab::retr_hfuids(loc_ids = gage_ids,
+                        path_oconus_hfab_config = mock_path,
+                        featureSource = "nwissite")
+
+  # ---- Test expectations ----
+  testthat::expect_s3_class(result, "data.frame")
+  testthat::expect_true("hf_uid" %in% base::names(result))
+  testthat::expect_equal(result$hf_uid[1], "mock-cat-001")
+})
+
+
+
 
 testthat::test_that("retr_comid_coord",{
 
