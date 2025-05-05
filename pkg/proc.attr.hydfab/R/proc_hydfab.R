@@ -21,6 +21,7 @@ std_feat_id <- function(df, name_featureSource = c("COMID","custom_hfuid")[1],
   #' @param name_featureSource The expected name of the feature source. Default "COMID" expected for CONUS, but OCONUS will use "custom_hfuid"
   #' @param col_featureID The column name inside `df` containing featureID of interest. Must provide if `vals_featureID` empty.
   #' @param vals_featureID The unique identifiers to populate featureID of interest. Must provide if `col_featureID` empty.
+  #' @seealso \link[proc.attr.hydfab]{retr_attr_new}
   #' @export
 
   # Check expected featureSource names
@@ -31,8 +32,10 @@ std_feat_id <- function(df, name_featureSource = c("COMID","custom_hfuid")[1],
             "the list of expected featureSource names: ", str_allowed,
              "STRONGLY RECONSIDER THIS CHOICE!!"))
   }
-
-  if(!base::is.null(col_featureID)){
+  if(base::any(base::grepl("featureID",base::names(df)))){
+    # nothing to do here, the featureID column already exists
+    print("TODO Consider if logic should change in std_feat_id around the featureID column assignment")
+  } else if(!base::is.null(col_featureID)){
     df$featureID <- df[[col_featureID]]
   } else if (!base::is.null(vals_featureID)){
     df$featureID <- vals_featureID
@@ -40,7 +43,7 @@ std_feat_id <- function(df, name_featureSource = c("COMID","custom_hfuid")[1],
     stop("Must provide either col_featureID or vals_featureID")
   }
   # Add in the featureSource for non-NA featureID columns
-  if(!"featureSource" %in% names(df)){
+  if(!"featureSource" %in% base::names(df) && base::nrow(df)>0){
     df$featureSource <- NA
   }
   df$featureSource[base::which(!base::is.na(df$featureID))] <- name_featureSource

@@ -23,3 +23,6 @@ std_feat_id(
 \description{
 Generate the standardized format of featureID and featureSource
 }
+\seealso{
+\link[proc.attr.hydfab]{retr_attr_new}
+}
