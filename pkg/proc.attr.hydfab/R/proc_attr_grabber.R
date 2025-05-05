@@ -51,25 +51,25 @@ attr_cfig_parse <- function(path_attr_config){
   dir_db_hydfab <- glue::glue(base::unlist(raw_config$file_io)[['dir_db_hydfab']]) # file.path(dir_base,'input','hydrofabric') # The local dir where hydrofabric data are stored to limit s3 connections
   dir_db_attrs <- glue::glue(base::unlist(raw_config$file_io)[['dir_db_attrs']])  # file.path(dir_base,'input','attributes') # The parent dir where each comid's attribute parquet file is stored in the subdirectory 'comid/', and each dataset's aggregated parquet attributes are stored in the subdirectory '/{dataset_name}
 
-  # datasets <- try(base::unlist(raw_config$formulation_metadata)[['datasets']])
-  # if("try-error" %in% class(datasets)){
-  #   # Consider multiple datasets:
-  names_form_meta <- unlist(lapply(raw_config$formulation_metadata, function (x) names(x)))
-  datasets <- raw_config$formulation_metadata[[which(names_form_meta=="datasets")]][['datasets']]
-  # }
+  # Define the datasets of interest for processing
+  names_form_meta <- base::unlist(
+    base::lapply(raw_config$formulation_metadata, function (x) base::names(x)))
+  datasets <- raw_config$formulation_metadata[[
+    base::which(names_form_meta=="datasets")]][['datasets']]
+
   ds_type <- try(base::unlist(raw_config$file_io)[['ds_type']])
-  if('try-error' %in% base::class(ds_type) || is.null(ds_type)){
+  if('try-error' %in% base::class(ds_type) || base::is.null(ds_type)){
     warning('ds_type undefined in the attribute config file. It is generally
     expected to be "training" or "prediction"')
     ds_type <- '' # !!! Generally expected to be 'training' or 'prediction' !!!
   }
   write_type <- try(base::unlist(raw_config$file_io[['write_type']]))
-  if('try-error' %in% base::class(write_type) || is.null(write_type)){
+  if('try-error' %in% base::class(write_type) || base::is.null(write_type)){
     write_type <- 'parquet'
   }
 
   # Figure out the dataset name(s) in order to generate path_meta appropriately
-  path_meta <- base::unlist(raw_config$file_io)[['path_meta']] # Still needs glue substitution
+  path_meta <- base::unlist(raw_config$file_io)[['path_meta']] # (DO NOT PERFORM glue SUBSTITUTION!!)
 
   # Read s3 connection details
   s3_base <- base::unlist(raw_config$hydfab_config)[['s3_base']]#s3://lynker-spatial/tabular-resources" # s3 path containing hydrofabric-formatted attribute datasets
@@ -78,7 +78,10 @@ attr_cfig_parse <- function(path_attr_config){
   # Path(s) to HydroATLAS data downscaled to hydrofabric (may be local &/or s3 paths)
   if(base::any(base::grepl("paths_ha", names(base::unlist(raw_config$attr_select))))){
     idxs_paths_ha <- grep("paths_ha",names(base::unlist(raw_config$attr_select)))
-    paths_ha <- base::unlist(raw_config$attr_select)[idxs_paths_ha] %>% unname()
+    paths_ha <- base::unlist(raw_config$attr_select)[idxs_paths_ha] %>%
+      base::unname()
+    paths_ha <- base::lapply(paths_ha, function(x) glue::glue(x)) %>%
+      base::unlist()
   } else {
     paths_ha <- NULL
   }
@@ -141,10 +144,12 @@ attr_cfig_parse <- function(path_attr_config){
     error = function(e) {NULL})
   if(base::is.null(name_oconus_hfab_config)){
     path_oconus_hfab_config <- NULL
-  } else {
+  } else { # The paths to hydrofabric domain gpkg files defined in a separate
+    # config file here
     path_oconus_hfab_config <- proc.attr.hydfab::build_cfig_path(
                   path_known_config = path_attr_config,
                   path_or_name_cfig = name_oconus_hfab_config)
+
   }
 
   #-----------------------------------------------------
@@ -1264,19 +1269,24 @@ std_attr_data_fmt <- function(attr_data){
       #.  full compatibility with potential custom datasets
 
 
-      # TODO oconus: Should COMID always be expected now??
+      # TODO oconus: Is it OK to eliminate COMID now??
 
-      sub_dt_dat$featureID <- base::as.character(sub_dt_dat$COMID)
-      sub_dt_dat$featureSource <- "COMID"
+      sub_dt_dat$featureID <- base::as.character(sub_dt_dat$featureID)
+      sub_dt_dat$featureSource <- base::as.character(sub_dt_dat$featureSource)
+      #sub_dt_dat$featureSource <- sub_dt_dat$COMID
       sub_dt_dat$data_source <- base::as.character(dat_srce)
       sub_dt_dat$dl_timestamp <- base::as.character(base::as.POSIXct(
         base::format(Sys.time()),tz="UTC"))
-      sub_dt_dat <- sub_dt_dat %>% dplyr::select(-COMID)
+      if("COMID" %in% base::colnames(sub_dt_dat)){
+        sub_dt_dat <- sub_dt_dat %>% dplyr::select(-COMID)
+      }
+
       # Convert from wide to long format, convert factors to char
       attr_data_ls[[dat_srce]] <- data.table::melt(sub_dt_dat,
            id.vars = c('featureID','featureSource','data_source','dl_timestamp'),
            variable.name = 'attribute') %>% dplyr::arrange(featureID) %>%
-           dplyr::mutate(dplyr::across(dplyr::where(is.factor), as.character))
+           dplyr::mutate(dplyr::across(dplyr::where(is.factor), as.character)) %>%
+          pkgcond::suppress_warnings(pattern = "are not all of the same type")
     }
   }
   return(attr_data_ls)
@@ -1293,10 +1303,10 @@ retr_attr_new <- function(locids,need_vars,paths_ha){
   #' @export
   # -------------------------------------------------------------------------- #
   # --------------- dataset grabber ---------------- #
-  attr_data <- list()
+  attr_data <- base::list()
 
   # --------------- Hydroatlas version 1 ---------------
-  if (('ha_vars' %in% base::names(need_vars)) &&
+  if(('ha_vars' %in% base::names(need_vars)) &&
       (base::all(!base::is.na(need_vars$ha_vars)))){
     # Hydroatlas variable query; list name formatted as {dataset_name}__v{ver_num}
     dt_hydatl <- proc.attr.hydfab::retr_attr_hydatl_wrap(
@@ -1316,7 +1326,12 @@ retr_attr_new <- function(locids,need_vars,paths_ha){
     df_nhd <- proc.attr.hydfab::proc_attr_usgs_nhd(comid=locids,
                               usgs_vars=need_vars$usgs_vars)
     # Standardize into featureSource and featureID columns
-    df_nhd_std <- proc.attr.hydfab::std_feat_id(df=df_nhd,col_featureID="COMID")
+    if("COMID" %in% base::names(df_nhd)){
+      df_nhd_std <- proc.attr.hydfab::std_feat_id(df=df_nhd,col_featureID="COMID")
+    } else {
+      df_nhd_std <- proc.attr.hydfab::std_feat_id(df=df_nhd,col_featureID="featureID")
+    }
+
     attr_data[['usgs_nhdplus__v2']] <- df_nhd_std
   }
 
@@ -1435,18 +1450,30 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
 
   # ------- Retr_Params$vars format checker --------- #
   # Check requested variables for retrieval are compatible/correctly formatted:
-  proc.attr.hydfab:::wrap_check_vars(vars_ls)
+  nada <- proc.attr.hydfab:::wrap_check_vars(vars_ls)
 
   # ----------- existing dataset checker ----------- #
   # Define the path to the attribute parquet file (name contains comid)
   # All the filepaths for each comid
+
+  # Remove NA ids (then add them back in!)
+  comids_with_na <- comids
+  idxs_ids_na <- base::which(base::is.na(comids))
+  if(base::length(idxs_ids_na)>0){
+    comids <- comids[-idxs_ids_na]
+    # NOTE: If this logic goes away, remake comids_attrs_need assignment to handle NA:
+    # comids_attrs_need <- comids[base::unlist(base::lapply(paths_attrs[base::which(!base::is.na(comids))],
+    #                                                       function(x) !base::file.exists(x)))]
+  }
+
+  # TODO add NA handling for comids (& ensure compatibility with proc_attr_gageids!!)
   paths_attrs <- proc.attr.hydfab::std_path_attrs(comid=comids,
                          dir_db_attrs=Retr_Params$paths$dir_db_attrs)
   # The comids that are stored already (have) & those that are new (need)
-  comids_attrs_have <- comids[unlist(lapply(paths_attrs,
-                                            function(x) file.exists(x)))]
-  comids_attrs_need <- comids[unlist(lapply(paths_attrs[which(!is.na(comids))],
-                                            function(x) !file.exists(x)))]
+  comids_attrs_have <- comids[base::unlist(base::lapply(paths_attrs,
+                                            function(x) base::file.exists(x)))]
+  comids_attrs_need <- comids[base::unlist(base::lapply(paths_attrs[base::which(!base::is.na(comids))],
+                                            function(x) !base::file.exists(x)))]
 
 
   # The full paths of attribute data for e/ comid that we (1) have and (2) need
@@ -1474,17 +1501,19 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
   ls_dt_exst <- base::lapply(ls_attr_exst, function(x) x$dt_all)
   dt_exst_all <- data.table::rbindlist(ls_dt_exst,use.names = TRUE,fill = TRUE)
   need_vars_og <- need_vars # Create a copy in case this gets modified
-  comids_all <- comids
 
   # -------------------------------------------------------------------------- #
   # ------------------ new attribute grab & write updater -------------------- #
   # This section retrieves attribute data that is not yet part of the database
   #. and then updates the database with the new data
-  ls_attr_data <- list()
-  ls_attr_data[['already_exist']] <- list('pre-exist'=dt_exst_all)
+  ls_attr_data <- base::list()
+  ls_attr_data[['already_exist']] <- base::list('pre-exist'=dt_exst_all)
   # Acquire attributes for locations that haven't been retrieved yet
   if(base::length(comids_attrs_need)>0 )  {
+
+
     # We'll need all variables for these new locations that don't have data
+
     # Grab all the attribute data for these comids that don't exist yet
     ls_attr_data[['new_comid']] <- proc.attr.hydfab::retr_attr_new(
                                           locids=comids_attrs_need,
@@ -1973,6 +2002,9 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
   base::names(ls_retr_comid$ls_comid) <- gage_ids
   just_comids <- ls_retr_comid$ls_comid %>% base::unname() %>% base::unlist()
 
+
+
+
   # ---------- RETRIEVE DESIRED ATTRIBUTE DATA FOR EACH LOCATION ------------- #
   dt_site_feat_retr <- proc.attr.hydfab::proc_attr_mlti_wrap(
                     comids=just_comids,Retr_Params=Retr_Params,
@@ -2162,7 +2194,6 @@ grab_attrs_datasets_fs_wrap <- function(Retr_Params,lyrs="network",overwrite=FAL
                       "\n These options exist in that directory:\n",good_ds,
                       "\n\n Reconsider the dataset and/or directory choice."))
   }
-
 
   ls_sitefeat_all <- base::list()
   for(ds in datasets){ # Looping by dataset
