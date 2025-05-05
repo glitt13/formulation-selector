@@ -140,7 +140,8 @@ read_hfab_layer <- function(path_gpkg, layer){
      'vpu' %in% base::names(hfab)){
     if(!base::all('ak' %in% hfab$vpu)){
       warning(glue::glue("Expecting the {gpkg_fname} vpu column to be 'ak'.
-                         EDITING the vpu!! "))
+              This should be fixed with hydrofabric v3.0.
+              EDITING the vpu!! "))
       hfab$vpu <- 'ak'
     }
   }
@@ -296,7 +297,7 @@ retr_hfab_id_coords <- function(path_gpkg, ntwk, epsg_domn,lon,lat,
   #' @export
   #'
   # Identify the point of interest, converted into the hydrofabric domain's CRS
-  if(!is.na(epsg_domn)){
+  if(!base::is.na(epsg_domn)){
     pt <-  sf::st_transform(sf::st_sfc(sf::st_point(base::c(lon,lat)),
                                        crs = epsg_coords),epsg_domn)
   } else {
@@ -310,12 +311,12 @@ retr_hfab_id_coords <- function(path_gpkg, ntwk, epsg_domn,lon,lat,
 
   if(base::length(origin)==0){
     warning(glue::glue("This lon/lat does not exist in the hydrofabric!
-                       {paste0(lon,',',lat)} for gage_id {gage_id}
+                       {paste0(lon,',',lat)}
                        from {path_gpkg}"))
     hf_id <- NA
   } else {
     # Subset network based on the origin id:
-    sub_ntwk <- ntwk[ntwk$id == origin,] %>% unique()
+    sub_ntwk <- ntwk[ntwk$id == origin,] %>% base::unique()
     # Generate the customized unique identifier
     hf_id <- proc.attr.hydfab::custom_hf_id(sub_ntwk)
   }
@@ -551,7 +552,7 @@ retr_hfuids <- function(loc_ids,
 
   # Retrieve standardized unique location identifier, hf uid
   dt_hfuid <- proc.attr.hydfab::retr_hfab_id_wrap(dt_need_hf=dt_retr_usgs,
-                                                    path_oconus_hfab_config,
+                                                    path_oconus_hfab_config=path_oconus_hfab_config,
                                                     col_usgsId="identifier", # specific to returned object from dataRetrieval::findNLDI
                                                     col_lon='longitude',
                                                     col_lat='latitude',
