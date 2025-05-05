@@ -19,6 +19,7 @@ suppressPackageStartupMessages(library(sf,quietly=TRUE))
 suppressPackageStartupMessages(library(future,quietly=TRUE))
 suppressPackageStartupMessages(library(future.apply,quietly=TRUE))
 suppressPackageStartupMessages(library(pkgcond,quietly=TRUE))
+suppressPackageStartupMessages(library(purrr,quietly=TRUE))
 options(arrow.unsafe_metadata = TRUE)
 
 
@@ -251,6 +252,50 @@ testthat::test_that("proc_attr_std_hfsub_name standardized name generator", {
                proc.attr.hydfab:::proc_attr_std_hfsub_name(111,"testit",'parquet'))
 
 })
+
+test_that("std_attr_data_fmt standardizes attribute data correctly", {
+
+  # Mock input data: 2 sources with sample attributes
+  mock_data <- list(
+    source_a = data.frame(
+      featureID = c("1001", "ak-cat-1003"),
+      featureSource = c("nwissite", "hfuid_custom"),
+      attr1 = factor(c("A", "B")),
+      attr2 = c(1, 2)
+    ),
+    source_b = data.frame(
+      featureID = c("2001"),
+      featureSource = c("wqp"),
+      attr1 = factor("X"),
+      attr2 = 42
+    )
+  )
+
+  # Run function
+  result <- proc.attr.hydfab::std_attr_data_fmt(mock_data) %>% suppressWarnings()
+
+  # Basic checks
+  testthat::expect_type(result, "list")
+  testthat::expect_named(result, c("source_a", "source_b"))
+  testthat::expect_length(result, 2)
+
+  # Each output should be a melted data.table
+  purrr::walk(result, function(dt) {
+    testthat::expect_s3_class(dt, "data.table")
+    testthat::expect_true(base::all(c("featureID", "featureSource", "data_source", "dl_timestamp", "attribute", "value") %in% base::names(dt)))
+    testthat::expect_true(base::all(base::sapply(dt$attribute, is.character)))
+  })
+
+  # Check number of rows: wide to long means each attr becomes a row
+  testthat::expect_equal(base::nrow(result$source_a), 4)  # 2 rows * 2 attributes
+  testthat::expect_equal(base::nrow(result$source_b), 2)  # 1 row * 2 attributes
+
+  # Ensure `data_source` and `dl_timestamp` are added
+  testthat::expect_true(base::all(result$source_a$data_source == "source_a"))
+  testthat::expect_true(base::all(result$source_b$data_source == "source_b"))
+})
+
+
 
 testthat::test_that("read_loc_data",{
   # Read in the normal gage
