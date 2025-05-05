@@ -143,8 +143,8 @@ attr_cfig_parse <- function(path_attr_config){
     path_oconus_hfab_config <- NULL
   } else {
     path_oconus_hfab_config <- proc.attr.hydfab::build_cfig_path(
-      path_known_config = path_attr_config,
-      path_or_name_cfig = name_oconus_hfab_config)
+                  path_known_config = path_attr_config,
+                  path_or_name_cfig = name_oconus_hfab_config)
   }
 
   #-----------------------------------------------------
@@ -154,6 +154,7 @@ attr_cfig_parse <- function(path_attr_config){
     dir_db_hydfab=dir_db_hydfab,
     dir_db_attrs=dir_db_attrs,
     paths_ha = paths_ha,
+    path_oconus_hfab_config=path_oconus_hfab_config,
     dir_std_base = dir_std_base,
     home_dir = home_dir,
     path_meta = path_meta),
@@ -1832,7 +1833,6 @@ retr_comids <- function(gage_ids,featureSource,featureID,dir_db_attrs,
     } else if(base::any(df_comid_featid$featureID == nldi_feat$featureID)){
       # Check the comid-featureID mapped database first
       comid <- df_comid_featid$comid[df_comid_featid$featureID == nldi_feat$featureID]
-      if(base::length())
 
       if(base::length(comid)>1){
         stop(glue::glue("Problem with comid database logic. Look at how many
