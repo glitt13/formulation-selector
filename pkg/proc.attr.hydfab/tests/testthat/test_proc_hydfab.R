@@ -13,7 +13,8 @@ suppressPackageStartupMessages(library(data.table,quietly=TRUE))
 suppressPackageStartupMessages(library(pkgcond,quietly=TRUE))
 suppressPackageStartupMessages(library(yaml,quietly=TRUE))
 suppressPackageStartupMessages(library(glue,quietly=TRUE))
-
+suppressPackageStartupMessages(library(sf,quietly=TRUE))
+suppressPackageStartupMessages(library(mockery,quietly=TRUE))
 # Generate objects used in multiple tests:
 dt_hads <- proc.attr.hydfab::read_noaa_hads_sites() %>% suppress_messages()
 
@@ -246,10 +247,6 @@ testthat::test_that("retr_hfab_id_wrap correctly retrieves hydrofabric IDs", {
 # ---
 test_that("retr_hfuids returns correct structure with mock retr_hfab_id_wrap", {
   # Load necessary packages
-  library(testthat)
-  library(mockery)
-  library(sf)
-  library(data.table)
 
   # ---- Mock input values ----
   gage_ids <- c("USGS-12345678")
@@ -267,7 +264,7 @@ test_that("retr_hfuids returns correct structure with mock retr_hfab_id_wrap", {
   )
 
   mock_findNLDI <- function(wqp = NULL, nwis = NULL, comid = NULL, location = NULL) {
-    list(origin = fake_sf)
+    base::list(origin = fake_sf)
   }
 
   # ---- Mock retr_hfab_id_wrap return ----
