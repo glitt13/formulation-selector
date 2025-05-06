@@ -983,6 +983,10 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
   #' @param overwrite boolean. Should the hydrofabric cloud data acquisition be redone and overwrite any local files? Default FALSE.
   #' @seealso \link[proc.attr.hydfab]{proc_attrs_gageids}
   #' @export
+  #'
+  # Changelog/Contributions
+  # 2024 Originally Created, GL
+  # 2025-05-06 reduce the missing variable grabbing to 'still_need' logic, GL
   # TODO integrate id_attrs_sel_wrap here
   vars_ls <- Retr_Params$vars
 
@@ -1015,9 +1019,15 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
                               vars_ls=vars_ls,
                               bucket_conn=NA))
   base::names(ls_attr_exst) <- paths_attrs_have
-  # Extract the need vars
-  need_vars <- base::lapply(ls_attr_exst, function(x) x$need_vars) %>%
-                          base::unique() %>% base::unlist(recursive=FALSE)
+
+  # ----- Extract the need vars
+  need_vars <- base::lapply(ls_attr_exst, function(x) x$need_vars) #%>%
+                          #base::unique() %>% base::unlist(recursive=FALSE)
+  miss_var_types_by_file <- base::lapply(need_vars, function(x) base::names(x))
+  # The indices corresponding to locations missing vars, based on need_vars
+  idxs_still_need_them <- base::grep(TRUE,base::lapply(miss_var_types_by_file,
+                              function(x) !base::is.null(x)) %>% base::unlist())
+
   ls_dt_exst <- base::lapply(ls_attr_exst, function(x) x$dt_all)
   dt_exst_all <- data.table::rbindlist(ls_dt_exst,use.names = TRUE,fill = TRUE)
   need_vars_og <- need_vars # Create a copy in case this gets modified
@@ -1056,15 +1066,18 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
   }
 
   # Acquire attributes that still haven't been retrieved (but some attrs exist)
-  if(base::length(base::unlist(need_vars))>0){
+  if(base::length(idxs_still_need_them)>0){
+    comids_attrs_still_need <- comids_attrs_have[idxs_still_need_them]
+    still_need_vars <- need_vars[idxs_still_need_them]
     # retrieve the needed attributes:
     ls_attr_data[['pre-exist']] <- proc.attr.hydfab::retr_attr_new(
-                                                comids=comids_attrs_have,
-                                                 need_vars=need_vars,
-                                                 path_ha=Retr_Params$paths$s3_path_hydatl)
+                                                locids=comids_attrs_still_need,
+                                                 need_vars=still_need_vars,
+                                                 paths_ha=Retr_Params$paths$paths_ha)
 
     dt_prexst_dat <- data.table::rbindlist(ls_attr_data[['pre-exist']],
                                            use.names = TRUE,fill=TRUE )
+
     # Write new attribute data to pre-existing comid file
     for(exst_comid in dt_prexst_dat$featureID){
       sub_dt_new_attrs <- dt_prexst_dat[dt_prexst_dat$featureID==exst_comid,]
