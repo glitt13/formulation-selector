@@ -1979,8 +1979,9 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
   if(!base::is.null(path_save_gpkg)){ # Add path save gpkg to parameter object
     Retr_Params$paths$path_save_gpkg <- path_save_gpkg
   } # Now we're ready for creating non-existent directories!
-  for(dir in Retr_Params$paths){
-    if(base::grepl('dir',dir)){
+  for(dir_name in base::names(Retr_Params$paths)){
+    if(base::grepl('dir',dir_name)){
+      dir <- Retr_Params$paths[[dir_name]]
       if(!base::dir.exists(dir) && !base::grepl("\\{",dir)){
         message(glue::glue("Creating {dir}"))
         base::dir.create(dir)
