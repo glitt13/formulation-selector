@@ -987,6 +987,7 @@ fs_retr_nhdp_comids_geom <- function(gage_ids,featureSource='nwissite',
   #' @export
   # Changelog/Contributions
   #. 2025-03-07 Originally created, GL
+  #. 2025-05-06 address error handling when is.na(gage_id), assignment when nrow>0, GL
 
   # Pre-allocate lists
   ls_featid <- base::lapply(1:length(gage_ids),function(x) NULL)
@@ -996,67 +997,74 @@ fs_retr_nhdp_comids_geom <- function(gage_ids,featureSource='nwissite',
     if(!base::exists("gage_id")){
       stop("MUST use 'gage_id' as the object name!!! \n
       Expected when defining nldi_feat$featureID")
-    }
+    } else if (base::is.na(gage_id)){
+      ls_sitefeat[[i]] <- NULL
+    } else { # Normal operations
+      # Retrieve the COMID
+      # Reference: https://doi-usgs.github.io/nhdplusTools/articles/get_data_overview.html
+      nldi_feat <- base::list(featureSource =featureSource,
+                              featureID = as.character(glue::glue(featureID)))
+      # NOTE: featureID string should expect {'gage_id'} as a variable!
+      ls_featid[[i]] <- nldi_feat
 
-    # Retrieve the COMID
-    # Reference: https://doi-usgs.github.io/nhdplusTools/articles/get_data_overview.html
-    nldi_feat <- base::list(featureSource =featureSource,
-                            featureID = as.character(glue::glue(featureID)))
-    # NOTE: featureID string should expect {'gage_id'} as a variable!
-    ls_featid[[i]] <- nldi_feat
 
-
-    site_feature <- try(nhdplusTools::get_nldi_feature(nldi_feature = nldi_feat))
-    if('try-error' %in% base::class(site_feature)){
-      stop(glue::glue("The following nldi features didn't work. You may need to
-                 revisit the configuration yaml file that processes this dataset in
-                fs_prep: \n {featureSource}, and featureID={featureID}"))
-    } else if (base::is.null(site_feature)){
-      if(nldi_feat$featureSource=="nwissite"){
-        # Try manual api retrieval specific for nwissite (USGS-{gage_id})
-        message(glue::glue("Attempting manual connection to api for {nldi_feat$featureID}"))
-        url_build <- base::paste0("https://api.water.usgs.gov/nldi/linked-data/nwissite/",
-                                  nldi_feat$featureID,"?f=json")
-        json_file <- jsonlite::read_json(url_build)
-        site_feature <- tibble::tibble(identifier=nldi_feat$featureID,
-              comid=json_file$features[[1]]$properties$comid,
-              geometry=sf::st_sfc(sf::st_point(
-                base::c(json_file$features[[1]]$geometry$coordinates[[2]],
-                  json_file$features[[1]]$geometry$coordinates[[1]])),crs=epsg)
-              )
-      } else {
-        # Try again with discover_nhdplus_id
-        warning(glue::glue("^^ Could not retrieve geometry for {nldi_feat$featureID}."))
-        comid <- try(nhdplusTools::discover_nhdplus_id(point=site_feature$geometry))
-        if("try-error" %in% base::class(comid)){ # Assign NA values for everything
-          site_feature <- tibble::tibble(identifier=nldi_feat$featureID,comid=NA,
-                                   geometry=sf::st_sfc(sf::st_point(),crs=epsg))
-        } else { # Assign NA values for geometry
-          site_feature <- tibble::tibble(identifier=nldi_feat$featureID,comid=comid,
-                                   geometry = sf::st_sfc(sf::st_point(),crs=epsg))
+      site_feature <- try(nhdplusTools::get_nldi_feature(nldi_feature = nldi_feat))
+      if('try-error' %in% base::class(site_feature)){
+        stop(glue::glue("The following nldi features didn't work. You may need to
+                   revisit the configuration yaml file that processes this dataset in
+                  fs_prep: \n {featureSource}, and featureID={featureID}"))
+      } else if (base::is.null(site_feature)){
+        if(nldi_feat$featureSource=="nwissite"){
+          # Try manual api retrieval specific for nwissite (USGS-{gage_id})
+          message(glue::glue("Attempting manual connection to api for {nldi_feat$featureID}"))
+          url_build <- base::paste0("https://api.water.usgs.gov/nldi/linked-data/nwissite/",
+                                    nldi_feat$featureID,"?f=json")
+          json_file <- jsonlite::read_json(url_build)
+          site_feature <- tibble::tibble(identifier=nldi_feat$featureID,
+                comid=json_file$features[[1]]$properties$comid,
+                geometry=sf::st_sfc(sf::st_point(
+                  base::c(json_file$features[[1]]$geometry$coordinates[[2]],
+                    json_file$features[[1]]$geometry$coordinates[[1]])),crs=epsg)
+                )
+          } else {
+            # Try again with discover_nhdplus_id
+            warning(glue::glue("^^ Could not retrieve geometry for {nldi_feat$featureID}."))
+            comid <- try(nhdplusTools::discover_nhdplus_id(point=site_feature$geometry))
+            if("try-error" %in% base::class(comid)){ # Assign NA values for everything
+              site_feature <- tibble::tibble(identifier=nldi_feat$featureID,comid=NA,
+                                       geometry=sf::st_sfc(sf::st_point(),crs=epsg))
+            } else { # Assign NA values for geometry
+              site_feature <- tibble::tibble(identifier=nldi_feat$featureID,comid=comid,
+                                       geometry = sf::st_sfc(sf::st_point(),crs=epsg))
+            }
+          }
+      }
+      if("sfc_LINESTRING" %in% base::class(site_feature$geometry)){
+        # We want a singular point for the comid, so pick the middle point
+        if (base::length(site_feature$geometry) > 1){
+          stop("Unexpected format - anticipating just one row in site_feature sf/df")
+        } else {
+          site_feature$geometry <- sf::st_line_sample(site_feature$geometry[[1]],
+                                                           sample = 0.5) %>%
+                                            sf::st_cast("POINT")
         }
       }
+
+      ls_sitefeat[[i]] <- site_feature
     }
-    if("sfc_LINESTRING" %in% base::class(site_feature$geometry)){
-      # We want a singular point for the comid, so pick the middle point
-      if (base::length(site_feature$geometry) > 1){
-        stop("Unexpected format - anticipating just one row in site_feature sf/df")
-      } else {
-        site_feature$geometry <- sf::st_line_sample(site_feature$geometry[[1]],
-                                                         sample = 0.5) %>%
-                                          sf::st_cast("POINT")
-      }
-    }
-    ls_sitefeat[[i]] <- site_feature
   }
 
   dt_all_geom <- data.table::rbindlist(ls_sitefeat,fill = TRUE,use.names = TRUE)
-  # Rename columns
-  name_lookup = base::c(featureID = 'identifier')
-  dt_comid_geom <- dt_all_geom %>%
-    dplyr::rename(dplyr::any_of(name_lookup),) # any_of allows situations when 'identifier' doesn't exist
-  dt_comid_geom$featureSource <- featureSource
-  dt_comid_geom$gage_id <- base::as.character(gage_ids)
+
+  if(base::nrow(dt_comid_geom)>0){
+    # Rename columns
+    name_lookup = base::c(featureID = 'identifier')
+    dt_comid_geom <- dt_all_geom %>%
+      dplyr::rename(dplyr::any_of(name_lookup),) # any_of allows situations when 'identifier' doesn't exist
+    dt_comid_geom$featureSource <- featureSource
+    dt_comid_geom$gage_id <- base::as.character(gage_ids)
+  }
+
   return(dt_comid_geom)
 }
 
@@ -1257,6 +1265,7 @@ std_attr_data_fmt <- function(attr_data){
   #' @export
   # Changelog/Contributions
   #. 2024-12-23 Originally created, GL
+  #. 2025-05-05 Remove featureSource col assigned from sub_dt_dat$COMID, remove COMID column
   # Ensure consistent format of dataset
   attr_data_ls <- list()
   for(dat_srce in base::names(attr_data)){
@@ -1301,13 +1310,17 @@ retr_attr_new <- function(locids,need_vars,paths_ha){
   #' @seealso \link[proc.attr.hydfab]{proc_attr_wrap}
   #' @seealso \link[proc.attr.hydfab]{proc_attr_mlti_wrap}
   #' @export
+  #'
+  # Changelog/Contributions
+  #. 2025 Originally created, GL
+  #. 2025-05-06 implement nrow(x)>0 empty data error handling, GL
   # -------------------------------------------------------------------------- #
   # --------------- dataset grabber ---------------- #
   attr_data <- base::list()
 
   # --------------- Hydroatlas version 1 ---------------
   if(('ha_vars' %in% base::names(need_vars)) &&
-      (base::all(!base::is.na(need_vars$ha_vars)))){
+      (base::all(!base::is.na(need_vars$ha_vars))) ){
     # Hydroatlas variable query; list name formatted as {dataset_name}__v{ver_num}
     dt_hydatl <- proc.attr.hydfab::retr_attr_hydatl_wrap(
         hf_ids = locids,
@@ -1316,7 +1329,6 @@ retr_attr_new <- function(locids,need_vars,paths_ha){
     # NOTE proc.attr.hydfab::std_feat_id is called inside retr_attr_hydatl_wrap
     #. And does not need to be called here
     attr_data[['hydroatlas__v1']] <- dt_hydatl
-
   }
 
   # --------------- USGS NHD Plus attributes ---------------
@@ -1326,7 +1338,7 @@ retr_attr_new <- function(locids,need_vars,paths_ha){
     df_nhd <- proc.attr.hydfab::proc_attr_usgs_nhd(comid=locids,
                               usgs_vars=need_vars$usgs_vars)
     # Standardize into featureSource and featureID columns
-    if("COMID" %in% base::names(df_nhd)){
+    if( ("COMID" %in% base::names(df_nhd)) && (base::nrow(df_nhd)>0)  ){
       df_nhd_std <- proc.attr.hydfab::std_feat_id(df=df_nhd,col_featureID="COMID")
     } else {
       df_nhd_std <- proc.attr.hydfab::std_feat_id(df=df_nhd,col_featureID="featureID")
@@ -1338,15 +1350,16 @@ retr_attr_new <- function(locids,need_vars,paths_ha){
   ########## May add more data sources here and append to attr_data ###########
 
   # ----------- dataset standardization ------------ #
-  if (!base::all(base::unlist(( # A qa/qc check
+  if (!base::all(base::unlist( # A qa/qc check
     base::lapply(attr_data, function(x)
       base::any(base::grepl("featureID", base::colnames(x)))
-      ))))){
+      ) ) ) && base::any(base::unlist( base::lapply(attr_data,
+                            function(x) base::nrow(x)>0))) ){
     stop("Expecting 'featureID' as a column name identifier in every dataset")
+  } else {
+    # Convert from wide to long format
+    attr_data <- proc.attr.hydfab::std_attr_data_fmt(attr_data)
   }
-
-  # Convert from wide to long format
-  attr_data <- proc.attr.hydfab::std_attr_data_fmt(attr_data)
 
   return(attr_data)
 }
@@ -1974,6 +1987,7 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
   #  Changelog/Contributions
   #   2024-07-29 Originally created, GL
   #.  2025-03-07 add path_save_gpkg capability, GL
+  #.  2025-05-06 add oCONUS/hydrofabric compatibility section, GL
   # Path checker/maker of anything that's a directory not formatted for later glue::glue() calls
 
   if(!base::is.null(path_save_gpkg)){ # Add path save gpkg to parameter object
@@ -1994,7 +2008,7 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
   if(base::is.null(hfab_retr)){ # Use default in the proc_attr_wrap() function
     hfab_retr <- base::formals(proc.attr.hydfab::proc_attr_wrap)$hfab_retr
   }
-
+  # ---------------------- CONUS COMID compatibility ------------------------- #
   ls_retr_comid <- proc.attr.hydfab::retr_comids(gage_ids=gage_ids,
                           featureSource=featureSource,
                           featureID=featureID,
@@ -2003,8 +2017,32 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
   base::names(ls_retr_comid$ls_comid) <- gage_ids
   just_comids <- ls_retr_comid$ls_comid %>% base::unname() %>% base::unlist()
 
+  # ---------------- oCONUS hydrofabric compatibility ------------------------ #
+  # The missing comids to be sought out in OCONUS hydrofabric domains
+  idxs_na_id <- base::which(base::is.na(just_comids))
+  if(base::length(idxs_na_id) > 0){  # assumed to be oCONUS if comid unavailable
+    gage_ids_for_hf <- gage_ids[idxs_na_id] # Locations in AK, PR, HI
 
+    # Convert into the nwissite form as defined by 'featureID'
+    loc_ids <- base::lapply(gage_ids_for_hf,
+                            function(gage_id) base::as.character(glue::glue(featureID))) %>%
+                                base::unlist()
 
+    dt_hfuid <- proc.attr.hydfab::retr_hfuids(loc_ids=loc_ids,
+              path_oconus_hfab_config=Retr_Params$paths$path_oconus_hfab_config, # e.g. "~/git/formulation-selector/scripts/eval_ingest/bm_test25/bm_oconus_config.yaml"
+              featureSource = featureSource)
+
+    if(base::nrow(dt_hfuid) == base::length(gage_ids_for_hf)){
+      # Integrate loc id back into the order of ls_retr_comid$ls_comid
+      just_comids[idxs_na_id] <- dt_hfuid$featureID
+      ls_retr_comid$ls_comid[idxs_na_id] <- dt_hfuid$featureID
+      #  Integrate loc id back into the order of ls_retr_comid$sf_comid
+      ls_retr_comid$sf_comid[idxs_na_id,"comid"] <- dt_hfuid$featureID
+      ls_retr_comid$sf_comid[idxs_na_id,"featureSource"] <- dt_hfuid$featureSource
+    } else {
+      stop("Problem with indexing assumption")
+    }
+  }
 
   # ---------- RETRIEVE DESIRED ATTRIBUTE DATA FOR EACH LOCATION ------------- #
   dt_site_feat_retr <- proc.attr.hydfab::proc_attr_mlti_wrap(
@@ -2157,7 +2195,7 @@ grab_attrs_datasets_fs_wrap <- function(Retr_Params,lyrs="network",overwrite=FAL
   #'  \item \code{paths} list of directories or paths used to acquire and save data These include the following:
   #'  \item \code{paths$dir_db_hydfab} the local path to where hydrofabric data are saved
   #'  \item \code{path$dir_db_attrs} local path for saving catchment attributes as parquet files
-  #'  \item \code{path$path_ha} the local or s3 location(s) of tabular data file with HydroATLAS downscaled to hydrofabric divide
+  #'  \item \code{path$paths_ha} the local or s3 location(s) of tabular data file with HydroATLAS downscaled to hydrofabric divide
   #'  \item \code{path$dir_std_base} the location of user_data_std containing dataset that were standardized by \pkg{fs_prep}.
   #'  \item \code{datasets} character vector. A list of datasets of interest inside \code{paths$dir_std_base}. If 'all' is specified, then all datasets in the directory are processed.
   #'  \item \code{ds_type} character. The identifier to use in filename when writing attribute location metadata retrieved from nhdplusTools::get_nldi_feature()
