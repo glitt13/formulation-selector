@@ -262,14 +262,14 @@ test_that("std_attr_data_fmt standardizes attribute data correctly", {
     source_a = data.frame(
       featureID = c("1001", "ak-cat-1003"),
       featureSource = c("nwissite", "hfuid_custom"),
-      attr1 = factor(c("A", "B")),
-      attr2 = c(1, 2)
+      TOT_TWI = factor(c("A", "B")),
+      TOT_PPT7100_JUL = c(1, 2)
     ),
     source_b = data.frame(
       featureID = c("2001"),
       featureSource = c("wqp"),
-      attr1 = factor("X"),
-      attr2 = 42
+      TOT_TWI = factor("X"),
+      TOT_PPT7100_JUL = 42
     )
   )
 
@@ -295,6 +295,30 @@ test_that("std_attr_data_fmt standardizes attribute data correctly", {
   # Ensure `data_source` and `dl_timestamp` are added
   testthat::expect_true(base::all(result$source_a$data_source == "source_a"))
   testthat::expect_true(base::all(result$source_b$data_source == "source_b"))
+
+
+  # run test on correcting attribute data when wrong columns supplied
+  # Create an attr_data with columns that shouldn't exist('COMID','hf_uid')
+  attr_data_test <- base::list("hydroatlas_v1" = data.frame(COMID = 724696,
+                                    hf_uid=NA,pet_mm_s01=NA, cly_pc_sav=NA,
+                                    featureID = "724696",featureSource="COMID"))
+  rslt_corr <- proc.attr.hydfab::std_attr_data_fmt(attr_data_test)
+  testthat::expect_true(base::nrow(rslt_corr$hydroatlas_v1)==2)
+  testthat::expect_true(base::ncol(rslt_corr$hydroatlas_v1) == 6)
+  testthat::expect_true(base::length(rslt_corr) == 1)
+
+  # run test on correcting attribute data when unacceptable attributes generated
+  attr_data_bad_attr <- base::list("hydroatlas_v1" = data.frame(not_an_attr=567,
+                                                                  badthing="43",
+                                                              COMID = 724696,
+                                                              hf_uid=NA,pet_mm_s01=NA, cly_pc_sav=NA,
+                                                              featureID = "724696",featureSource="COMID"))
+
+  rslt_corr_bad <- proc.attr.hydfab::std_attr_data_fmt(attr_data_bad_attr) %>%
+    testthat::expect_warning(regexp="badthing")
+  testthat::expect_true(base::nrow(rslt_corr_bad$hydroatlas_v1)==2)
+  testthat::expect_false(base::all(base::grepl("not_an_attr",rslt_corr_bad$hydroatlas_v1$attribute)))
+  testthat::expect_false(base::all(base::grepl("badthing",rslt_corr_bad$hydroatlas_v1$attribute)))
 })
 
 
