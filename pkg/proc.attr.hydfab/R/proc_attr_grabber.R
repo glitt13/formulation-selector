@@ -1574,8 +1574,8 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
   # 2024 Originally Created, GL
   # 2025-05-06 reduce the missing variable grabbing to 'still_need' logic, GL
   # 2025-05-07 add chck_need_vars_fmt, GL
-
-  # TODO integrate id_attrs_sel_wrap here
+  # 2025-05-08 fix: need_vars transform w/ chck_need_vars_fmt must happen after
+  # TODO integrate _id_attrs_sel_wrap here
   vars_ls <- Retr_Params$vars
 
   # ------- Retr_Params$vars format checker --------- #
@@ -1596,7 +1596,6 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
     #                                                       function(x) !base::file.exists(x)))]
   }
 
-  # TODO add NA handling for comids (& ensure compatibility with proc_attr_gageids!!)
   paths_attrs <- proc.attr.hydfab::std_path_attrs(comid=comids,
                          dir_db_attrs=Retr_Params$paths$dir_db_attrs)
   # The comids that are stored already (have) & those that are new (need)
@@ -1622,28 +1621,21 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
 
   # ----- Extract the need vars
   need_vars <- base::lapply(ls_attr_exst, function(x) x$need_vars) #%>%
-
-  # Run check on need_vars format:
+  # NOTE: DO NOT call chck_need_vars_fmt here b/c we first need miss_var_types_by_file logic
+  need_vars_og <- need_vars # Create a copy before transforming using chck_need_vars_fmt
+  # Run check on need_vars format to get into appropriate format
   need_vars <- proc.attr.hydfab:::chck_need_vars_fmt(need_vars)
-
-  if(!base::all(base::grepl("_vars",base::names(need_vars)) )){
-    # Try re-formatting
-    need_vars <- base::lapply(ls_attr_exst, function(x) x$need_vars) %>%
-                        base::unique() %>% base::unlist(recursive=FALSE)
-    if(!base::all(base::grepl("_vars",base::names(need_vars)) )){
-      warning("Unexpected format of need_vars. Should be a list e.g.\n
-               base::list(ha_vars = c('pet_mm_s01','cly_pc_sav'))")
-    }
-  }
-
-  miss_var_types_by_file <- base::lapply(need_vars, function(x) base::names(x))
+  # Use pre-transformed form of need_vars (og) to identify indices of interest
+  miss_var_types_by_file <- base::lapply(need_vars_og, function(x) base::names(x))
   # The indices corresponding to locations missing vars, based on need_vars
   idxs_still_need_them <- base::grep(TRUE,base::lapply(miss_var_types_by_file,
                               function(x) !base::is.null(x)) %>% base::unlist())
 
+  # ----- compile the existing data into a single data.table
   ls_dt_exst <- base::lapply(ls_attr_exst, function(x) x$dt_all)
   dt_exst_all <- data.table::rbindlist(ls_dt_exst,use.names = TRUE,fill = TRUE)
-  need_vars_og <- need_vars # Create a copy in case this gets modified
+
+
 
   # -------------------------------------------------------------------------- #
   # ------------------ new attribute grab & write updater -------------------- #
@@ -1653,8 +1645,6 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
   ls_attr_data[['already_exist']] <- base::list('pre-exist'=dt_exst_all)
   # Acquire attributes for locations that haven't been retrieved yet
   if(base::length(comids_attrs_need)>0 )  {
-
-
     # We'll need all variables for these new locations that don't have data
 
     # Grab all the attribute data for these comids that don't exist yet
