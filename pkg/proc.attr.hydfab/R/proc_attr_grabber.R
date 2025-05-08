@@ -248,17 +248,37 @@ build_cfig_path <- function(path_known_config, path_or_name_cfig) {
   return(path_cfig)
 }
 
-map_attrs_to_dataset <- function(vars){
-  #' @title Match the variable names to the data source
-  #' @param vars List of variable names, possibly mixed across different data sources
-  #' @export
-  # Read in proc.attr.hydfab package's extdata describing attributes & data sources
+##### READING/PARSING PACKAGE CONFIG FILES
+read_fs_attr_menu_config <- function(){
+  #' @title Read in proc.attr.hydfab package's extdata describing attributes & data sources
+  # Changelog / contributions
+  # 2025-05-07 refactored from proc.attr.hydfab::map_attrs_to_dataset
   dir_extdata <- system.file("extdata",package="proc.attr.hydfab")
   path_attr_menu <- base::file.path(dir_extdata, "fs_attr_menu.yaml")
   ls_attr_menu <- yaml::read_yaml(path_attr_menu)
+  return(ls_attr_menu)
+}
 
+read_attr_srce_type_config <- function(){
+  #' @title Read the attribute source type config file
+  # Changelog / contributions
+  # 2025-05-07 refactored from proc.attr.hydfab::map_attrs_to_dataset, GL
+
+  dir_extdata <- system.file("extdata",package="proc.attr.hydfab")
   path_attr_src_types <- base::file.path(dir_extdata,"attr_source_types.yml")
   df_attr_src_types <- yaml::read_yaml(path_attr_src_types)
+  return(df_attr_src_types)
+}
+
+
+parse_attr_srce_type_config <- function(){
+  #' @title Parse the attr_source_types.yml config file internal to proc.attr.hydfab
+  #' @seealso \link[proc.attr.hydfab]{map_attrs_to_dataset}
+  # Changelog / contributions
+  # 2025-05-07 refactored from proc.attr.hydfab::map_attrs_to_dataset &
+  #.  added internal_ds_name to df_map. GL
+  df_attr_src_types <- proc.attr.hydfab:::read_attr_srce_type_config()
+
   srce_types <- base::lapply(df_attr_src_types, function(x) base::unlist(x)) %>%
     base::names()
   ls_internal_vars <- base::list()
@@ -266,12 +286,56 @@ map_attrs_to_dataset <- function(vars){
   ctr <- 0
   for(x in df_attr_src_types){
     ctr <- ctr+1
-    ls_internal_ds_names[[ctr]] <- base::lapply(x, function(j) j[['name']]) %>%
+    ls_internal_vars[[ctr]] <- base::lapply(x, function(j) j[['name']]) %>%
       base::unlist()
+    if(base::length(x)>1){
+      ls_internal_ds_names[[ctr]] <- base::lapply(x, function(j) j[['internal_dataset_name']]) %>%
+        base::unlist()
+    } else {
+      ls_internal_ds_names[[ctr]] <- NA
+    }
   }
   # Map the names used in the menu to the names used in the attribute config file/RaFTS code
   df_map <- data.frame(menu_name = base::unlist(srce_types),
-                       rafts_name = base::unlist(ls_internal_ds_names))
+                       rafts_name = base::unlist(ls_internal_vars),
+                       internal_ds_name=base::unlist(ls_internal_ds_names))
+  return(df_map)
+}
+
+
+map_attrs_to_dataset <- function(vars){
+  #' @title Match the variable names to the data source
+  #' @param vars List of variable names, possibly mixed across different data sources
+  #' @export
+  # Changelog / contributions
+  # 2025-05-07 refactored to reading/parsing package config functions, GL
+
+  # Read in proc.attr.hydfab package's extdata describing attributes & data sources
+
+  # dir_extdata <- system.file("extdata",package="proc.attr.hydfab")
+  # path_attr_menu <- base::file.path(dir_extdata, "fs_attr_menu.yaml")
+  ls_attr_menu <- proc.attr.hydfab:::read_fs_attr_menu_config()
+
+  # path_attr_src_types <- base::file.path(dir_extdata,"attr_source_types.yml")
+  # df_attr_src_types <- yaml::read_yaml(path_attr_src_types)
+  #
+  # df_attr_src_types <- proc.attr.hydfab:::read_attr_srce_type_config
+  #
+  # srce_types <- base::lapply(df_attr_src_types, function(x) base::unlist(x)) %>%
+  #   base::names()
+  # ls_internal_vars <- base::list()
+  # ls_internal_ds_names <- base::list()
+  # ctr <- 0
+  # for(x in df_attr_src_types){
+  #   ctr <- ctr+1
+  #   ls_internal_ds_names[[ctr]] <- base::lapply(x, function(j) j[['name']]) %>%
+  #     base::unlist()
+  # }
+  # # Map the names used in the menu to the names used in the attribute config file/RaFTS code
+  # df_map <- data.frame(menu_name = base::unlist(srce_types),
+  #                      rafts_name = base::unlist(ls_internal_ds_names))
+  df_map <- proc.attr.hydfab:::parse_attr_srce_type_config()
+
 
   # Now figure out which variables correspond to which rafts_name
   ls_attrs_name <- base::list()
@@ -435,13 +499,23 @@ retr_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
   #' @seealso \link[proc.attr.hydfab]{custom_hf_id} for a custom hydrofabric ID with vpu in the identifier
   #' @export
   #'
-
+  # Changelog / Contributions
+  #. 2025-03 originally created, GL
+  #. 2025-05-07 add s3 placeholder, GL
   ls_dat_ha <- list()
   ctr <- 0
   for(path_ha in paths_ha){
     ctr <- ctr + 1
-    if(!base::file.exists(path_ha)){
-      stop(glue::glue("The HydroATLAS attributes file does not exist: {path_ha}"))
+
+    if(base::grepl("s3:/", path_ha)){
+      # TODO add in s3 capability here
+      warning(base::paste0("!!!!!!!!!!!!!!!!!!!!!! #TODO !!!!!!!!!!!!!!!!!!!!!!!!!\n",
+                        glue::glue("s3 connection for HydroATLAS attributes file needs to be made:
+                                   {path_ha}.")))
+      ls_dat_ha[ctr] <- data.frame()
+    } else if(!base::file.exists(path_ha)){
+      stop(base::paste0("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+              glue::glue("The HydroATLAS attributes file does not exist: {path_ha}.")))
     }
     # TODO how do we split the hf_ids into COMIDs and non-COMIDs??
     #.  - attempt retr_attr_hydatl() for each path_ha,generate NA empties, then merge back into the appropriate order?
@@ -1056,13 +1130,15 @@ fs_retr_nhdp_comids_geom <- function(gage_ids,featureSource='nwissite',
 
   dt_all_geom <- data.table::rbindlist(ls_sitefeat,fill = TRUE,use.names = TRUE)
 
-  if(base::nrow(dt_comid_geom)>0){
+  if(base::nrow(dt_all_geom)>0){
     # Rename columns
     name_lookup = base::c(featureID = 'identifier')
     dt_comid_geom <- dt_all_geom %>%
       dplyr::rename(dplyr::any_of(name_lookup),) # any_of allows situations when 'identifier' doesn't exist
     dt_comid_geom$featureSource <- featureSource
     dt_comid_geom$gage_id <- base::as.character(gage_ids)
+  } else {
+    dt_comid_geom <- dt_all_geom
   }
 
   return(dt_comid_geom)
@@ -1266,6 +1342,8 @@ std_attr_data_fmt <- function(attr_data){
   # Changelog/Contributions
   #. 2024-12-23 Originally created, GL
   #. 2025-05-05 Remove featureSource col assigned from sub_dt_dat$COMID, remove COMID column
+  #. 2025-05-07 fix: Remove hf_uid and hf_id columns in case they exist, otherwise 'hf_uid' could end up in the attribute column
+
   # Ensure consistent format of dataset
   attr_data_ls <- list()
   for(dat_srce in base::names(attr_data)){
@@ -1288,6 +1366,12 @@ std_attr_data_fmt <- function(attr_data){
         base::format(Sys.time()),tz="UTC"))
       if("COMID" %in% base::colnames(sub_dt_dat)){
         sub_dt_dat <- sub_dt_dat %>% dplyr::select(-COMID)
+      }
+      if("hf_uid" %in% base::colnames(sub_dt_dat)){
+        sub_dt_dat <- sub_dt_dat %>% dplyr::select(-"hf_uid")
+      }
+      if("hf_id" %in% base::colnames(sub_dt_dat)){
+        sub_dt_dat <- sub_dt_dat %>% dplyr::select(-"hf_id")
       }
 
       # Convert from wide to long format, convert factors to char
@@ -1314,12 +1398,18 @@ retr_attr_new <- function(locids,need_vars,paths_ha){
   # Changelog/Contributions
   #. 2025 Originally created, GL
   #. 2025-05-06 implement nrow(x)>0 empty data error handling, GL
+  #. 2025-05-07 add ha_vars logic to be compatible with dataset path(custome file), GL
   # -------------------------------------------------------------------------- #
   # --------------- dataset grabber ---------------- #
   attr_data <- base::list()
 
   # --------------- Hydroatlas version 1 ---------------
-  if(('ha_vars' %in% base::names(need_vars)) &&
+  # In the case of reading a custom file(dataset path) rather than netcdf,
+  #.  the list ordering in need_vars takes a different form
+  var_types_file <- base::lapply(need_vars, function(x) base::names(x)) %>%
+              base::unname() %>% base::unlist() %>% base::unique()
+
+  if(('ha_vars' %in% base::names(need_vars)) || ('ha_vars' %in% var_types_file)  &&
       (base::all(!base::is.na(need_vars$ha_vars))) ){
     # Hydroatlas variable query; list name formatted as {dataset_name}__v{ver_num}
     dt_hydatl <- proc.attr.hydfab::retr_attr_hydatl_wrap(
@@ -1431,6 +1521,31 @@ io_attr_dat <- function(dt_new_dat,path_attrs,
   return(dt_cmbo)
 }
 
+chck_need_vars_fmt <- function(need_vars){
+  #' @title Check the format of need_vars object and correct if it doesn't match
+  #' @param need_vars a list whose names must follow "{shortstring}_vars", with
+  #' list contents containing actual variable names corresponding to a dataset
+  #' @seealso [proc.attr.hydfab]{proc_attr_mlti_wrap}
+
+  # Changelog / contributions
+  #. 2025-05-07 Originally created, GL
+  df_map_vars <- proc.attr.hydfab:::parse_attr_srce_type_config()
+
+  if(!base::all(names(need_vars) %in% df_map_vars$rafts_name)){
+    # Try re-formatting the need_vars
+    need_vars <- base::lapply(ls_attr_exst, function(x) x$need_vars) %>%
+      base::unique() %>% base::unlist(recursive=FALSE)
+    if(!base::all(names(need_vars) %in% df_map_vars$rafts_name)){
+      warning("Unexpected format of need_vars. Should be a list e.g.\n
+      base::list(ha_vars = c('pet_mm_s01','cly_pc_sav')). \n
+      Refer to the proc.attr.hydfab/inst/extdata/attr_source_types.yml
+      for acceptable need_vars in the 'name' category.")
+    }
+  }
+
+  return(need_vars)
+}
+
 
 proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
                                 overwrite=FALSE){
@@ -1458,6 +1573,8 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
   # Changelog/Contributions
   # 2024 Originally Created, GL
   # 2025-05-06 reduce the missing variable grabbing to 'still_need' logic, GL
+  # 2025-05-07 add chck_need_vars_fmt, GL
+
   # TODO integrate id_attrs_sel_wrap here
   vars_ls <- Retr_Params$vars
 
@@ -1505,7 +1622,20 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
 
   # ----- Extract the need vars
   need_vars <- base::lapply(ls_attr_exst, function(x) x$need_vars) #%>%
-                          #base::unique() %>% base::unlist(recursive=FALSE)
+
+  # Run check on need_vars format:
+  need_vars <- proc.attr.hydfab:::chck_need_vars_fmt(need_vars)
+
+  if(!base::all(base::grepl("_vars",base::names(need_vars)) )){
+    # Try re-formatting
+    need_vars <- base::lapply(ls_attr_exst, function(x) x$need_vars) %>%
+                        base::unique() %>% base::unlist(recursive=FALSE)
+    if(!base::all(base::grepl("_vars",base::names(need_vars)) )){
+      warning("Unexpected format of need_vars. Should be a list e.g.\n
+               base::list(ha_vars = c('pet_mm_s01','cly_pc_sav'))")
+    }
+  }
+
   miss_var_types_by_file <- base::lapply(need_vars, function(x) base::names(x))
   # The indices corresponding to locations missing vars, based on need_vars
   idxs_still_need_them <- base::grep(TRUE,base::lapply(miss_var_types_by_file,
@@ -1550,10 +1680,12 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
     }
   }
 
-  # Acquire attributes that still haven't been retrieved (but some attrs exist)
+  # Acquire attributes that still haven't been retrieved (but some attrs exist for a given location)
   if(base::length(idxs_still_need_them)>0){
     comids_attrs_still_need <- comids_attrs_have[idxs_still_need_them]
-    still_need_vars <- need_vars[idxs_still_need_them]
+    still_need_vars <- need_vars[idxs_still_need_them] %>%
+      proc.attr.hydfab:::chck_need_vars_fmt()# Run check on format
+
     # retrieve the needed attributes:
     ls_attr_data[['pre-exist']] <- proc.attr.hydfab::retr_attr_new(
                                                 locids=comids_attrs_still_need,
@@ -1564,7 +1696,7 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
                                            use.names = TRUE,fill=TRUE )
 
     # Write new attribute data to pre-existing comid file
-    for(exst_comid in dt_prexst_dat$featureID){
+    for(exst_comid in base::unique(dt_prexst_dat$featureID)){
       sub_dt_new_attrs <- dt_prexst_dat[dt_prexst_dat$featureID==exst_comid,]
       path_exst_comid <- proc.attr.hydfab::std_path_attrs(
                             comid=exst_comid,
@@ -2068,7 +2200,8 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
     gage_ids_missing <- base::names(ls_retr_comid$ls_comid)[base::which(
         !base::names(ls_retr_comid$ls_comid) %in% dt_site_feat$gage_id)]
 
-    gage_ids_missing <- c(missing_the_comid,gage_ids_missing) %>% base::unique()
+    gage_ids_missing <- base::c(missing_the_comid,gage_ids_missing) %>%
+                        base::unique()
     warning(glue::glue("The following gage_id values did not return a comid:\n
                        {paste0(gage_ids_missing,collapse=',')}"))
   }
@@ -2290,7 +2423,7 @@ grab_attrs_datasets_fs_wrap <- function(Retr_Params,lyrs="network",overwrite=FAL
       dt_site_feat <- proc.attr.hydfab::proc_attr_gageids(gage_ids=as.array(dat_loc[['gage_id']]),
                                                            featureSource=Retr_Params$loc_id_read$featureSource_loc,
                                                            featureID=Retr_Params$loc_id_read$featureID_loc,
-                                                           Retr_Params,
+                                                           Retr_Params = Retr_Params,
                                                            path_save_gpkg=path_save_gpkg,
                                                            lyrs=lyrs,
                                                            overwrite=overwrite)
