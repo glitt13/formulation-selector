@@ -495,6 +495,7 @@ retr_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
   #' @details The hf_ids may contain 1) a COMID, corresponding to CONUS, &/or
   #' 2) a hydrofabric id for OCONUS
   # We want to make sure the hydrofabric id is a unique id
+  #' @seealso \link[proc.attr.hydfab]{std_attr_data_fmt} - uses the `hf_id_cols` default argument values using formals
   #' @seealso \link[proc.attr.hydfab]{retr_attr_hydatl}
   #' @seealso \link[proc.attr.hydfab]{custom_hf_id} for a custom hydrofabric ID with vpu in the identifier
   #' @export
@@ -1207,6 +1208,7 @@ proc_attr_hf <- function(comid, dir_db_hydfab,custom_name="{lyrs}_",fileext = 'g
   #' @param hf_version character class. The hydrofabric version. When NULL, defaults to same as \code{hfsubsetR::get_subset()}
   #' @param type hydrofabric type. When NULL, defaults to same as \code{hfsubsetR::get_subset()}, likely 'nextgen'
   #' @param domain hydrofabric domain. When NULL, defaults to same as \code{hfsubsetR::get_subset()}, likely 'conus'
+  #' @seealso \link[proc.attr.hydfab]{hfab_config_opt} Searches for default arguments from this function using formals
   #' @export
 
   warning("proc_attr_hf DOES NOT WORK AS EXPECTED!!")
@@ -1336,13 +1338,27 @@ proc_attr_exst_wrap <- function(path_attrs,vars_ls,bucket_conn=NA){
 
 std_attr_data_fmt <- function(attr_data){
   #' @title Standardize the catchment attribute data to read/write in parquet files
+  #' @description Standardizes into common format with the following columns:
+  #'  \itemize{
+  #'  \item \code{featureID} The unique location identifier
+  #'  \item \code{featureSource} The type of unique identifier
+  #'  \item \code{data_source} The source of attribute data corresponding to a location
+  #'  \item \code{dl_timestamp} The download timestamp of attribute data
+  #'  \item \code{attribute} The attribute name from the external source
+  #'  \item \code{value} The value of the attribute
+  #'  }
+  #'  Additionally, uses the internal function `read_fs_attr_menu_config` to
+  #'  check if the entries in the \code{attribute} column are consistent with
+  #'  expected forms, and removes those that are not defined in the menu.
   #' @param attr_data list of data.frame of attribute data
   #' @seealso \link[proc.attr.hydfab]{retr_attr_new}
+  #' @seealso \link[proc.attr.hydfab]{read_fs_attr_menu_config}
   #' @export
   # Changelog/Contributions
   #. 2024-12-23 Originally created, GL
-  #. 2025-05-05 Remove featureSource col assigned from sub_dt_dat$COMID, remove COMID column
-  #. 2025-05-07 fix: Remove hf_uid and hf_id columns in case they exist, otherwise 'hf_uid' could end up in the attribute column
+  #. 2025-05-05 Remove featureSource col assigned from sub_dt_dat$COMID, remove COMID column, GL
+  #. 2025-05-07 fix: Remove hf_uid and hf_id columns in case they exist, otherwise 'hf_uid' could end up in the attribute column, GL
+  #. 2025-05-08 refactor: use formals argument defaults to define possible identifier column names; add menu checker GL
 
   # Ensure consistent format of dataset
   attr_data_ls <- list()
@@ -1355,23 +1371,26 @@ std_attr_data_fmt <- function(attr_data){
       # Even though COMID always expected, use featureSource and featureID for
       #.  full compatibility with potential custom datasets
 
-
-      # TODO oconus: Is it OK to eliminate COMID now??
-
       sub_dt_dat$featureID <- base::as.character(sub_dt_dat$featureID)
       sub_dt_dat$featureSource <- base::as.character(sub_dt_dat$featureSource)
       #sub_dt_dat$featureSource <- sub_dt_dat$COMID
       sub_dt_dat$data_source <- base::as.character(dat_srce)
       sub_dt_dat$dl_timestamp <- base::as.character(base::as.POSIXct(
         base::format(Sys.time()),tz="UTC"))
-      if("COMID" %in% base::colnames(sub_dt_dat)){
-        sub_dt_dat <- sub_dt_dat %>% dplyr::select(-COMID)
+      # Extract default id column names considered in retr_attr_hydatl_wrap
+      ls_hf_ids_cols_call <- base::as.list(
+        base::formals(proc.attr.hydfab::retr_attr_hydatl_wrap)$hf_id_cols)
+      ls_hf_ids_cols <- ls_hf_ids_cols_call[2:length(ls_hf_ids_cols_call)] %>%
+        base::unlist()
+
+      # ------------------ The identifier columns to remove (NOT featureID)
+      cols_no_go <- base::list("COMID","comid",ls_hf_ids_cols) %>% base::unlist()
+      cols_to_rm <- cols_no_go[base::which(cols_no_go %in% base::colnames(sub_dt_dat))]
+      if("featureID" %in% cols_to_rm){ # Ensure that featureID stays for wide-long conversion
+        cols_to_rm <- cols_to_rm[-grep("featureID",cols_to_rm)]
       }
-      if("hf_uid" %in% base::colnames(sub_dt_dat)){
-        sub_dt_dat <- sub_dt_dat %>% dplyr::select(-"hf_uid")
-      }
-      if("hf_id" %in% base::colnames(sub_dt_dat)){
-        sub_dt_dat <- sub_dt_dat %>% dplyr::select(-"hf_id")
+      if(base::length(cols_to_rm)>0){ # Remove identifier columns
+        sub_dt_dat <- sub_dt_dat %>% dplyr::select(-dplyr::all_of(cols_to_rm))
       }
 
       # Convert from wide to long format, convert factors to char
@@ -1380,6 +1399,29 @@ std_attr_data_fmt <- function(attr_data){
            variable.name = 'attribute') %>% dplyr::arrange(featureID) %>%
            dplyr::mutate(dplyr::across(dplyr::where(is.factor), as.character)) %>%
           pkgcond::suppress_warnings(pattern = "are not all of the same type")
+
+      # ------------------
+      # Run check that wide-to-long transform didn't accidentally create attributes not in the menu
+      ls_attr_menu <- proc.attr.hydfab:::read_fs_attr_menu_config()
+
+      # All possible attributes from the menu
+      all_attrs <- base::lapply(base::names(ls_attr_menu), function(x)
+        base::names(base::unlist(ls_attr_menu[[x]]))) %>% base::unlist()
+      # Run check for bad attributes and remove
+      if(base::any(!attr_data_ls[[dat_srce]]$attribute %in% all_attrs)){
+        problem_attrs <- attr_data_ls[[dat_srce]]$attribute[which(!attr_data_ls[[dat_srce]]$attribute %in% all_attrs)] %>%
+          base::unique()
+        warning("The following entries are not attributes per the attribute menu and shall be removed\n",
+            "from the attributes dataset that will get written to file:\n",
+            base::paste0(problem_attrs, collapse = "\n"),
+            "\nConsider placing these the cols_no_go object inside proc.attr.hydfab::std_attr_data_fmt\n",
+            "Refer to proc.attr.hydfab::read_fs_attr_menu_config for the allowable attributes defined in package config file.")
+
+        idxs_rm <- base::lapply(problem_attrs, function(x)
+          base::which(attr_data_ls[[dat_srce]]$attribute == x)) %>%
+          base::unlist()
+        attr_data_ls[[dat_srce]] <- attr_data_ls[[dat_srce]][-idxs_rm,]
+      }
     }
   }
   return(attr_data_ls)
@@ -1635,8 +1677,6 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
   ls_dt_exst <- base::lapply(ls_attr_exst, function(x) x$dt_all)
   dt_exst_all <- data.table::rbindlist(ls_dt_exst,use.names = TRUE,fill = TRUE)
 
-
-
   # -------------------------------------------------------------------------- #
   # ------------------ new attribute grab & write updater -------------------- #
   # This section retrieves attribute data that is not yet part of the database
@@ -1804,7 +1844,8 @@ proc_attr_wrap <- function(comid, Retr_Params, lyrs='network',overwrite=FALSE,hf
   #' @param lyrs character. The layer names of interest from the hydrofabric gpkg. Default 'network'
   #' @param overwrite boolean. Should the hydrofabric cloud data acquisition be redone and overwrite any local files? Default FALSE.
   #' @param hfab_retr boolean. Should the hydrofabric geopackage data be retrieved? Default FALSE.
-  #' @seealso \link[proc.attr.hydfab]{proc_attrs_gageids}
+  #' @seealso \link[proc.attr.hydfab]{hfab_config_opt} Searches for default arguments from this function using formals
+  #' @seealso \link[proc.attr.hydfab]{proc_attrs_gageids} Also references this function's default args using formals
   #' @seealso \link[proc.attr.hydfab]{proc_attr_mlti_wrap}
   #' @export
 
@@ -2639,7 +2680,8 @@ hfab_config_opt <- function(hfab_config,
   #' uses default param value in \code{proc.attr_hydfab::proc_attr_wrap}.
   #' @param hfab_config The hydrofabric-specific section from the config file, hydfab_config. list.
   #' @param reqd_hfab The non-optional item names in the hydrofabric config file
-  #' @return List with default arguments populated corresponding to hfsubetR::get_subset(),
+  #' @return List with default arguments populated corresponding to hfsubetR::get_subset()
+  #' @seealso \link[hfsubsetR]{get_subset} Default args referenced using formals here
   #' @export
 
   # The values inside the hydrofabric configuration section from attr config file

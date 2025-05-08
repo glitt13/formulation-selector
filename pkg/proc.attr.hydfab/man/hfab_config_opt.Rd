@@ -15,7 +15,7 @@ hfab_config_opt(
 \item{reqd_hfab}{The non-optional item names in the hydrofabric config file}
 }
 \value{
-List with default arguments populated corresponding to hfsubetR::get_subset(),
+List with default arguments populated corresponding to hfsubetR::get_subset()
 }
 \description{
 If an argument provided in the config file is NULL, first look
@@ -23,4 +23,7 @@ for default param value from the \code{proc.attr_hydfab::proc_attr_hf}.
 If that is NULL, then look for default value from the
 \code{hfsubsetR::get_subset()} args if that param exists there. Otherwise,
 uses default param value in \code{proc.attr_hydfab::proc_attr_wrap}.
+}
+\seealso{
+\link[hfsubsetR]{get_subset} Default args referenced using formals here
 }

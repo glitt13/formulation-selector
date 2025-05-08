@@ -41,6 +41,9 @@ proc_attr_hf(
 \description{
 Checks to see if a local dataset exists. If not, retrieve from lynker-spatial s3 bucket
 }
+\seealso{
+\link[proc.attr.hydfab]{hfab_config_opt} Searches for default arguments from this function using formals
+}
 \author{
 Guy Litt \email{guy.litt@noaa.gov}
 }
