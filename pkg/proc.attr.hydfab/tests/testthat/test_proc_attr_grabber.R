@@ -674,6 +674,38 @@ testthat::test_that("grab_attrs_datasets_fs_wrap", {
 
 })
 
+testthat::test_that("retr_attr_hydatl_wrap",{
+
+  # Create appropriate paths to use for unit testing
+  path_ha_vars_pkg <- base::file.path(dir_base,'hydroatlas_vars_sub.parquet')
+  path_ha_vars_tmp <- base::file.path(temp_dir,"hydroatlas_vars_sub.parquet")
+  fs::file_copy(path_ha_vars_pkg,path_ha_vars_tmp ,overwrite = TRUE)
+
+  path_ha_oconus_pkg <- base::file.path(dir_base,"hydroatlas_vars_oconus_sub.parquet")
+  path_ha_oconus_tmp <- base::file.path(temp_dir,"hydroatlas_vars_oconus_sub.parquet")
+  fs::file_copy(path_ha_oconus_pkg,path_ha_oconus_tmp,overwrite = TRUE)
+
+
+  # Define args for retr_attr_hydatl_wrap in proc_attr_grabber.R
+  paths_ha <- c(path_ha_oconus_tmp,path_ha_vars_tmp)
+  hf_id_cols = c("hf_uid","hf_id","id")
+  ha_vars <- c("ari_ix_sav","cly_pc_sav","snw_pc_uyr")
+  hf_ids <- base::c("ak-cat-15164", NA,"hi-cat-2629","prvi-cat-752",9250320)
+
+  dt_hydatl <- proc.attr.hydfab::retr_attr_hydatl_wrap(hf_ids=hf_ids,
+                                                       paths_ha=paths_ha,
+                                                       ha_vars=ha_vars,
+                                                       hf_id_cols=hf_id_cols) %>%
+    testthat::expect_warning(regexp =
+      "The following hydrofabric ids could not be found in the HydroATLAS data")
+
+
+  testthat::expect_true(base::nrow(dt_hydatl) == 2)
+  testthat::expect_true(base::all(ha_vars %in% base::names(dt_hydatl)))
+  testthat::expect_true("hf_uid" %in% base::colnames(dt_hydatl))
+  testthat::expect_true(base::all(dt_hydatl$featureSource == "custom_hfuid"))
+})
+
 
 testthat::test_that("retr_attr_hydatl", {
   ha_vars <- c("pet_mm_s01","cly_pc_sav","cly_pc_uav")

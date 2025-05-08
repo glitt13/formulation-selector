@@ -31,6 +31,10 @@ attr_cfig_parse <- function(path_attr_config){
   #' @details Parses the attribute config file to generate the parameter
   #' list `Retr_Params` used throughout proc.attr.hydfab
   #' @export
+  # Changelog/contributions
+  # 2024 - originally created, GL
+  # 2025-05-02 Add oconus hydrofabric parsing, GL
+
   raw_config <- yaml::read_yaml(path_attr_config)
 
   # Define directory paths from the config file
@@ -568,10 +572,6 @@ retr_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
     }
     # RENAME id column to hf_uid standard:
     dat_ha <- dat_ha %>% dplyr::rename(!!colname_featID:=!!hf_id_col)
-
-
-
-
 
     # For rows with all NA values, remove them because those locations may exist
     #. in a different HydroATLAS dataset path, path_ha (e.g.  CONUS vs oCONUS)
@@ -1400,7 +1400,7 @@ std_attr_data_fmt <- function(attr_data){
            dplyr::mutate(dplyr::across(dplyr::where(is.factor), as.character)) %>%
           pkgcond::suppress_warnings(pattern = "are not all of the same type")
 
-      # ------------------
+      # ------------------ Remove any entry that is not an official attribute
       # Run check that wide-to-long transform didn't accidentally create attributes not in the menu
       ls_attr_menu <- proc.attr.hydfab:::read_fs_attr_menu_config()
 
