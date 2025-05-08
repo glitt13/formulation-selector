@@ -22,19 +22,21 @@ suppressPackageStartupMessages(library(pkgcond,quietly=TRUE))
 suppressPackageStartupMessages(library(purrr,quietly=TRUE))
 options(arrow.unsafe_metadata = TRUE)
 
+# Define data directories to a package-specific data path
+dir_base <- system.file("extdata",package="proc.attr.hydfab")
 
 # TODO establish a basic config file to read in for this functionality
 comid <- "18094981"#"02479560"#14138870# A small basin
 s3_base <- "s3://lynker-spatial/tabular-resources"
 s3_bucket <- 'lynker-spatial'
 s3_path_hydatl <- glue::glue('{s3_base}/hydroATLAS/hydroatlas_vars.parquet')
+path_ha <- glue::glue("{dir_base}/hydroatlas_vars_sub.parquet")
 
 # Testing variables
 # ha_vars <- c('pet_mm_s01', 'cly_pc_sav', 'cly_pc_uav') # hydroatlas variables
 # usgs_vars <- c('TOT_TWI','TOT_PRSNOW','TOT_POPDENS90','TOT_EWT','TOT_RECHG')
 
-# Define data directories to a package-specific data path
-dir_base <- system.file("extdata",package="proc.attr.hydfab")
+
 # Refer to temp_dir <- tempdir() in setup.R
 temp_dir <- local_temp_dir() # If running this on your own, source 'setup.R' first.
 dir_db_hydfab <- file.path(temp_dir,'hfab')
@@ -53,7 +55,7 @@ usgs_vars <- c('TOT_TWI','TOT_PRSNOW')#,'TOT_POPDENS90','TOT_EWT','TOT_RECHG')
 
 Retr_Params <- list(paths = list(dir_db_hydfab=dir_db_hydfab,
                                  dir_db_attrs=dir_db_attrs,
-                                 path_ha = s3_path_hydatl,
+                                 paths_ha = c(path_ha),
                                  dir_std_base = dir_user,
                                  path_meta=path_meta),
                     vars = list(usgs_vars = usgs_vars,
@@ -165,7 +167,7 @@ testthat::test_that("retr_attr_new",{
   need_vars <- list(usgs_vars = c("CAT_TWI","CAT_BFI"))
 
   rslt <- proc.attr.hydfab::retr_attr_new(locids = comids, need_vars=need_vars,
-                                          paths_ha = Retr_Params$paths$path_ha)
+                                          paths_ha = Retr_Params$paths$paths_ha)
 
   testthat::expect_contains(rslt[['usgs_nhdplus__v2']]$featureID,comids)
   testthat::expect_contains(rslt[['usgs_nhdplus__v2']]$attribute,need_vars$usgs_vars)
@@ -180,7 +182,7 @@ testthat::test_that("check_miss_attrs_comid_io",{
   Retr_Params_pkg <- Retr_Params
   Retr_Params_pkg$paths$dir_db_attrs <- dir_db_attrs_pkg
   dt_all <- proc.attr.hydfab::retr_attr_new(locids = comids, need_vars=need_vars,
-                                            paths_ha = Retr_Params_pkg$paths$path_ha)[['usgs_nhdplus__v2']]
+                                            paths_ha = Retr_Params_pkg$paths$paths_ha)[['usgs_nhdplus__v2']]
   # Add in an extra usgs var that wasn't retrieved, TOT_ELEV_MAX
   attr_vars <- list(usgs_vars = c("TOT_TWI","TOT_PRSNOW","TOT_ELEV_MAX"))
   rslt <- testthat::capture_warning(proc.attr.hydfab::check_miss_attrs_comid_io(dt_all,
@@ -370,7 +372,7 @@ testthat::test_that('proc_attr_gageids',{
                                                               Retr_Params=Retr_Params,
                                                               path_save_gpkg = NULL,
                                                               lyrs="network",overwrite=FALSE),
-                           regexp="following gage_id values did not return a comid")
+                           regexp="following hydrofabric ids could not be found in the HydroATLAS")
 
 })
 
@@ -616,8 +618,8 @@ testthat::test_that("grab_attrs_datasets_fs_wrap", {
                                                                       overwrite=FALSE) %>%
                         base::suppressWarnings()
   # When 'all' datasets requested, should have the same number retrieved
-  testthat::expect_equal(length(ls_comids_all_ds),
-                        length(list.files(Retr_Params_all_ds$paths$dir_std_base)))
+  testthat::expect_equal(base::length(ls_comids_all_ds),
+                        base::length(base::list.files(Retr_Params_all_ds$paths$dir_std_base)))
 
   # Test running just the dataset path - not reading in a netcdf dataset.
   Retr_Params_no_ds <- Retr_Params
@@ -629,7 +631,13 @@ testthat::test_that("grab_attrs_datasets_fs_wrap", {
   Retr_Params_no_ds$loc_id_read$featureID_loc <- 'USGS-{gage_id}'
   Retr_Params_no_ds$loc_id_read$fmt <- 'csv'
 
-  dat_gid_ex <- proc.attr.hydfab::grab_attrs_datasets_fs_wrap(Retr_Params_no_ds,
+  # COPY hydroatlas vars stored in package into temp dir for standard processing
+  path_ha_vars_pkg <- base::file.path(dir_base,'hydroatlas_vars_sub.parquet')
+  path_ha_vars_tmp <- file.path(temp_dir,"hydroatlas_vars_sub.parquet")
+  fs::file_copy(path_ha_vars_pkg,path_ha_vars_tmp ,overwrite = TRUE)
+  Retr_Params_no_ds$paths$paths_ha <- path_ha_vars_tmp
+
+  dat_gid_ex <- proc.attr.hydfab::grab_attrs_datasets_fs_wrap(Retr_Params = Retr_Params_no_ds,
                                                   lyrs="network",
                                                   path_save_gpkg_cstm = mock_path_save_gpkg,
                                                   overwrite=FALSE) %>% suppressWarnings()
