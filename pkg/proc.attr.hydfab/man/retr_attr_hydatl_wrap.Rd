@@ -37,6 +37,8 @@ The hf_ids may contain 1) a COMID, corresponding to CONUS, &/or
 2) a hydrofabric id for OCONUS
 }
 \seealso{
+\link[proc.attr.hydfab]{std_attr_data_fmt} - uses the \code{hf_id_cols} default argument values using formals
+
 \link[proc.attr.hydfab]{retr_attr_hydatl}
 
 \link[proc.attr.hydfab]{custom_hf_id} for a custom hydrofabric ID with vpu in the identifier
