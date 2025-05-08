@@ -479,6 +479,8 @@ proc_attr_std_hfsub_name <- function(comid,custom_name='', fileext='gpkg'){
 }
 
 
+
+
 retr_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
                                   hf_id_cols = c("hf_uid","hf_id","id"),
                                   colname_featID = "hf_uid"){
@@ -507,17 +509,23 @@ retr_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
   # Changelog / Contributions
   #. 2025-03 originally created, GL
   #. 2025-05-07 add s3 placeholder, GL
-  ls_dat_ha <- list()
+  #. 2025-05-08 implement s3 compatibility, GL
+  ls_dat_ha <- base::list()
   ctr <- 0
   for(path_ha in paths_ha){
     ctr <- ctr + 1
 
     if(base::grepl("s3:/", path_ha)){
-      # TODO add in s3 capability here
-      warning(base::paste0("!!!!!!!!!!!!!!!!!!!!!! #TODO !!!!!!!!!!!!!!!!!!!!!!!!!\n",
-                        glue::glue("s3 connection for HydroATLAS attributes file needs to be made:
-                                   {path_ha}.")))
-      ls_dat_ha[ctr] <- data.frame()
+      base::message(base::paste0("Retrieving HydroATLAS attributes from the",
+      " following s3 bucket connection:\n",
+      glue::glue("{path_ha}")))
+      # TODO add in s3 capability here:
+      # TODO Refer to retr_attr_hydatl and how it uses path_s3
+      # TODO establish default save HydroATLAS variable parquet location/naming
+      # warning(base::paste0("!!!!!!!!!!!!!!!!!!!!!! #TODO !!!!!!!!!!!!!!!!!!!!!!!!!\n",
+      #                   glue::glue("s3 connection for HydroATLAS attributes file needs to be made:
+      #                              {path_ha}.")))
+      #
     } else if(!base::file.exists(path_ha)){
       stop(base::paste0("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
               glue::glue("The HydroATLAS attributes file does not exist: {path_ha}.")))
@@ -534,8 +542,10 @@ retr_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
 
     if (hf_id_col == "hf_uid"){ # Expected to be OCONUS per proc.attr.hydfab::custom_hf_id
       # The uid is already created - use it
-      dat_ha <- retr_attr_hydatl(hf_ids, path_ha, ha_vars,hf_id_col=hf_id_col)
-      # TODO consider identifying an s3_ha path specific for this one
+      dat_ha <- proc.attr.hydfab::retr_attr_hydatl(hf_ids = hf_ids,
+                                                   path_ha=path_ha,
+                                                   ha_vars=ha_vars,
+                                                   hf_id_col=hf_id_col)
 
       # Standardize to the featureID/featureSource format
       dat_ha <- proc.attr.hydfab::std_feat_id(df=dat_ha,
@@ -556,7 +566,6 @@ retr_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
       # TODO add in the standardization hf_uid approach here
       stop("TODO: Add standardization for hf_uid")
       # TODO should we allow 'hf_id' for col_id
-      # TODO
 
       proc.attr.hydfab::custom_hf_id(df=todo_define_here, col_vpu = "vpu",col_id = "id")
       hf_id_col <- "hf_uid"
@@ -596,11 +605,9 @@ retr_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
       "The following hydrofabric ids could not be found in the HydroATLAS data:",
        "\n{paste0(missing_ids,collapse='\n')}")
     warning(msg_missing_ids)
-    # TODO add write path for missing HydroATLAS ids (should this happen elsewhere?)
-
-    # TODO create reader/writer of missing HydroATLAS ids
-
-    # TODO add write path for missing HydroATLAS variables:
+    # NOTE: missing ids will get written to attributes/missing_data/missing_attrs_locs.csv
+    #. using proc.attr.hydfab::check_miss_attrs_comid_io called at the end of
+    #. proc.attr.hydfab::proc_attr_mlti_wrap.
   }
   return(dt_hydatl)
 }
@@ -625,19 +632,18 @@ retr_attr_hydatl <- function(hf_ids, path_ha, ha_vars,hf_id_col=c("hf_uid","hf_i
   #. 2024 Originally created, GL
   #. 2025-02-25 fix: don't force numeric hf_ids, allow custom hf_id column name
   #. 2025-04-24 feat: fill in full tibble with NA based on missing hf_ids
+  #. 2025-05-08 fix: remove conus check when forcing path_ha <- path_s3, GL
   if(base::grepl("s3",path_ha)){ # Run a check that the bucket connection works
     bucket <- try(arrow::s3_bucket(path_ha),silent=TRUE)
     if('try-error' %in% base::class(bucket)){
       stop(glue::glue("Could not connect to an s3 bucket path for HydroATLAS
                       data retrieval. Reconsider the path_ha of {path_ha}"))
     }
-  } else if(!file.exists(path_ha)){
-      warning(glue::glue(
+  } else if(!base::file.exists(path_ha)){
+    warning(glue::glue(
        "Local filepath does not exist for HydroATLAS parquet file:\n{path_ha}
-       \nAssigning lynker-spatial s3 path:\n{s3_ha}"))
-      if(domain == 'conus'){
-        path_ha <- s3_ha
-      }
+       \nForcefully assigning lynker-spatial s3 path:\n{s3_ha}"))
+    path_ha <- s3_ha
   } # presumed to be local path location
 
   # Determine whether id should be numeric or character class
@@ -1440,7 +1446,7 @@ retr_attr_new <- function(locids,need_vars,paths_ha){
   # Changelog/Contributions
   #. 2025 Originally created, GL
   #. 2025-05-06 implement nrow(x)>0 empty data error handling, GL
-  #. 2025-05-07 add ha_vars logic to be compatible with dataset path(custome file), GL
+  #. 2025-05-07 add ha_vars logic to be compatible with dataset path(custom file), GL
   # -------------------------------------------------------------------------- #
   # --------------- dataset grabber ---------------- #
   attr_data <- base::list()
@@ -1571,13 +1577,14 @@ chck_need_vars_fmt <- function(need_vars){
 
   # Changelog / contributions
   #. 2025-05-07 Originally created, GL
+  #. 2025-05-08 fix: remove accidental ls_attr_exst
   df_map_vars <- proc.attr.hydfab:::parse_attr_srce_type_config()
 
   if(!base::all(names(need_vars) %in% df_map_vars$rafts_name)){
     # Try re-formatting the need_vars
-    need_vars <- base::lapply(ls_attr_exst, function(x) x$need_vars) %>%
+    need_vars <- base::lapply(need_vars, function(x) x$need_vars) %>%
       base::unique() %>% base::unlist(recursive=FALSE)
-    if(!base::all(names(need_vars) %in% df_map_vars$rafts_name)){
+    if(!base::all(base::names(need_vars) %in% df_map_vars$rafts_name)){
       warning("Unexpected format of need_vars. Should be a list e.g.\n
       base::list(ha_vars = c('pet_mm_s01','cly_pc_sav')). \n
       Refer to the proc.attr.hydfab/inst/extdata/attr_source_types.yml
