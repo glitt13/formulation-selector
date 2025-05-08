@@ -398,7 +398,7 @@ for(path_hfab in paths_hfab){
                    base::c(new_cols, base::setdiff(names(dt_wt_mean),new_cols)))
 
     # Create path to hydrofabric's hydroatlas attributes and write to file as .csv
-    path_attrs <- proc.attr.hydfab:::std_paths_attrs(dir_base_hfab, vpu = vpu)
+    path_attrs <- proc.attr.hydfab:::std_paths_ha_attrs(dir_base_hfab, vpu = vpu)
     utils::write.csv(dt_wt_mean,file = path_attrs)
 
     # Update hydrofabric geopackage with the downscaled hydroatlas attributes as a new layer

@@ -704,13 +704,24 @@ testthat::test_that("retr_attr_hydatl_wrap",{
   testthat::expect_true(base::all(ha_vars %in% base::names(dt_hydatl)))
   testthat::expect_true("hf_uid" %in% base::colnames(dt_hydatl))
   testthat::expect_true(base::all(dt_hydatl$featureSource == "custom_hfuid"))
+
+  # Test if s3 in path_ha:
+  path_ha_s3 <- base::as.character(base::formals(fun=proc.attr.hydfab::retr_attr_hydatl)$s3_ha)
+
+  dt_hydatl_s3 <- proc.attr.hydfab::retr_attr_hydatl_wrap(hf_ids=9250320,
+                                                          paths_ha=path_ha_s3,
+                                                          ha_vars=ha_vars,
+                                                          hf_id_cols=hf_id_cols)
+
+  testthat::expect_true(base::nrow(dt_hydatl_s3)==1)
+  testthat::expect_identical(as.character(dt_hydatl_s3$featureID), "9250320")
 })
 
 
 testthat::test_that("retr_attr_hydatl", {
   ha_vars <- c("pet_mm_s01","cly_pc_sav","cly_pc_uav")
   exp_dat_ha <- readRDS(system.file("extdata", paste0("ha_18094981.Rds"), package="proc.attr.hydfab"))
-  ha <- proc.attr.hydfab::retr_attr_hydatl(comid,path_ha=s3_path_hydatl,
+  ha <- proc.attr.hydfab::retr_attr_hydatl(hf_ids=comid,path_ha=s3_path_hydatl,
                                            ha_vars=ha_vars)
   # saveRDS(ha,paste0("~/git/fsds/pkg/proc.attr.hydfab/inst/extdata/ha_",comid,".Rds"))
   # Wide data expected
@@ -724,9 +735,10 @@ testthat::test_that("retr_attr_hydatl", {
   testthat::expect_true(base::all(ha_vars %in% base::colnames(ha_mlti)))
 
   # Run this with a bad s3 bucket
-  testthat::expect_error(proc.attr.hydfab::retr_attr_hydatl(comid="18094981",
+  testthat::expect_error(proc.attr.hydfab::retr_attr_hydatl(hf_ids="18094981",
                                                           path_ha ='https://s3.notabucket',
-                                                          ha_vars = Retr_Params$vars$ha_vars))
+                                                          ha_vars = Retr_Params$vars$ha_vars),
+                                                    regexp = "Could not connect to an s3 bucket path")
 
 
 

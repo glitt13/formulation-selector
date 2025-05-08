@@ -62,12 +62,16 @@ std_paths_ntrsct <- function(path_hfab){
   return(list(rds=path_save_ls_ntrsct, gpkg = path_save_ntrsct_gpkg))
 }
 
-std_paths_attrs <- function(dir_base_hfab, vpu){
+std_paths_ha_attrs <- function(dir_base_hfab, vpu){
   #' @title standardize path to the HydroATLAS attributes corresponding to
   #' each hydrofabric divide, saved as a csv
   #' @param dir_base_hfab Base directory where hydrofabric data stored
   #' @param vpu the hydrofabric vpu of interest (e.g. `'ak'` or `'prvi'`)
-  path_attrs_new <- file.path(dir_base_hfab,paste0(vpu,"_hydroatlas_attrs.csv"))
+  # Changelog/contributions
+  # 2025-03 originally created, GL
+  # 2025-05-08 rename from std_paths_attrs to std_paths_ha_attrs
+  path_attrs_new <- base::file.path(dir_base_hfab,
+                            base::paste0(vpu,"_hydroatlas_attrs.csv"))
   return(path_attrs_new)
 }
 
