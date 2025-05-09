@@ -302,7 +302,7 @@ dl_nhdplus_geoms_wrap <- function(df,col_id, dir_save_nhdp,filename_str,
   #' @description Retrieve all nhdplus layers for a comid/AOI, and download/save data
   #' in chunks at hourly intervals to account for external database hits
   #' @details If AOI selected, the area of interest is assumed to be a line, and
-  #' the midpoint is selected for querrying NLDI.
+  #' the midpoint is selected for querying NLDI.
   #' Recommended to stick to a certain seq_size (e.g. default) to easily re-use
   #' file chunks when `overwrite_chunk` is FALSE.
   #' @param df dataframe with location information that `get_nhdplus` uses
