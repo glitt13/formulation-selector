@@ -11,3 +11,6 @@ source_map_vi:
 source_map_hi:
   domain: "HI"
   crs_hfab: "ESRI:102007"
+# source_map_conus:
+#   domain: "conus"
+#   crs_hfab: "EPSG:" #TODO what's the epsg code??
