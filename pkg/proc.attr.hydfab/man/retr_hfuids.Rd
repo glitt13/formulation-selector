@@ -27,7 +27,7 @@ for the water quality portal (fewer locations means less data returned),
 would need to be defined as two points (e.g. \code{c(-115,40)})}
 }
 \description{
-Intended for oCONUS locations, whereas
+Intended for oCONUS locations
 \link[proc.attr.hydfab]{retr_comids} can grab the comids from CONUS
 locations. Thus this function is intended to fill the gaps after
 \link[proc.attr.hydfab]{retr_comids} has run.
