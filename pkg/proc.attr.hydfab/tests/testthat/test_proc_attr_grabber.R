@@ -42,7 +42,7 @@ temp_dir <- local_temp_dir() # If running this on your own, source 'setup.R' fir
 dir_db_hydfab <- file.path(temp_dir,'hfab')
 path_meta <- paste0(temp_dir,"/{ds}/nldi_feat_{ds}_{ds_type}.{write_type}")
 dir_db_attrs <- file.path(temp_dir,'attrs') # used for temporary attr retrieval
-dir_db_attrs_pkg <- system.file("extdata","attributes_pah",package="proc.attr.hydfab")# permanent pacakage location
+dir_db_attrs_pkg <- system.file("extdata","attributes_pah",package="proc.attr.hydfab")# permanent package location
 dir_user <- system.file("extdata","user_data_std", package="proc.attr.hydfab") # dir_user <- "~/git/fsds/pkg/proc.attr.hydfab/inst/extdata/user_data_std/"
 dir_dataset <- file.path(dir_user,'xssa-mini')
 path_mini_ds <- file.path(dir_dataset,'xSSA-mini_Raven_blended.nc')

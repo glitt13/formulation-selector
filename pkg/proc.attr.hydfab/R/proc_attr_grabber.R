@@ -1046,7 +1046,6 @@ std_write_geom_map_gpkg <- function(sf_comid,path_save_gpkg,epsg=NULL){
   return(sf_cmbo_no_dupe)
 }
 
-
 fs_retr_nhdp_comids_geom <- function(gage_ids,featureSource='nwissite',
                                      featureID="USGS-{gage_id}",epsg=4326){
   #' @title Retrieve comids & point geometry based on nldi_feature identifiers
@@ -1124,7 +1123,8 @@ fs_retr_nhdp_comids_geom <- function(gage_ids,featureSource='nwissite',
         # We want a singular point for the comid, so pick the middle point
         if (base::length(site_feature$geometry) > 1){
           stop("Unexpected format - anticipating just one row in site_feature sf/df")
-        } else {
+        } else { # Pick the midpoint of a linestring
+          # TODO test out proc.attr.hydfab:::get_linestring_midpoint(site_feature$geometry) here
           site_feature$geometry <- sf::st_line_sample(site_feature$geometry[[1]],
                                                            sample = 0.5) %>%
                                             sf::st_cast("POINT")
