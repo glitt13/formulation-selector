@@ -1597,7 +1597,7 @@ chck_need_vars_fmt <- function(need_vars){
 
 
 proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
-                                overwrite=FALSE){
+                                overwrite=FALSE,filter_vars=TRUE){
   #' @title Wrapper to retrieve variables from multiple comids when processing
   #' attributes. Returns all attribute data for all comid locations
   #' @author Guy Litt \email{guy.litt@noaa.gov}
@@ -1612,11 +1612,16 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
   #'   dl_timestamp - timestamp of when data were downloaded
   #'   attribute - the variable identifier used in a particular dataset
   #'   value - the value of the identifier
+  #' Note a refactor needed with \link[proc.attr.hydfab]{proc_attr_exst_wrap} if
+  #' we want to be more efficient with retrieving only the needed variables as
+  #' defined in Retr_Params$vars
   #' @param comids list of character. The common identifier USGS location codes for surface water features.
   #' @param Retr_Params list. List of list structure with parameters/paths needed to acquire variables of interest
   #' @param lyrs character. The layer names of interest from the hydrofabric gpkg. Default 'network'
   #' @param overwrite boolean. Should the hydrofabric cloud data acquisition be redone and overwrite any local files? Default FALSE.
+  #' @param filter_vars boolean. Should the data be filtered down to the variables provided in `Retr_Params$vars'?`
   #' @seealso \link[proc.attr.hydfab]{proc_attrs_gageids}
+  #' @seealso \link[proc.attr.hydfab]{proc_attr_exst_wrap}
   #' @export
   #'
   # Changelog/Contributions
@@ -1624,6 +1629,7 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
   # 2025-05-06 reduce the missing variable grabbing to 'still_need' logic, GL
   # 2025-05-07 add chck_need_vars_fmt, GL
   # 2025-05-08 fix: need_vars transform w/ chck_need_vars_fmt must happen after
+  # 2025-05-13 feat: add variable filtering via filter_vars boolean arg
   # TODO integrate _id_attrs_sel_wrap here
   vars_ls <- Retr_Params$vars
 
@@ -1757,6 +1763,11 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
     proc.attr.hydfab::check_miss_attrs_comid_io(dt_all=dt_all,
                               attr_vars = Retr_Params$vars,
                               dir_db_attrs <- Retr_Params$paths$dir_db_attrs)
+  }
+
+  if(filter_vars && "attribute" %in% base::names(dt_all)){
+    dt_all <- dt_all %>%
+      dplyr::filter(attribute %in% base::unname(base::unlist(Retr_Params$vars)))
   }
 
   return(dt_all)
