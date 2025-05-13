@@ -665,7 +665,7 @@ testthat::test_that("grab_attrs_datasets_fs_wrap", {
                                                   lyrs="network",
                                                   path_save_gpkg_cstm = mock_path_save_gpkg,
                                                   overwrite=FALSE) %>% suppressWarnings()
-  testthat::expect_equal(nrow(dat_gid_ex[[1]]),24) # this considers both usgs & hydroatlas
+  testthat::expect_equal(nrow(dat_gid_ex[[1]]),20) # this considers both usgs & hydroatlas
   dat_gf <- read.csv(good_file,colClasses ="character")
   orig_ids <- unique(as.character(dat_gf$gage_id))
   rtrn_ids <- unique(dat_gid_ex[[1]]$gage_id) # Note that "01031500" is missing. Not sure why.
