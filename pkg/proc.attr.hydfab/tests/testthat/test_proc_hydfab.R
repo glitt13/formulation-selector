@@ -459,7 +459,7 @@ if(base::exists("temp_gpkg")){
 if(FALSE){ #ONLY RUN THIS ONCE TO GENERATE TEST DATA. ONCE IN PACKAGE,
   # NO LONGER NEEDED. THIS DOCUMENTS HOW TEST DATA GENERATED.
   # The locations of interest - will need to delete gpkg and re-write if this changes
-  ak_locs <- c("wb-15164","wb-1003")
+  ak_locs <- c("wb-15164","wb-1003","wb-15164")
   prvi_locs <- base::c("wb-752","wb-777")
   hi_locs <- base::c("wb-2629","wb-1365","wb-1366")
   # ^^ include downstream wb-1366 to ensure full coverage for spatial query in unit test

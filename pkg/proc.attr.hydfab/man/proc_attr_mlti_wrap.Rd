@@ -5,7 +5,13 @@
 \title{Wrapper to retrieve variables from multiple comids when processing
 attributes. Returns all attribute data for all comid locations}
 \usage{
-proc_attr_mlti_wrap(comids, Retr_Params, lyrs = "network", overwrite = FALSE)
+proc_attr_mlti_wrap(
+  comids,
+  Retr_Params,
+  lyrs = "network",
+  overwrite = FALSE,
+  filter_vars = TRUE
+)
 }
 \arguments{
 \item{comids}{list of character. The common identifier USGS location codes for surface water features.}
@@ -15,6 +21,8 @@ proc_attr_mlti_wrap(comids, Retr_Params, lyrs = "network", overwrite = FALSE)
 \item{lyrs}{character. The layer names of interest from the hydrofabric gpkg. Default 'network'}
 
 \item{overwrite}{boolean. Should the hydrofabric cloud data acquisition be redone and overwrite any local files? Default FALSE.}
+
+\item{filter_vars}{boolean. Should the data be filtered down to the variables provided in \verb{Retr_Params$vars'?}}
 }
 \description{
 Identifies a comid location using the hydrofabric and then
@@ -30,9 +38,14 @@ data_source - where the data came from (e.g. 'usgs_nhdplus__v2','hydroatlas__v1'
 dl_timestamp - timestamp of when data were downloaded
 attribute - the variable identifier used in a particular dataset
 value - the value of the identifier
+Note a refactor needed with \link[proc.attr.hydfab]{proc_attr_exst_wrap} if
+we want to be more efficient with retrieving only the needed variables as
+defined in Retr_Params$vars
 }
 \seealso{
 \link[proc.attr.hydfab]{proc_attrs_gageids}
+
+\link[proc.attr.hydfab]{proc_attr_exst_wrap}
 }
 \author{
 Guy Litt \email{guy.litt@noaa.gov}
