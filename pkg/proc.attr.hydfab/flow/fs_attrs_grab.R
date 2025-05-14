@@ -25,6 +25,10 @@ library(glue)
 library(future)
 library(future.apply)
 
+# Changelog/contributions
+#. 2024 originally created, GL
+
+# TODO add path_save_gpkg_custom to parsing in Retr_Params?? ...or as an argument in this fs_attrs_grab.R
 # TODO is AWS_NO_SIGN_REQUEST necessary??
 # Sys.setenv(AWS_NO_SIGN_REQUEST="YES")
 
@@ -37,6 +41,7 @@ if(base::length(cmd_args)!=1){
 
 # Read in config file, e.g.  "~/git/formulation-selector/scripts/eval_ingest/xssa_us/xssaus_attr_config.yaml"
 path_attr_config <- cmd_args[1] # "~/git/formulation-selector/scripts/eval_ingest/xssa/xssa_attr_config.yaml"
+
 
 Retr_Params <- proc.attr.hydfab::attr_cfig_parse(path_attr_config)
 
