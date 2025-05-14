@@ -12,6 +12,14 @@ fs_retr_nhdp_comids_geom_wrap(
   featureID = "USGS-{gage_id}",
   epsg = 4326
 )
+
+fs_retr_nhdp_comids_geom_wrap(
+  path_save_gpkg,
+  gage_ids,
+  featureSource = "nwissite",
+  featureID = "USGS-{gage_id}",
+  epsg = 4326
+)
 }
 \arguments{
 \item{path_save_gpkg}{The filepath where the geopackage file should live}
@@ -34,8 +42,18 @@ that the term 'gage_id' is used as a variable in glue syntax to create featureID
 Try reading geopackage file, if it doesn't exist or is missing
 locations based on the gage_ids of interest, grab them & update the
 geopackage file
+
+Try reading geopackage file, if it doesn't exist or is missing
+locations based on the gage_ids of interest, grab them & update the
+geopackage file
 }
 \seealso{
+\link[proc.attr.hydfab]{proc_attr_read_gage_ids_fs}
+
+\link[proc.attr.hydfab]{fs_retr_nhdp_comids_geom}
+
+\code{fs_algo.fs_algo_train_eval.fs_retr_nhdp_comids_geom_wrap}
+
 \link[proc.attr.hydfab]{proc_attr_read_gage_ids_fs}
 
 \link[proc.attr.hydfab]{fs_retr_nhdp_comids_geom}

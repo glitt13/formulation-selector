@@ -27,7 +27,7 @@ metric_mappings_single_timeseries: # Refer to CIROH-funded TEEHR Metric List: ht
   - 'FLV': '30% low flow bias, Yilmaz et al 2008' #Added based on Kratzert et al, 2019 (may not be in TEEHR)
   - 'FMS': 'bias of FDC midsegment slope, Yilmaz et al 2008' #Added based on Kratzert et al, 2019 (may not be in TEEHR)
 metric_mappings_hydrotools: #  consider the metrics provided via hydrotools https://github.com/NOAA-OWP/hydrotools/tree/main/python/metrics/src/hydrotools/metrics/metrics.py
-  - 'MESS': 'mean error skill score' 
+  - 'MESS': 'mean error skill score'
   - 'COP': 'coefficient of persistence'
   - 'COE': 'coefficient of extrapolation'
   - 'POD': 'probability of detection'
@@ -38,7 +38,7 @@ metric_mappings_hydrotools: #  consider the metrics provided via hydrotools http
   - 'PctC': 'percent correct'
   - 'BC': 'base chance'
   - 'ETS': 'equitable threat score'
-metric_mappings_signatures: 
+metric_mappings_signatures:
   - 'FDCSE': 'flow duration curve slope error'
   - 'APFRE': 'annual peak flow relative error'
   - 'MMVE': 'mean monthly volume error'
@@ -84,4 +84,6 @@ metric_xssa_process_categories: # Custom response variables from Mai et al 2022 
   - 'P_wt_baseflow': "Evaporation $O$, variance weighted"
   - 'N_wt_quickflow': "Quickflow $N$, variance weighted"
   - 'M_wt_infilt': "Infiltration $M$, variance weighted"
-  # If you add response variable, make sure it begins with metric_ e.g. metric_xssa_process_categories, 
+metric_testing_placeholder:
+  - 'fake': A fake value to use as a placeholder
+  # If you add response variable, make sure it begins with metric_ e.g. metric_xssa_process_categories,

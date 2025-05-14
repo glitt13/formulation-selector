@@ -5,6 +5,8 @@
 \title{Read geopackage containing identifers and point locations}
 \usage{
 read_fs_retr_gpkg(path_save_gpkg, verbose = FALSE)
+
+read_fs_retr_gpkg(path_save_gpkg, verbose = FALSE)
 }
 \arguments{
 \item{path_save_gpkg}{filepath to the geopackage}
@@ -13,12 +15,25 @@ read_fs_retr_gpkg(path_save_gpkg, verbose = FALSE)
 Reads in a geopackage whose filepath is
 standardized by \link[proc.attr.hydfab]{std_path_retr_gpkg}
 and created by \link[proc.attr.hydfab]{fs_retr_nhdp_comids_geom_wrap}
+
+Reads in a geopackage whose filepath is
+standardized by \link[proc.attr.hydfab]{std_path_retr_gpkg}
+and created by \link[proc.attr.hydfab]{fs_retr_nhdp_comids_geom_wrap}
 }
 \details{
 The renaming may be a temporary solution just-in case file
 originated in python fs_algo
+
+The renaming may be a temporary solution just-in case file
+originated in python fs_algo
 }
 \seealso{
+\link[proc.attr.hydfab]{fs_retr_nhdp_comids_geom_wrap}
+
+\link[proc.attr.hydfab]{std_path_retr_gpkg}
+
+\link[proc.attr.hydfab]{fs_retr_nhdp_comids_geom_wrap}
+
 \link[proc.attr.hydfab]{fs_retr_nhdp_comids_geom_wrap}
 
 \link[proc.attr.hydfab]{std_path_retr_gpkg}

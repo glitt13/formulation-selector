@@ -19,27 +19,30 @@ suppressPackageStartupMessages(library(sf,quietly=TRUE))
 suppressPackageStartupMessages(library(future,quietly=TRUE))
 suppressPackageStartupMessages(library(future.apply,quietly=TRUE))
 suppressPackageStartupMessages(library(pkgcond,quietly=TRUE))
+suppressPackageStartupMessages(library(purrr,quietly=TRUE))
 options(arrow.unsafe_metadata = TRUE)
 
+# Define data directories to a package-specific data path
+dir_base <- system.file("extdata",package="proc.attr.hydfab")
 
 # TODO establish a basic config file to read in for this functionality
 comid <- "18094981"#"02479560"#14138870# A small basin
 s3_base <- "s3://lynker-spatial/tabular-resources"
 s3_bucket <- 'lynker-spatial'
 s3_path_hydatl <- glue::glue('{s3_base}/hydroATLAS/hydroatlas_vars.parquet')
+path_ha <- glue::glue("{dir_base}/hydroatlas_vars_sub.parquet")
 
 # Testing variables
 # ha_vars <- c('pet_mm_s01', 'cly_pc_sav', 'cly_pc_uav') # hydroatlas variables
 # usgs_vars <- c('TOT_TWI','TOT_PRSNOW','TOT_POPDENS90','TOT_EWT','TOT_RECHG')
 
-# Define data directories to a package-specific data path
-dir_base <- system.file("extdata",package="proc.attr.hydfab")
+
 # Refer to temp_dir <- tempdir() in setup.R
 temp_dir <- local_temp_dir() # If running this on your own, source 'setup.R' first.
 dir_db_hydfab <- file.path(temp_dir,'hfab')
 path_meta <- paste0(temp_dir,"/{ds}/nldi_feat_{ds}_{ds_type}.{write_type}")
 dir_db_attrs <- file.path(temp_dir,'attrs') # used for temporary attr retrieval
-dir_db_attrs_pkg <- system.file("extdata","attributes_pah",package="proc.attr.hydfab")# permanent pacakage location
+dir_db_attrs_pkg <- system.file("extdata","attributes_pah",package="proc.attr.hydfab")# permanent package location
 dir_user <- system.file("extdata","user_data_std", package="proc.attr.hydfab") # dir_user <- "~/git/fsds/pkg/proc.attr.hydfab/inst/extdata/user_data_std/"
 dir_dataset <- file.path(dir_user,'xssa-mini')
 path_mini_ds <- file.path(dir_dataset,'xSSA-mini_Raven_blended.nc')
@@ -52,7 +55,7 @@ usgs_vars <- c('TOT_TWI','TOT_PRSNOW')#,'TOT_POPDENS90','TOT_EWT','TOT_RECHG')
 
 Retr_Params <- list(paths = list(dir_db_hydfab=dir_db_hydfab,
                                  dir_db_attrs=dir_db_attrs,
-                                 s3_path_hydatl = s3_path_hydatl,
+                                 paths_ha = c(path_ha),
                                  dir_std_base = dir_user,
                                  path_meta=path_meta),
                     vars = list(usgs_vars = usgs_vars,
@@ -163,8 +166,8 @@ testthat::test_that("retr_attr_new",{
   comids <- c("1520007","1623207")
   need_vars <- list(usgs_vars = c("CAT_TWI","CAT_BFI"))
 
-  rslt <- proc.attr.hydfab::retr_attr_new(comids = comids, need_vars=need_vars,
-                                          path_ha = Retr_Params$paths$s3_path_hydatl)
+  rslt <- proc.attr.hydfab::retr_attr_new(locids = comids, need_vars=need_vars,
+                                          paths_ha = Retr_Params$paths$paths_ha)
 
   testthat::expect_contains(rslt[['usgs_nhdplus__v2']]$featureID,comids)
   testthat::expect_contains(rslt[['usgs_nhdplus__v2']]$attribute,need_vars$usgs_vars)
@@ -178,8 +181,8 @@ testthat::test_that("check_miss_attrs_comid_io",{
   need_vars <- list(usgs_vars = c("TOT_PRSNOW","TOT_TWI"))
   Retr_Params_pkg <- Retr_Params
   Retr_Params_pkg$paths$dir_db_attrs <- dir_db_attrs_pkg
-  dt_all <- proc.attr.hydfab::retr_attr_new(comids = comids, need_vars=need_vars,
-                                            path_ha = Retr_Params_pkg$paths$s3_path_hydatl)[['usgs_nhdplus__v2']]
+  dt_all <- proc.attr.hydfab::retr_attr_new(locids = comids, need_vars=need_vars,
+                                            paths_ha = Retr_Params_pkg$paths$paths_ha)[['usgs_nhdplus__v2']]
   # Add in an extra usgs var that wasn't retrieved, TOT_ELEV_MAX
   attr_vars <- list(usgs_vars = c("TOT_TWI","TOT_PRSNOW","TOT_ELEV_MAX"))
   rslt <- testthat::capture_warning(proc.attr.hydfab::check_miss_attrs_comid_io(dt_all,
@@ -251,6 +254,74 @@ testthat::test_that("proc_attr_std_hfsub_name standardized name generator", {
                proc.attr.hydfab:::proc_attr_std_hfsub_name(111,"testit",'parquet'))
 
 })
+
+test_that("std_attr_data_fmt standardizes attribute data correctly", {
+
+  # Mock input data: 2 sources with sample attributes
+  mock_data <- list(
+    source_a = data.frame(
+      featureID = c("1001", "ak-cat-1003"),
+      featureSource = c("nwissite", "hfuid_custom"),
+      TOT_TWI = factor(c("A", "B")),
+      TOT_PPT7100_JUL = c(1, 2)
+    ),
+    source_b = data.frame(
+      featureID = c("2001"),
+      featureSource = c("wqp"),
+      TOT_TWI = factor("X"),
+      TOT_PPT7100_JUL = 42
+    )
+  )
+
+  # Run function
+  result <- proc.attr.hydfab::std_attr_data_fmt(mock_data) %>% suppressWarnings()
+
+  # Basic checks
+  testthat::expect_type(result, "list")
+  testthat::expect_named(result, c("source_a", "source_b"))
+  testthat::expect_length(result, 2)
+
+  # Each output should be a melted data.table
+  purrr::walk(result, function(dt) {
+    testthat::expect_s3_class(dt, "data.table")
+    testthat::expect_true(base::all(c("featureID", "featureSource", "data_source", "dl_timestamp", "attribute", "value") %in% base::names(dt)))
+    testthat::expect_true(base::all(base::sapply(dt$attribute, is.character)))
+  })
+
+  # Check number of rows: wide to long means each attr becomes a row
+  testthat::expect_equal(base::nrow(result$source_a), 4)  # 2 rows * 2 attributes
+  testthat::expect_equal(base::nrow(result$source_b), 2)  # 1 row * 2 attributes
+
+  # Ensure `data_source` and `dl_timestamp` are added
+  testthat::expect_true(base::all(result$source_a$data_source == "source_a"))
+  testthat::expect_true(base::all(result$source_b$data_source == "source_b"))
+
+
+  # run test on correcting attribute data when wrong columns supplied
+  # Create an attr_data with columns that shouldn't exist('COMID','hf_uid')
+  attr_data_test <- base::list("hydroatlas_v1" = data.frame(COMID = 724696,
+                                    hf_uid=NA,pet_mm_s01=NA, cly_pc_sav=NA,
+                                    featureID = "724696",featureSource="COMID"))
+  rslt_corr <- proc.attr.hydfab::std_attr_data_fmt(attr_data_test)
+  testthat::expect_true(base::nrow(rslt_corr$hydroatlas_v1)==2)
+  testthat::expect_true(base::ncol(rslt_corr$hydroatlas_v1) == 6)
+  testthat::expect_true(base::length(rslt_corr) == 1)
+
+  # run test on correcting attribute data when unacceptable attributes generated
+  attr_data_bad_attr <- base::list("hydroatlas_v1" = data.frame(not_an_attr=567,
+                                                                  badthing="43",
+                                                              COMID = 724696,
+                                                              hf_uid=NA,pet_mm_s01=NA, cly_pc_sav=NA,
+                                                              featureID = "724696",featureSource="COMID"))
+
+  rslt_corr_bad <- proc.attr.hydfab::std_attr_data_fmt(attr_data_bad_attr) %>%
+    testthat::expect_warning(regexp="badthing")
+  testthat::expect_true(base::nrow(rslt_corr_bad$hydroatlas_v1)==2)
+  testthat::expect_false(base::all(base::grepl("not_an_attr",rslt_corr_bad$hydroatlas_v1$attribute)))
+  testthat::expect_false(base::all(base::grepl("badthing",rslt_corr_bad$hydroatlas_v1$attribute)))
+})
+
+
 
 testthat::test_that("read_loc_data",{
   # Read in the normal gage
@@ -325,7 +396,7 @@ testthat::test_that('proc_attr_gageids',{
                                                               Retr_Params=Retr_Params,
                                                               path_save_gpkg = NULL,
                                                               lyrs="network",overwrite=FALSE),
-                           regexp="following gage_id values did not return a comid")
+                           regexp="following hydrofabric ids could not be found in the HydroATLAS")
 
 })
 
@@ -571,8 +642,8 @@ testthat::test_that("grab_attrs_datasets_fs_wrap", {
                                                                       overwrite=FALSE) %>%
                         base::suppressWarnings()
   # When 'all' datasets requested, should have the same number retrieved
-  testthat::expect_equal(length(ls_comids_all_ds),
-                        length(list.files(Retr_Params_all_ds$paths$dir_std_base)))
+  testthat::expect_equal(base::length(ls_comids_all_ds),
+                        base::length(base::list.files(Retr_Params_all_ds$paths$dir_std_base)))
 
   # Test running just the dataset path - not reading in a netcdf dataset.
   Retr_Params_no_ds <- Retr_Params
@@ -584,11 +655,17 @@ testthat::test_that("grab_attrs_datasets_fs_wrap", {
   Retr_Params_no_ds$loc_id_read$featureID_loc <- 'USGS-{gage_id}'
   Retr_Params_no_ds$loc_id_read$fmt <- 'csv'
 
-  dat_gid_ex <- proc.attr.hydfab::grab_attrs_datasets_fs_wrap(Retr_Params_no_ds,
+  # COPY hydroatlas vars stored in package into temp dir for standard processing
+  path_ha_vars_pkg <- base::file.path(dir_base,'hydroatlas_vars_sub.parquet')
+  path_ha_vars_tmp <- file.path(temp_dir,"hydroatlas_vars_sub.parquet")
+  fs::file_copy(path_ha_vars_pkg,path_ha_vars_tmp ,overwrite = TRUE)
+  Retr_Params_no_ds$paths$paths_ha <- path_ha_vars_tmp
+
+  dat_gid_ex <- proc.attr.hydfab::grab_attrs_datasets_fs_wrap(Retr_Params = Retr_Params_no_ds,
                                                   lyrs="network",
                                                   path_save_gpkg_cstm = mock_path_save_gpkg,
                                                   overwrite=FALSE) %>% suppressWarnings()
-  testthat::expect_equal(nrow(dat_gid_ex[[1]]),24) # this considers both usgs & hydroatlas
+  testthat::expect_equal(nrow(dat_gid_ex[[1]]),20) # this considers both usgs & hydroatlas
   dat_gf <- read.csv(good_file,colClasses ="character")
   orig_ids <- unique(as.character(dat_gf$gage_id))
   rtrn_ids <- unique(dat_gid_ex[[1]]$gage_id) # Note that "01031500" is missing. Not sure why.
@@ -597,19 +674,74 @@ testthat::test_that("grab_attrs_datasets_fs_wrap", {
 
 })
 
+testthat::test_that("retr_attr_hydatl_wrap",{
 
-testthat::test_that("proc_attr_hydatl", {
+  # Create appropriate paths to use for unit testing
+  path_ha_vars_pkg <- base::file.path(dir_base,'hydroatlas_vars_sub.parquet')
+  path_ha_vars_tmp <- base::file.path(temp_dir,"hydroatlas_vars_sub.parquet")
+  fs::file_copy(path_ha_vars_pkg,path_ha_vars_tmp ,overwrite = TRUE)
+
+  path_ha_oconus_pkg <- base::file.path(dir_base,"hydroatlas_vars_oconus_sub.parquet")
+  path_ha_oconus_tmp <- base::file.path(temp_dir,"hydroatlas_vars_oconus_sub.parquet")
+  fs::file_copy(path_ha_oconus_pkg,path_ha_oconus_tmp,overwrite = TRUE)
+
+
+  # Define args for retr_attr_hydatl_wrap in proc_attr_grabber.R
+  paths_ha <- c(path_ha_oconus_tmp,path_ha_vars_tmp)
+  hf_id_cols = c("hf_uid","hf_id","id")
+  ha_vars <- c("ari_ix_sav","cly_pc_sav","snw_pc_uyr")
+  hf_ids <- base::c("ak-cat-15164", NA,"hi-cat-2629","prvi-cat-752",9250320)
+
+  dt_hydatl <- proc.attr.hydfab::retr_attr_hydatl_wrap(hf_ids=hf_ids,
+                                                       paths_ha=paths_ha,
+                                                       ha_vars=ha_vars,
+                                                       hf_id_cols=hf_id_cols) %>%
+    testthat::expect_warning(regexp =
+      "The following hydrofabric ids could not be found in the HydroATLAS data")
+
+
+  testthat::expect_true(base::nrow(dt_hydatl) == 2)
+  testthat::expect_true(base::all(ha_vars %in% base::names(dt_hydatl)))
+  testthat::expect_true("hf_uid" %in% base::colnames(dt_hydatl))
+  testthat::expect_true(base::all(dt_hydatl$featureSource == "custom_hfuid"))
+
+  # Test if s3 in path_ha:
+  path_ha_s3 <- base::as.character(base::formals(fun=proc.attr.hydfab::retr_attr_hydatl)$s3_ha)
+
+  dt_hydatl_s3 <- proc.attr.hydfab::retr_attr_hydatl_wrap(hf_ids=9250320,
+                                                          paths_ha=path_ha_s3,
+                                                          ha_vars=ha_vars,
+                                                          hf_id_cols=hf_id_cols)
+
+  testthat::expect_true(base::nrow(dt_hydatl_s3)==1)
+  testthat::expect_identical(as.character(dt_hydatl_s3$featureID), "9250320")
+})
+
+
+testthat::test_that("retr_attr_hydatl", {
+  ha_vars <- c("pet_mm_s01","cly_pc_sav","cly_pc_uav")
   exp_dat_ha <- readRDS(system.file("extdata", paste0("ha_18094981.Rds"), package="proc.attr.hydfab"))
-  ha <- proc.attr.hydfab::proc_attr_hydatl(comid,s3_path_hydatl,
-                                           ha_vars=c("pet_mm_s01","cly_pc_sav","cly_pc_uav"))
+  ha <- proc.attr.hydfab::retr_attr_hydatl(hf_ids=comid,path_ha=s3_path_hydatl,
+                                           ha_vars=ha_vars)
   # saveRDS(ha,paste0("~/git/fsds/pkg/proc.attr.hydfab/inst/extdata/ha_",comid,".Rds"))
   # Wide data expected
   testthat::expect_equal(ha,exp_dat_ha)
 
+  # Run with a list of comids:
+  mlti_comids <- base::c(comid,1022566,1702414)
+  ha_mlti <- proc.attr.hydfab::retr_attr_hydatl(hf_ids=mlti_comids,path_ha=s3_path_hydatl,
+                                                ha_vars=ha_vars)
+  testthat::expect_equal(base::length(mlti_comids),base::nrow(ha_mlti))
+  testthat::expect_true(base::all(ha_vars %in% base::colnames(ha_mlti)))
+
   # Run this with a bad s3 bucket
-  testthat::expect_error(proc.attr.hydfab::proc_attr_hydatl(comid="18094981",
-                                                          s3_path_hydatl ='https://s3.notabucket',
-                                                          ha_vars = Retr_Params$vars$ha_vars))
+  testthat::expect_error(proc.attr.hydfab::retr_attr_hydatl(hf_ids="18094981",
+                                                          path_ha ='https://s3.notabucket',
+                                                          ha_vars = Retr_Params$vars$ha_vars),
+                                                    regexp = "Could not connect to an s3 bucket path")
+
+
+
 })
 
 testthat::test_that("proc_attr_usgs_nhd", {

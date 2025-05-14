@@ -203,10 +203,10 @@ compile_chunks_ndplus_geoms <- function(dir_save_nhdp,seq_nums=NULL,
   #' @return A compiled list of the geospatial data, containing:
   #' \itemize{
   #' \item `catchment` The catchment boundaries NHDplus dataset
-  #' \item `flowlines` The flowlines NHDplus dataset
-  #' \item `outlet` The catchment outlet NHDplus dataset
-  #' \item `input_dt` The input data.table with data used to query NHDplus
-  #' \item `path_gpkg_compiled` File path of the saved geopackage
+  #' \list `flowlines` The flowlines NHDplus dataset
+  #' \list `outlet` The catchment outlet NHDplus dataset
+  #' \list `input_dt` The input data.table with data used to query NHDplus
+  #' \list `path_gpkg_compiled` File path of the saved geopackage
   #' }
   #' @seealso \link[proc.attr.hydfab]{dl_nhdplus_geoms_wrap}
   # Changelog/contributions
@@ -302,7 +302,7 @@ dl_nhdplus_geoms_wrap <- function(df,col_id, dir_save_nhdp,filename_str,
   #' @description Retrieve all nhdplus layers for a comid/AOI, and download/save data
   #' in chunks at hourly intervals to account for external database hits
   #' @details If AOI selected, the area of interest is assumed to be a line, and
-  #' the midpoint is selected for querrying NLDI.
+  #' the midpoint is selected for querying NLDI.
   #' Recommended to stick to a certain seq_size (e.g. default) to easily re-use
   #' file chunks when `overwrite_chunk` is FALSE.
   #' @param df dataframe with location information that `get_nhdplus` uses

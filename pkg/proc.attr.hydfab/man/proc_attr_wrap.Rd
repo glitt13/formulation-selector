@@ -40,7 +40,9 @@ attribute - the variable identifier used in a particular dataset
 value - the value of the identifier
 }
 \seealso{
-\link[proc.attr.hydfab]{proc_attrs_gageids}
+\link[proc.attr.hydfab]{hfab_config_opt} Searches for default arguments from this function using formals
+
+\link[proc.attr.hydfab]{proc_attrs_gageids} Also references this function's default args using formals
 
 \link[proc.attr.hydfab]{proc_attr_mlti_wrap}
 }

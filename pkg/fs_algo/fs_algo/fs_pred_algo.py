@@ -46,9 +46,9 @@ if __name__ == "__main__":
     name_attr_csv = algo_cfg.get('name_attr_csv',None)
     colname_attr_csv = algo_cfg.get('colname_attr_csv',None)
     # Determine whether random forest confidence intervals computed during model training:
-    forci = algo_cfg.get('uncertainty',{}).get('fci',{})
-    if len(forci)>0:
-        forestci = forci[0].get('forestci',False)
+    fci = algo_cfg.get('uncertainty',{}).get('fci',{})
+    if len(fci)>0:
+        forestci = fci[0].get('forestci',False)
     else:
         forestci = False
     # Attributes needed for prediction:
@@ -133,8 +133,8 @@ if __name__ == "__main__":
                 resp_pred = pipe.predict(df_attr_sub_rmna)
 
                 # Initialize DataFrame for storing results
-                #df_pred = pd.DataFrame({'featureID': comids_pred, 'prediction': resp_pred, 'metric': metric, 'dataset': ds, 'algo': algo, 'name_algo': Path(path_algo).name})
-                df_pred = pd.DataFrame({'featureID': df_attr_sub_rmna.index.astype(str), 'prediction': resp_pred, 'metric': metric, 'dataset': ds, 'algo': algo, 'name_algo': Path(path_algo).name})
+                df_pred = pd.DataFrame({'featureID': comids_pred, 'prediction': resp_pred, 'metric': metric, 'dataset': ds, 'algo': algo, 'name_algo': Path(path_algo).name})
+        
                 # If using RandomForest, calculate confidence intervals using forestci
                 if algo == 'rf' and forestci:
                     rf_model = pipe.named_steps['randomforestregressor']  # Use the correct step name

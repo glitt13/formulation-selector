@@ -21,18 +21,18 @@ file_io: # May define {home_dir} for python's '{home_dir}/string_path'.format(ho
   - dir_db_attrs: '{dir_base}/attributes' # Required. The parent dir where each comid's attribute parquet file is stored in the subdirectory 'comid/', and each dataset's aggregated parquet attributes are stored in the subdirectory '/{dataset_name}
   - ds_type: 'training' # Required string. Recommended to select 'training' or 'prediction', but any string will work. This string will be used in the filename of the output metadata describing each data point's identifer, COMID, lat/lon, reach name of the location. This string should differ from the string used in the prediction config yaml file. Filename: `"nldi_feat_{dataset}_{ds_type}.csv"` inside `dir_std_base / dataset / `
   - write_type: 'parquet' # Required filetype for writing NLDI feature metadata. Default 'parquet'. May also select 'csv'
-  - path_meta:  "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.{write_type}"  #Required. Training attribute metadata filepath formatted for R's glue or py f-string, as generated using `proc.attr.hydfab::write_meta_nldi_feat()`. Strongly suggested default:  "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.{write_type}"  
+  - path_meta:  "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.{write_type}"  #Required. Training attribute metadata filepath formatted for R's glue or py f-string, as generated using `proc.attr.hydfab::write_meta_nldi_feat()`. Strongly suggested default:  "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.{write_type}"
 formulation_metadata:
   - datasets: # Required. Must match directory name inside dir_std_base. May be a list of items.
     -  kratzert19_ealstm_MSE  # Required. In this example case, it's a sublist of just one thing.
-    -  kratzert19_ealstm_NSE 
-    -  kratzert19_HBV_ub 
-    -  kratzert19_lstm_MSE 
-    -  kratzert19_lstm_no_static_MSE 
-    -  kratzert19_lstm_no_static_NSE 
-    -  kratzert19_lstm_NSE 
-    -  kratzert19_mHm_basin 
-    -  kratzert19_q_sim_fuse_900 
+    -  kratzert19_ealstm_NSE
+    -  kratzert19_HBV_ub
+    -  kratzert19_lstm_MSE
+    -  kratzert19_lstm_no_static_MSE
+    -  kratzert19_lstm_no_static_NSE
+    -  kratzert19_lstm_NSE
+    -  kratzert19_mHm_basin
+    -  kratzert19_q_sim_fuse_900
     -  kratzert19_q_sim_fuse_902
     -  kratzert19_q_sim_fuse_904
     -  kratzert19_SAC_SMA
@@ -54,7 +54,8 @@ hydfab_config: # Required section describing hydrofabric connection details and 
    - 'network'
  - source: "s3://lynker-spatial/hydrofabric"
 attr_select: # Required. The names of variable sublistings are standardized with _vars, e.g. ha_vars, usgs_vars, sc_vars
-  - s3_path_hydatl: '{s3_base}/hydroATLAS/hydroatlas_vars.parquet' # path to hydroatlas data formatted for hydrofabric. Required only if hydroatlas variables desired.
+  - paths_ha: # Paths to tabular HydroATLAS variables downscaled to hydrofabric divide
+    - '{s3_base}/hydroATLAS/hydroatlas_vars.parquet' # path to hydroatlas data formatted for hydrofabric. Required only if hydroatlas variables desired.
   - ha_vars:  # hydroatlas variables. Must specify s3_path_hydatl if desired.
     - # NADA
   - usgs_vars: # list of variables retrievable using nhdplusTools::get_characteristics_metadata().

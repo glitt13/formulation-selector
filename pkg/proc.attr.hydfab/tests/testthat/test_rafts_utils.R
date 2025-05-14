@@ -48,7 +48,7 @@ usgs_vars <- c('TOT_TWI','TOT_PRSNOW')#,'TOT_POPDENS90','TOT_EWT','TOT_RECHG')
 
 Retr_Params <- list(paths = list(dir_db_hydfab=dir_db_hydfab,
                                  dir_db_attrs=dir_db_attrs,
-                                 s3_path_hydatl = s3_path_hydatl,
+                                 paths_ha = s3_path_hydatl,
                                  dir_std_base = dir_user,
                                  path_meta=path_meta),
                     vars = list(usgs_vars = usgs_vars,
@@ -69,11 +69,13 @@ Retr_Params <- list(paths = list(dir_db_hydfab=dir_db_hydfab,
 testthat::test_that('retrieve_attr_exst', {
   comids <- c("1520007","1623207","1638559","1722317") # !!Don't change this!!
   vars <- Retr_Params$vars %>% unlist() %>% unname()
+
   # Run tests based on expected dims
   dat_attr_all <- suppressWarnings(proc.attr.hydfab::retrieve_attr_exst(comids,vars,dir_db_attrs_pkg))
   testthat::expect_equal(length(unique(dat_attr_all$featureID)), # TODO update datasets inside dir_db_attrs
                          length(comids))
   testthat::expect_equal(length(unique(dat_attr_all$attribute)),length(vars))
+
   testthat::expect_error(proc.attr.hydfab::retrieve_attr_exst(comids,
                                                               vars,
                                                               dir_db_attrs='a'))
@@ -99,13 +101,13 @@ testthat::test_that('retrieve_attr_exst', {
 
 
 testthat::test_that("dl_nhdplus_geoms_wrap", {
-
   filename_str <- 'test_rafts_utils'
-  dir_save_nhdp <- file.path(temp_dir,"test_geoms_retr_new")
+  dir_save_nhdp <- file.path(temp_dir,"test_geoms_retr")
   names_nhdp_query <- c("catchment","flowlines","outlet","input_dt",
                         "path_gpkg_compiled")
   df <- data.frame(comids =c("1520007","1623207","1638559","1722317"),
                    idx=c(1,2,3,4))
+
   ################ Test an empty directory first #######################
   rslt_capt_cond <- testthat::capture_condition(
     proc.attr.hydfab:::compile_chunks_ndplus_geoms(dir_save_nhdp,

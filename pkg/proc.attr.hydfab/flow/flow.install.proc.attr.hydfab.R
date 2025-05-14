@@ -33,8 +33,8 @@ namePack <- c("proc.attr.hydfab")
 for(pack in namePack){
 
   pkg_dir <- file.path(fs_dir,"pkg") # Note that CRAN does not allow '_' in package names, hence the '.'
-  if (!dir.exists(pkg_dir)){
-    stop(paste0("reconsider the path to ",pkg_dir))
+  if (!base::dir.exists(pkg_dir)){
+    stop(base::paste0("reconsider the path to ",pkg_dir))
   }
 
   pack_dir <- file.path(pkg_dir, pack)
