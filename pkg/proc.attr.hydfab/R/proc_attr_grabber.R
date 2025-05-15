@@ -1282,9 +1282,9 @@ proc_attr_exst_wrap <- function(path_attrs,vars_ls,bucket_conn=NA){
   #'  path for a given comid and identifies missing attributes.
   #'  Returns list of
   #'   - dt_all: a data.table of existing comid data,
-  #'   - need_vars: a list of datasource ids containing a list of variable
-  #'        names that will be downloaded.
-
+  #'   - need_vars_ls: a list of datasource ids containing sublists of variable
+  #'        names that will be downloaded, aka a location list, with each
+  #'        item containing the `need_vars` list.
   #' @param path_attrs character. Path to attribute file data storage location
   #' @param vars_ls list. Variable names
   #' @param bucket_conn TODO add cloud conn details in case data stored in s3
@@ -1323,22 +1323,24 @@ proc_attr_exst_wrap <- function(path_attrs,vars_ls,bucket_conn=NA){
         # 'R metadata may have unsafe or invalid elements Type: "externalptr" '
     }
 
-    need_vars <- list()
-    for(var_srce in names(vars_ls)){
+    need_vars_ls <- list()
+    for(var_srce in base::names(vars_ls)){
       # Compare/contrast what is there vs. desired
       attrs_reqd <- vars_ls[[var_srce]]
       attrs_needed <- attrs_reqd[which(!attrs_reqd %in% dt_all$attribute)]
 
       if(length(attrs_needed)>0){ # Only build list of variables needed
-        need_vars[[var_srce]] <- attrs_needed
+        # NOTE: DO NOT call chck_need_vars_fmt here b/c we first need miss_var_types_by_file logic
+        need_vars_ls[[var_srce]] <- attrs_needed
       }
     }
   } else {
     # No variable subsetting required. Grab them all for this comid
-    need_vars <- vars_ls
+    # NOTE: DO NOT call chck_need_vars_fmt here b/c we first need miss_var_types_by_file logic
+    need_vars_ls <- vars_ls
     dt_all <- data.table::data.table() # to be populated.
   }
-  return(list(dt_all=dt_all,need_vars=need_vars))
+  return(list(dt_all=dt_all,need_vars_ls=need_vars_ls))
 }
 
 
@@ -1448,6 +1450,9 @@ retr_attr_new <- function(locids,need_vars,paths_ha){
   #. 2025-05-06 implement nrow(x)>0 empty data error handling, GL
   #. 2025-05-07 add ha_vars logic to be compatible with dataset path(custom file), GL
   # -------------------------------------------------------------------------- #
+  # Run format check on need_vars:
+  need_vars <- proc.attr.hydfab:::chck_need_vars_fmt(need_vars)
+
   # --------------- dataset grabber ---------------- #
   attr_data <- base::list()
 
@@ -1529,7 +1534,9 @@ io_attr_dat <- function(dt_new_dat,path_attrs,
   #' @seealso \link[proc.attr.hydfab]{std_attr_data_fmt}
   #' @seealso \link[proc.attr.hydfab]{std_path_attrs}
   #' @export
-  # TODO consider implementing the read existing/update/write all here.
+  # Changelog/contributions
+  #. 2024 originally created
+  #. 2025-05-15 fix: enforce same class for value column, GL
 
   logl_write_parq <- TRUE
   # Double-check by first reading a possible dataset
@@ -1537,9 +1544,20 @@ io_attr_dat <- function(dt_new_dat,path_attrs,
   if ('try-error' %in% base::class(dt_exist)){
     dt_cmbo <- dt_new_dat
   } else if(base::nrow(dt_exist)>0 && base::nrow(dt_new_dat)>0){
+      if(!base::class(dt_exist$value) %in% base::class(dt_new_dat$value)){
+        if(base::any(base::is.na(base::as.numeric(dt_new_dat$value))) ||
+           base::any(base::is.na(base::as.numeric(dt_exist$value)))){
+          # Some character classes may have snuck in - force character class for all values
+          dt_exist$value <- base::as.character(dt_exist$value)
+          dt_new_dat$value <- base::as.character(dt_new_dat$value)
+        } else { # we can handle numeric values (preferable)
+          dt_exist$value <- base::as.numeric(dt_exist$value)
+          dt_new_dat$value <- base::as.numeric(dt_new_dat$value)
+        }
+      }
       # Merge & duplicate check based on a subset of columns
       dt_cmbo <- data.table::merge.data.table(dt_exist,dt_new_dat,
-                                              all=TRUE,no.dups=TRUE) %>%
+                                              all=TRUE,no.dups=TRUE,) %>%
                   dplyr::group_by(dplyr::across(dplyr::all_of(distinct_cols))) %>%
                   dplyr::arrange(dl_timestamp) %>%
                   dplyr::slice(1) %>% dplyr::ungroup()
@@ -1570,7 +1588,12 @@ io_attr_dat <- function(dt_new_dat,path_attrs,
 }
 
 chck_need_vars_fmt <- function(need_vars){
-  #' @title Check the format of need_vars object and correct if it doesn't match
+  #' @title Check the format of need_vars object and try to correct if non-compliant
+  #' @description If a list of locations with sublists of data sources is
+  #' provided, this condenses it into  a list of data sources containing all
+  #' variables that were contained across each location. This means some
+  #' variables that may not be needed for some locations, but are needed for
+  #' others.
   #' @param need_vars a list whose names must follow "{shortstring}_vars", with
   #' list contents containing actual variable names corresponding to a dataset
   #' @seealso [proc.attr.hydfab]{proc_attr_mlti_wrap}
@@ -1578,20 +1601,67 @@ chck_need_vars_fmt <- function(need_vars){
   # Changelog / contributions
   #. 2025-05-07 Originally created, GL
   #. 2025-05-08 fix: remove accidental ls_attr_exst
+  #. 2025-05-15 patch: add in the simplification in case initial check failed, GL
   df_map_vars <- proc.attr.hydfab:::parse_attr_srce_type_config()
-
-  if(!base::all(names(need_vars) %in% df_map_vars$rafts_name)){
+  need_vars_ls <- need_vars
+  if(!base::all(base::names(need_vars) %in% df_map_vars$rafts_name)){
     # Try re-formatting the need_vars
-    need_vars <- base::lapply(need_vars, function(x) x$need_vars) %>%
+    need_vars <- base::lapply(names(need_vars), function(n) need_vars[[n]]) %>%
+    #need_vars <- base::lapply(need_vars, function(x) x$need_vars) %>%
       base::unique() %>% base::unlist(recursive=FALSE)
+
+    if(base::all(base::is.null(need_vars))){
+      ls_need_vars <- base::list()
+      ctr <- 0
+      for(path_nam in base::names(need_vars_ls)){
+        ctr <- ctr + 1
+        len_subls <- base::length(need_vars_ls[[path_nam]])
+        ls_need_vars[[ctr]] <- need_vars_ls[[path_nam]][1:len_subls]
+      }
+      need_vars <- ls_need_vars
+    } else if (base::any(base::duplicated(names(need_vars)))){
+      # Combine into singular names
+      message("Variable types duplicated. Aggregating all needed variables into a combined list form.")
+      uniq_types <- base::names(need_vars) %>% base::unique()
+      need_vars_redo <- list()
+      for(uniq_type in uniq_types){
+        need_vars_redo[[uniq_type]] <- base::lapply(need_vars_ls, function(x)
+          x[[uniq_type]]) %>% base::unname() %>% base::unlist() %>% base::unique()
+      }
+      need_vars <- need_vars_redo
+    }
+    # # ----
+    # if(base::is.null(need_vars)){ # Did we pass a location list of need_vars?
+    #   # This will simplify further by aggregating all vars inside e/ location
+    #   # into a list of variables named by the type of variable data source
+    #   uniq_need <- base::unique(need_vars_ls)
+    #   uniq_types <- base::lapply(uniq_need, function(x) base::names(x)) %>%
+    #     base::unlist() %>% base::unique()
+    #   # Simplify problem by combining all needed variables across all locations
+    #   # and grabbing them, regardless of whether some locations already have them
+    #   message("Aggregating all needed variables into a combined list form.")
+    #   redone_var_list <- list()
+    #   for(typ in uniq_types){
+    #     grp_all_vars_by_typ <- list()
+    #     ctr <- 0
+    #     for(need in uniq_need){
+    #       ctr <- ctr+1
+    #       vars_all <- need[[typ]]
+    #       grp_all_vars_by_typ[[ctr]] <- vars_all
+    #     }
+    #     redone_var_list[[typ]] <- unlist(grp_all_vars_by_typ) %>% unique()
+    #   }
+    #   need_vars <- redone_var_list
+    # }
+
     if(!base::all(base::names(need_vars) %in% df_map_vars$rafts_name)){
-      warning("Unexpected format of need_vars. Should be a list e.g.\n
-      base::list(ha_vars = c('pet_mm_s01','cly_pc_sav')). \n
+      stop("Unexpected format of need_vars. Should be a list e.g.\n
+      base::list(ha_vars = c('pet_mm_s01','cly_pc_sav'),
+                 usgs_vars = c('TOT_TWI')). \n
       Refer to the proc.attr.hydfab/inst/extdata/attr_source_types.yml
       for acceptable need_vars in the 'name' category.")
     }
   }
-
   return(need_vars)
 }
 
@@ -1621,7 +1691,7 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
   #' @param overwrite boolean. Should the hydrofabric cloud data acquisition be redone and overwrite any local files? Default FALSE.
   #' @param filter_vars boolean. Should the data be filtered down to the variables provided in `Retr_Params$vars'?`
   #' @seealso \link[proc.attr.hydfab]{proc_attrs_gageids}
-  #' @seealso \link[proc.attr.hydfab]{proc_attr_exst_wrap}
+  #' @seealso \link[proc.attr.hydfab]{proc_attr_exst_wrap} Generates the need_vars
   #' @export
   #'
   # Changelog/Contributions
@@ -1674,14 +1744,15 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
                               bucket_conn=NA))
   base::names(ls_attr_exst) <- paths_attrs_have
 
-  # ----- Extract the need vars
-  need_vars <- base::lapply(ls_attr_exst, function(x) x$need_vars) #%>%
+  # ----- Extract the need vars sublists to each location list
+  need_vars_ls <- base::lapply(ls_attr_exst, function(x) x$need_vars_ls)
   # NOTE: DO NOT call chck_need_vars_fmt here b/c we first need miss_var_types_by_file logic
-  need_vars_og <- need_vars # Create a copy before transforming using chck_need_vars_fmt
+
   # Run check on need_vars format to get into appropriate format
-  need_vars <- proc.attr.hydfab:::chck_need_vars_fmt(need_vars)
-  # Use pre-transformed form of need_vars (og) to identify indices of interest
-  miss_var_types_by_file <- base::lapply(need_vars_og, function(x) base::names(x))
+  need_vars_refmt <- proc.attr.hydfab:::chck_need_vars_fmt(need_vars_ls)
+
+  # Use pre-transformed form, need_vars_ls, to identify indices of interest
+  miss_var_types_by_file <- base::lapply(need_vars_ls, function(x) base::names(x))
   # The indices corresponding to locations missing vars, based on need_vars
   idxs_still_need_them <- base::grep(TRUE,base::lapply(miss_var_types_by_file,
                               function(x) !base::is.null(x)) %>% base::unlist())
@@ -1722,13 +1793,18 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
                                                       path_attrs=path_new_comid)
     }
   }
-
+  # --------------------- Locations that need some vars ---------------------- #
+  # This section finds missing variables for locations that already have some data
   # Acquire attributes that still haven't been retrieved (but some attrs exist for a given location)
+
   if(base::length(idxs_still_need_them)>0){
     comids_attrs_still_need <- comids_attrs_have[idxs_still_need_them]
-    still_need_vars <- need_vars[idxs_still_need_them] %>%
+    still_need_vars <- need_vars_ls[idxs_still_need_them] %>%
       proc.attr.hydfab:::chck_need_vars_fmt()# Run check on format
 
+    if(base::is.null(still_need_vars)){
+      stop("Still don't have logic figured out correctly for defining variables.")
+    }
     # retrieve the needed attributes:
     ls_attr_data[['pre-exist']] <- proc.attr.hydfab::retr_attr_new(
                                                 locids=comids_attrs_still_need,
@@ -1769,6 +1845,9 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
     dt_all <- dt_all %>%
       dplyr::filter(attribute %in% base::unname(base::unlist(Retr_Params$vars)))
   }
+
+  # Remove any duplicates
+  dt_all <- dt_all[!base::duplicated(dt_all),]
 
   return(dt_all)
 }
@@ -1905,53 +1984,11 @@ proc_attr_wrap <- function(comid, Retr_Params, lyrs='network',overwrite=FALSE,hf
   ls_chck <- proc.attr.hydfab::proc_attr_exst_wrap(comid,path_attrs,
                                                    vars_ls,bucket_conn=NA)
   dt_all <- ls_chck$dt_all
-  need_vars <- ls_chck$need_vars
+  need_vars <- ls_chck$need_vars_ls
 
   # --------------- dataset grabber ---------------- #
-  # attr_data <- list()
-  # if (('ha_vars' %in% base::names(need_vars)) &&
-  #     (base::all(!base::is.na(need_vars$ha_vars)))){
-  #   # Hydroatlas variable query; list name formatted as {dataset_name}__v{version_number}
-  #   attr_data[['hydroatlas__v1']] <- proc.attr.hydfab::retr_attr_hydatl(path_ha=Retr_Params$paths$paths_ha,
-  #                                         hf_id=net$hf_id,
-  #                                         ha_vars=need_vars$ha_vars) %>%
-  #                               # ensures 'COMID' exists as colname
-  #                               dplyr::rename("COMID" = "hf_id")
-  # }
-  # if( (base::any(base::grepl("usgs_vars", base::names(need_vars)))) &&
-  #     (base::all(!base::is.na(need_vars$usgs_vars))) ){
-  #   # USGS nhdplusv2 query; list name formatted as {dataset_name}__v{version_number}
-  #   attr_data[['usgs_nhdplus__v2']] <- proc.attr.hydfab::proc_attr_usgs_nhd(comid=net$hf_id,
-  #                                                               usgs_vars=need_vars$usgs_vars)
-  # }
   attr_data <- proc.attr.hydfab::retr_attr_new(locids=net$hf_id,need_vars=need_vars,
                              paths_ha=Retr_Params$paths$paths_ha)
-
-  ########## May add more data sources here and append to attr_data ###########
-  # ----------- dataset standardization ------------ #
-  # if (!base::all(base::unlist(( # A qa/qc check
-  #         base::lapply(attr_data, fu <- tion(x)
-  #                 base::any(base::grepl("COMID", colnames(x)))))))){
-  #   stop("Expecting 'COMID' as a column name identifier in every dataset")
-  # }
-
-  # Ensure consistent format of dataset
-  # attr_data_ls <- list()
-  # for(dat_srce in base::names(attr_data)){
-  #   sub_dt_dat <- attr_data[[dat_srce]] %>% data.table::as.data.table()
-  #   # Even though COMID always expected, use featureSource and featureID for
-  #   #.  full compatibility with potential custom datasets
-  #   sub_dt_dat$featureID <- base::as.character(sub_dt_dat$COMID)
-  #   sub_dt_dat$featureSource <- "COMID"
-  #   sub_dt_dat$data_source <- base::as.character(dat_srce)
-  #   sub_dt_dat$dl_timestamp <- base::as.character(base::as.POSIXct(
-  #     base::format(Sys.time()),tz="UTC"))
-  #   sub_dt_dat <- sub_dt_dat %>% dplyr::select(-COMID)
-  #   # Convert from wide to long format
-  #   attr_data_ls[[dat_srce]] <- data.table::melt(sub_dt_dat,
-  #                            id.vars = c('featureID','featureSource', 'data_source','dl_timestamp'),
-  #                            variable.name = 'attribute')
-  # }
 
   # Combine freshly-acquired data
   dt_new_dat <- data.table::rbindlist(attr_data,use.names=TRUE,fill=TRUE)
