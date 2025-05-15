@@ -744,6 +744,38 @@ testthat::test_that("retr_attr_hydatl", {
 
 })
 
+testthat::test_that("chck_need_vars_fmt", {
+  need_vars_std <- base::list(usgs_vars = c("TOT_TWI","TOT_BFI"),
+                        ha_vars = c("snd_pc_uav","swc_pc_uyr"))
+  need_vars_std2 <- base::list(usgs_vars = c("TOT_TWI"),
+                         ha_vars = c("snd_pc_uav","pst_pc_use","crp_pc_use"))
+  # The normal situation
+  rslt_normal <- proc.attr.hydfab:::chck_need_vars_fmt(need_vars_std)
+
+  testthat::expect_identical(need_vars_std, rslt_normal)
+
+  # A list of locations should condense it all
+  need_vars_ls <- base::list(comid_location_11111 = need_vars_std,
+                       comid_location_22222 = need_vars_std2)
+
+  rslt_condens <- proc.attr.hydfab:::chck_need_vars_fmt(need_vars_ls)
+
+  testthat::expect_false(identical(rslt_condens, need_vars_ls))
+
+  testthat::expect_true(base::all(base::names(rslt_condens) %in%
+                                    base::names(need_vars_std)))
+  all_ha_vars <-base::c(need_vars_std$ha_vars,need_vars_std2$ha_vars) %>%
+    base::unlist() %>% base::unique()
+  testthat::expect_true(base::all(all_ha_vars %in% rslt_condens$ha_vars))
+
+  testthat::expect_error(
+    proc.attr.hydfab:::chck_need_vars_fmt(list(need_vars_ls=need_vars_ls)),
+    regexp="Unexpected format of need_vars")
+
+})
+
+
+
 testthat::test_that("proc_attr_usgs_nhd", {
   exp_dat <- readRDS(system.file("extdata", paste0("nhd_18094981.Rds"), package="proc.attr.hydfab"))
   order_cols <- c('COMID',"TOT_TWI","TOT_PRSNOW","TOT_POPDENS90","TOT_EWT","TOT_RECHG")
@@ -766,7 +798,7 @@ testthat::test_that("proc_attr_exst_wrap", {
                                                    vars_ls=Retr_Params$vars,
                                                    bucket_conn=NA) %>%
               base::suppressWarnings()
-  testthat::expect_true(all(names(ls_rslt) == c("dt_all","need_vars")))
+  testthat::expect_true(all(names(ls_rslt) == c("dt_all","need_vars_ls")))
   testthat::expect_type(ls_rslt,'list')
   testthat::expect_s3_class(ls_rslt$dt_all,'data.table')
   if(length(list.files(dir_db_attrs,pattern='parquet'))==0){

@@ -2,7 +2,7 @@
 % Please edit documentation in R/proc_attr_grabber.R
 \name{chck_need_vars_fmt}
 \alias{chck_need_vars_fmt}
-\title{Check the format of need_vars object and correct if it doesn't match}
+\title{Check the format of need_vars object and try to correct if non-compliant}
 \usage{
 chck_need_vars_fmt(need_vars)
 }
@@ -11,7 +11,11 @@ chck_need_vars_fmt(need_vars)
 list contents containing actual variable names corresponding to a dataset}
 }
 \description{
-Check the format of need_vars object and correct if it doesn't match
+If a list of locations with sublists of data sources is
+provided, this condenses it into  a list of data sources containing all
+variables that were contained across each location. This means some
+variables that may not be needed for some locations, but are needed for
+others.
 }
 \seealso{
 [proc.attr.hydfab]{proc_attr_mlti_wrap}
