@@ -524,7 +524,6 @@ std_write_geom_map_gpkg <- function(sf_comid,path_save_gpkg,epsg=NULL){
   return(sf_cmbo_no_dupe)
 }
 
-
 fs_retr_nhdp_comids_geom <- function(gage_ids,featureSource='nwissite',
                                      featureID="USGS-{gage_id}",epsg=4326){
   #' @title Retrieve comids & point geometry based on nldi_feature identifiers
