@@ -917,6 +917,7 @@ fs_retr_nhdp_comids_geom <- function(gage_ids,featureSource='nwissite',
         stop(glue::glue("The following nldi features didn't work. You may need to
                    revisit the configuration yaml file that processes this dataset in
                   fs_prep: \n {featureSource}, and featureID={featureID}"))
+        # TODO consider adding hydrofabric integration here (e.g. oCONUS??)
       } else if (base::is.null(site_feature)){
         if(nldi_feat$featureSource=="nwissite"){
           # Try manual api retrieval specific for nwissite (USGS-{gage_id})
@@ -937,9 +938,13 @@ fs_retr_nhdp_comids_geom <- function(gage_ids,featureSource='nwissite',
             if("try-error" %in% base::class(comid)){ # Assign NA values for everything
               site_feature <- tibble::tibble(identifier=nldi_feat$featureID,comid=NA,
                                        geometry=sf::st_sfc(sf::st_point(),crs=epsg))
+              warning(glue::glue("try-error comid - Consider adding hydrofabric integration  (e.g. oCONUS??) for \n",
+                               "{gage_id}"))
             } else { # Assign NA values for geometry
               site_feature <- tibble::tibble(identifier=nldi_feat$featureID,comid=comid,
                                        geometry = sf::st_sfc(sf::st_point(),crs=epsg))
+              warning(glue::glue("else comid - Consider adding hydrofabric integration  (e.g. oCONUS??) for \n",
+                               "{gage_id}"))
             }
           }
       }
