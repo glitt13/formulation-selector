@@ -34,10 +34,13 @@ import forestci as fci
 from scipy import stats as st
 from sklearn.utils import resample
 from sklearn.pipeline import Pipeline
-# from sklearn.linear_model import LinearRegression
 from mapie.regression import MapieRegressor
+import yaml
+
 
 # %% UNIT TESTING FOR AttrConfigAndVars
+parent_dir_test = Path(__file__).parent
+dir_test_data = Path(parent_dir_test,"test_data")
 
 class TestAttrConfigAndVars(unittest.TestCase):
     print("Testing AttrConfigAndVars")
@@ -863,3 +866,47 @@ class TestAlgoTrainEvalBasic(unittest.TestCase):
         self.assertFalse(self.algo.eval_df.empty)
     
 # %%
+
+class TestReadMetadata(unittest.TestCase):
+    @patch('pandas.read_parquet')
+    def test_read_metadata_file_not_found(self, mock_read_parquet):
+        """Test that FileNotFoundError is raised when metadata file is missing."""
+        path_attr_config = Path(dir_test_data, "attr_config.yaml")
+        with self.assertRaises(FileNotFoundError):
+            fs_algo_train_eval._read_metadata(path_attr_config, ds='dataset_name')
+
+    @patch('pandas.read_parquet')
+    def test_read_metadata_reads_parquet(self, mock_read_parquet):
+        """Test reading metadata when parquet file is present and correct."""
+        # Arrange
+        mock_df = pd.DataFrame({'gage_id': [12345, 25432], 'featureID': ['prvi-cat-135', 'ak-cat-123']})
+        mock_read_parquet.return_value = mock_df
+
+        # Use real attr_config.yaml
+        path_attr_config = Path(dir_test_data, "attr_config.yaml")
+        attr_cfig = fs_algo_train_eval.AttrConfigAndVars(path_attr_config)
+        
+        # Patch AttrConfigAndVars and mock its instance
+        with patch("fs_algo.fs_algo_train_eval.AttrConfigAndVars") as MockAttrClass:
+            mock_instance = MockAttrClass.return_value
+            mock_instance._read_attr_config.return_value = None
+
+            mock_instance.attr_config = {
+                'file_io': [
+                    {'ds_type': 'training'},
+                    {'write_type': 'parquet'},
+                    {'path_meta': "{dir_std_base}/{ds}/{ds}_{ds_type}.{write_type}"}
+                ]
+            }
+            # Only override dir_std_base key
+            mock_instance.attrs_cfg_dict = {'dir_std_base': dir_test_data}
+
+            # Act
+            result = fs_algo_train_eval._read_metadata(path_attr_config, ds="dataset_name")
+
+            # Assert
+            mock_read_parquet.assert_called_once()
+            pd.testing.assert_frame_equal(result, mock_df)
+
+if __name__ == "__main__":
+    unittest.main()
