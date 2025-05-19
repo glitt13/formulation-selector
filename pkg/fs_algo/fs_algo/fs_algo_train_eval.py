@@ -38,6 +38,8 @@ from scipy.stats import norm
 import random
 import scipy.stats as st
 
+
+
 # %% BASIN ATTRIBUTES (PREDICTORS) & RESPONSE VARIABLES (e.g. METRICS)
 class AttrConfigAndVars:
     def __init__(self, path_attr_config: str | os.PathLike):
@@ -72,18 +74,19 @@ class AttrConfigAndVars:
             raise warnings.warn(f"No attributes discerned from 'attr_select'." \
                                 "Assuming all attributes desired.",UserWarning)
         
-        # Determine if home_dir. Either defined in attribute config file or assumed to be system default.
-        home_dir_read = [v for x in self.attr_config['file_io'] for k, v in x.items() if 'home_dir' in k ]
-        if len(home_dir_read) == 0:
-            home_dir = str(Path.home())
-        elif home_dir_read[0] is None:
-            home_dir = str(Path.home())
-        elif not Path(home_dir_read[0]).exists():
-            warnings.warn(f"The user-defined home directory path {home_dir_read[0]} " \
-             f"inside {self.path_attr_config} does not exist. Using system default {Path.home()}", UserWarning)
-            home_dir = str(Path.home())
-        else:
-            home_dir = home_dir_read[0]
+        home_dir = _define_home_dir(self.attr_config)
+        # # Determine if home_dir. Either defined in attribute config file or assumed to be system default.
+        # home_dir_read = [v for x in self.attr_config['file_io'] for k, v in x.items() if 'home_dir' in k ]
+        # if len(home_dir_read) == 0:
+        #     home_dir = str(Path.home())
+        # elif home_dir_read[0] is None:
+        #     home_dir = str(Path.home())
+        # elif not Path(home_dir_read[0]).exists():
+        #     warnings.warn(f"The user-defined home directory path {home_dir_read[0]} " \
+        #      f"inside {self.path_attr_config} does not exist. Using system default {Path.home()}", UserWarning)
+        #     home_dir = str(Path.home())
+        # else:
+        #     home_dir = home_dir_read[0]
 
         dir_base = list([x for x in self.attr_config['file_io'] if 'dir_base' in x][0].values())[0].format(home_dir=home_dir)
         # Location of attributes (predictor data):
@@ -115,6 +118,29 @@ class AttrConfigAndVars:
                             'dir_base': dir_base,
                             'home_dir': home_dir,
                             'datasets': datasets}
+def _define_home_dir(attr_config:dict) -> os.PathLike:
+    """Define the home directory of this system
+
+    :param attr_config: The attribute config file object generated using fs_algo_train_eval.AttrConfigAndVars
+    :type attr_config: dict
+    :return: The filepath to the home directory
+    :rtype: os.PathLike
+    """
+    # Determine if home_dir. Either defined in attribute config file or assumed to be system default.
+    home_dir_read = [v for x in attr_config['file_io'] for k, v in x.items() if 'home_dir' in k ]
+    if len(home_dir_read) == 0:
+        home_dir = str(Path.home())
+    elif home_dir_read[0] is None:
+        home_dir = str(Path.home())
+    elif not Path(home_dir_read[0]).exists():
+        warnings.warn(f"The user-defined home directory path {home_dir_read[0]} " \
+            f"inside attribute config file does not exist. Using system default {Path.home()}", UserWarning)
+        home_dir = str(Path.home())
+    else:
+        home_dir = home_dir_read[0]
+    return home_dir        
+
+
 def _check_attr_rm_dupes(attr_df:pd.DataFrame, 
                    uniq_cols:list = ['featureID','featureSource','data_source','attribute','value'],
                    sort_col:str = 'dl_timestamp',
@@ -148,7 +174,7 @@ def fs_read_attr_comid(dir_db_attrs:str | os.PathLike, comids_resp:list | Iterab
 
     :param dir_db_attrs: directory where attribute .parquet files live
     :type dir_db_attrs: str | os.PathLike
-    :param comids_resp: USGS COMID values of interest 
+    :param comids_resp: Unique location ID (e.g.USGS COMID, hf_uid) values of interest 
     :type comids_resp: list | Iterable
     :param attrs_sel: desired attributes to select from the attributes .parquet files, defaults to 'all'
     :type attrs_sel: str | Iterable, optional
@@ -171,6 +197,7 @@ def fs_read_attr_comid(dir_db_attrs:str | os.PathLike, comids_resp:list | Iterab
     """
     # Changelog/contributions
     #  2025-04-01 Add logic to remove empty parquet files
+    #  2025-05-19 refactor: remove _NA_ parquet files, udpate 'all' to dd.read_parquet, GL
     if _s3:
         storage_options={"anon",True} # for public
         # TODO  Setup the s3fs filesystem that will be used, with xarray to open the parquet files
@@ -178,21 +205,20 @@ def fs_read_attr_comid(dir_db_attrs:str | os.PathLike, comids_resp:list | Iterab
 
     # Parquet files sized 0 bytes cause fatal errors when trying to read. Remove them.
     files_empty = [file for file in Path(dir_db_attrs).rglob("*.parquet") if file.stat().st_size == 0]
-    if len(files_empty) > 0:
-        for file in files_empty:
+    # The location identifer of _NA_ should not exist. Remove it.
+    file_NA = [file for file in Path(dir_db_attrs).rglob("*.parquet") if '_NA_' in str(file)]
+    files_rm = files_empty + file_NA
+    if len(files_rm) > 0:
+        for file in files_rm:
             os.remove(file)
 
     # ------------------- Subset based on comids of interest ------------------
-    if read_type == 'all': # Considering all parquet files inside directory
+    elif read_type == 'all': # Considering all parquet files inside directory
         # Read attribute data acquired using proc.attr.hydfab R package
-        all_files = [x for x in Path(dir_db_attrs).glob('*.parquet')]
-        all_df = pd.read_parquet(all_files)
-        #all_attr_ddf = dd.read_parquet(dir_db_attrs, storage_options = storage_options)
         comids_resp_str = [str(s) for s in comids_resp]
-        attr_ddf_subloc = dd.from_pandas(all_df[all_df['featureID'].isin(comids_resp_str)],
-                                         npartitions=2)
+        all_attr_ddf = dd.read_parquet(dir_db_attrs, storage_options = storage_options)
+        attr_ddf_subloc = all_attr_ddf[all_attr_ddf['featureID'].isin(comids_resp_str)]
     elif read_type == 'filename': # Read based on comid being located in the parquet filename
-        
         substrings = [f'_{sub}_' for sub in comids_resp]
         pattern = re.compile('|'.join(map(re.escape,substrings)))
         all_files = [file for file in Path(dir_db_attrs).iterdir() if file.is_file()]
@@ -223,9 +249,13 @@ def fs_read_attr_comid(dir_db_attrs:str | os.PathLike, comids_resp:list | Iterab
     attr_df_sub = _check_attr_rm_dupes(attr_df=attr_df_sub)
 
     # Run check that all variables are present across all basins
+
     dict_rslt = _check_attributes_exist(attr_df_sub,attrs_sel)
     attr_df_sub, attrs_sel_ser = dict_rslt['df_attr'], dict_rslt['attrs_sel']
-
+    print("!!!!!!!!!!!!!!!!!!!!!!!!")
+    print(attr_df_sub['value'])
+    print(type(attr_df_sub['value']))
+    print("---------------------------------")
     if not pd.api.types.is_float_dtype(attr_df_sub['value']):
         warnings.warn("Forcing all attribute values to be float")
         attr_df_sub['value'] = np.float64(attr_df_sub['value'])
@@ -262,10 +292,16 @@ def _check_attributes_exist(df_attr: pd.DataFrame, attrs_sel:pd.Series | Iterabl
 
     # Run check that all attributes are present for all basins
     if df_attr.groupby('featureID')['attribute'].count().nunique() != 1:
-        
         # multiple combos of comid/attrs exist. Find them and warn about it.
-        vec_missing = df_attr.groupby('featureID')['attribute'].count() != len(attrs_sel)
-        bad_comids = vec_missing.index.values[vec_missing]
+        counts = df_attr.groupby('featureID')['attribute'].count()
+        vec_missing = counts != len(attrs_sel)
+
+        if isinstance(vec_missing, pd.Series):
+            bad_comids = counts.index[vec_missing].tolist()
+        else: # Fallback in case vec_missing is a single boolean
+            bad_comids = counts.index.tolist() if vec_missing else []
+        # vec_missing = df_attr.groupby('featureID')['attribute'].count() != len(attrs_sel)
+        # bad_comids = vec_missing.index.values[vec_missing]
         msg_tot_loc = f"    TOTAL unique locations with missing attributes: {len(bad_comids)}"
         warnings.warn(msg_tot_loc,UserWarning)
         df_attr_sub_missing = df_attr[df_attr['featureID'].isin(bad_comids)]
@@ -332,6 +368,8 @@ def _find_feat_srce_id(dat_resp: Optional[xr.core.dataset.Dataset] = None,
 
     note:: Standardized dataset attributes preferred in cases of processing multiple datasets & attributes differ by dataset). 
     Otherwise, fallback on config file. At least one argument must be provided.
+
+    # TODO refactor this to read the attribute config file directly by passing the path to the config file
     """
     
     featureSource = None
@@ -681,21 +719,24 @@ def _read_pred_comid(path_pred_locs: str | os.PathLike, comid_pred_col:str ) -> 
     return comids_pred
 
 
-def find_common_comid(dict_gdf_comids:Dict[str,gpd.GeoDataFrame], column='comid')->list:
+def find_common_comid(dict_gdf_comids:Dict[str,gpd.GeoDataFrame], column='featureID')->list:
     """Given a collection of multiple datasets, find the shared comids
 
     :param dict_gdf_comids: a dictionary of multiple datasets,
       each containing a geodataframe of comids as generated by
       :func:`fs_retr_nhdp_comids_geom`
     :type dict_gdf_comids: dict[str, geopandas.GeoDataFrame]
-    :param column: The geodataframe column name for the comid, defaults to 'comid'
+    :param column: The geodataframe column name for the comid, defaults to 'featureID'
     :type column: str, optional
     :seealso: :func:`split_train_test_comid_wrap`
     :seealso: :func:`fs_retr_nhdp_comids_geom`
     :return: list of the shared comids
     :rtype: list
     """
-    
+    # Changelog/contributions
+    # FY25 originally created, GL
+    # 2025-05-19 change default column to 'featureID'
+
     common_comid = None
     for df in dict_gdf_comids.values():
         if common_comid is None:
@@ -761,8 +802,46 @@ def fs_retr_nhdp_comids_geom_wrap(path_save_gpkg:str|os.PathLike,
         gdf_comid.to_file(path_save_gpkg, layer = 'outlet',driver='GPKG')
     return(gdf_comid)
 
-def combine_resp_gdf_comid_wrap(dir_std_base:str|os.PathLike,ds:str,
-                          attr_config:dict)->dict:
+def _read_metadata(path_attr_config:str|os.PathLike, ds:str) -> pd.DataFrame:
+    """Read the metadata file for the dataset of interest
+
+    :param attr_config: The path to attribute config file 
+    :type attr_config: str | os.PathLike
+    :param ds: The unique dataset identifier
+    :type ds: str
+    :return: The metadata dataframe
+    :rtype: pd.DataFrame
+
+    Changelog:
+    2025-05-19 originally created, GL
+    """
+
+    attr_cfig = AttrConfigAndVars(path_attr_config)
+    attr_cfig._read_attr_config()
+
+    # Define directories/datasets from the attribute config file
+    dir_std_base = attr_cfig.attrs_cfg_dict.get('dir_std_base')
+
+    # Grab variables for building out the path to metadata (which contains comid-gage id mappings)
+    ds_type = [x for x in attr_cfig.attr_config.get('file_io') if 'ds_type' in x][0]['ds_type']
+    write_type = [x for x in attr_cfig.attr_config.get('file_io') if 'write_type' in x][0]['write_type']
+    path_meta_fstr = [x for x in attr_cfig.attr_config.get('file_io') if 'path_meta' in x][0]['path_meta']
+
+    vals = {'ds_type':ds_type,'write_type':write_type, 'dir_std_base':dir_std_base,'ds':ds}
+    path_meta = path_meta_fstr.format(**vals)
+    if not Path(path_meta).exists():
+        raise FileNotFoundError(f"The dataset's metadata mapping file could not be found: \n{path_meta}")
+    if 'parquet' in Path(path_meta).suffix:
+        df_meta = pd.read_parquet(path_meta)
+    elif 'csv' in Path(path_meta).suffix:
+        df_meta = pd.read_csv(path_meta)
+
+    return df_meta
+
+
+
+def combine_resp_gdf_comid_wrap(dir_std_base:str|os.PathLike,ds:str,path_attr_config:str|os.PathLike,
+                          )->dict:
     """Standardize the response variable and geodataframe/comid retrieval for a single dataset in a wrapper function
 
     Removes data points from consideration if no comid could be found. Makes the gdf and response data consistent.
@@ -771,17 +850,26 @@ def combine_resp_gdf_comid_wrap(dir_std_base:str|os.PathLike,ds:str,
     :type dir_std_base: str | os.PathLike
     :param ds:  The unique dataset identifier
     :type ds: str
-    :param attr_config: configuration data generated from the attribute configuration file
-    :type attr_config: dict
+    :param path_attr_config: path to the attribute configuration file
+    :type attr_config: str | os.PathLike
     :return: dict of the response xarray dataset `'dat_resp'`,
       and the geodataframe with comids & coordinates `'gdf_comid'`
     :rtype: dict
+
+    Changelog:
+        2025-05-19 refactor: integrate path_meta for gage_id:featureID-featureSource mapping, GL   
     """
 
     dat_resp = _open_response_data_fs(dir_std_base,ds)
 
+    # ----- Retrieve a dataset's metadata that maps the gage_id to the featureID
+    df_meta = _read_metadata(path_attr_config=path_attr_config, ds=ds)
+
     # %% COMID & coord retrieval and assignment to response variable's coordinate
-    [featureSource,featureID] = _find_feat_srce_id(dat_resp,attr_config) # e.g. ['nwissite','USGS-{gage_id}']
+    # TODO quickfix: read attribute config file here:
+    attr_cfig = AttrConfigAndVars(path_attr_config)
+    attr_cfig._read_attr_config()
+    [featureSource,featureID] = _find_feat_srce_id(dat_resp,attr_config=attr_cfig.attr_config) # e.g. ['nwissite','USGS-{gage_id}']
     
     path_fs_dat_resp =  _std_fs_prep_ds_paths(dir_std_base=dir_std_base,ds=ds,mtch_str='*.nc')
     if len(path_fs_dat_resp) > 1:
@@ -794,6 +882,20 @@ def combine_resp_gdf_comid_wrap(dir_std_base:str|os.PathLike,ds:str,
                                   gage_ids=dat_resp['gage_id'].values,
                                 featureSource=featureSource, featureID=featureID)
    
+    # --- map gdf_comid and df_meta for featureID
+    # remove featureID/featureSource columns in gdf_comid that pertain to the gage_id, 
+    # not the unique identifiers of those same cols in the df_meta
+    if 'featureID' in gdf_comid.columns:
+        gdf_comid = gdf_comid.drop(columns=['featureID'])
+    if 'featureSource' in gdf_comid.columns:
+        gdf_comid = gdf_comid.drop(columns=['featureSource'])
+    # merge gdf_comid with df_meta based on gage_id column
+    df_meta_map = df_meta[['featureID','featureSource','gage_id']].drop_duplicates()
+
+    gdf_comid = gdf_comid.merge(df_meta_map, on='gage_id', how='left')
+
+
+
     # --- response data identifier alignment with comids & na removal --- #
     # Subset gdf to the gage_ids that are present in the standardized response variable
     sub_gdf_comid = gdf_comid[gdf_comid['gage_id'].isin(dat_resp['gage_id'].values)]
@@ -804,17 +906,21 @@ def combine_resp_gdf_comid_wrap(dir_std_base:str|os.PathLike,ds:str,
             raise ValueError(f"The number of gage_ids in the response variable ({len(dat_resp['gage_id'])}) is less than the number of gage_ids in the geodataframe ({sub_gdf_comid.shape[0]}).")
             # TODO consider dropping the gage_ids that are not present in the geodataframe
     
-    gage_to_comid_map = sub_gdf_comid.set_index('gage_id')['comid']
-    mapped_comids = pd.Series(dat_resp['gage_id'].values).map(gage_to_comid_map)
-    dat_resp = dat_resp.assign_coords(comid=("gage_id", mapped_comids.values))
-    # Assign the comid coordinate to dat_resp
-    #dat_resp1 = dat_resp.assign_coords(comid=('gage_id', dat_resp['gage_id'].values.map(gage_to_comid_map)))
-    #dat_resp = dat_resp.assign_coords(comid = sub_gdf_comid['comid'].values)
-        # dat_resp = dat_resp.isel(gage_id=~dat_resp['gage_id'].isin(sub_gdf_comid['gage_id'].values))
-    #dat_resp = dat_resp.assign_coords(comid = gdf_comid['comid'].values)
-    
+    if('featureID' in sub_gdf_comid.columns):
+        feature_id_col = 'featureID'
+    elif('comid' in sub_gdf_comid.columns):
+        feature_id_col = 'comid'
+    else:
+        raise ValueError(f"The geodataframe does not contain a column named 'featureID' or 'comid'.")
 
-    idxs_na_comid = list(np.where(sub_gdf_comid['comid'].isna())[0])
+    gage_to_feat_source_map = sub_gdf_comid.set_index('gage_id')['featureSource']
+    mapped_feat_source = pd.Series(dat_resp['gage_id'].values).map(gage_to_feat_source_map)
+    gage_to_comid_map = sub_gdf_comid.set_index('gage_id')[feature_id_col]
+    mapped_comids = pd.Series(dat_resp['gage_id'].values).map(gage_to_comid_map)
+    dat_resp = dat_resp.assign_coords(featureID=("gage_id", mapped_comids.values),
+                                      featureSource=("gage_id",mapped_feat_source))
+
+    idxs_na_comid = list(np.where(sub_gdf_comid['featureID'].isna())[0])
     gage_id_mask = ~np.isin(np.arange(len(dat_resp['gage_id'])),idxs_na_comid)
     if len(idxs_na_comid) > 0:
         gage_ids_missing = dat_resp['gage_id'].isel(gage_id=~gage_id_mask).values
@@ -823,10 +929,10 @@ def combine_resp_gdf_comid_wrap(dir_std_base:str|os.PathLike,ds:str,
               \n{gage_ids_missing}")
         # Remove the unknown comids now that they've been matched up to the original dims in dat_resp:
         dat_resp = dat_resp.isel(gage_id=gage_id_mask)# remove NA vals from gage_id coord
-        #dat_resp = dat_resp.isel(comid=gage_id_mask) # remove NA vals from comid coord
+
     
-    sub_gdf_comid = sub_gdf_comid.drop_duplicates().dropna()
-    if any(sub_gdf_comid['comid'].duplicated()):
+    sub_gdf_comid = sub_gdf_comid.drop_duplicates().dropna(subset=['featureID'],axis=0)
+    if any(sub_gdf_comid[feature_id_col].duplicated()):
         print("Note that some duplicated comids found in dataset based on initial location identifier, gage_id")
     sub_gdf_comid['dataset'] = ds 
 
@@ -835,8 +941,8 @@ def combine_resp_gdf_comid_wrap(dir_std_base:str|os.PathLike,ds:str,
     return(dict_resp_gdf)
 
 def split_train_test_comid_wrap(dir_std_base:str|os.PathLike, 
-                datasets:list, attr_config:dict,
-                comid_col='comid', test_size:float=0.3,
+                datasets:list, path_attr_config:str | os.PathLike,
+                id_col='featureID', test_size:float=0.3,
                 random_state:int=42) -> dict:
     """Create a train/test split based on shared comids across multiple datasets
     Helpful when multiple datasets desired for intercomparison share the same comids, but 
@@ -847,10 +953,10 @@ def split_train_test_comid_wrap(dir_std_base:str|os.PathLike,
     :type dir_std_base: str | os.PathLike
     :param datasets: The unique dataset identifiers as a list
     :type datasets: list
-    :param attr_config: configuration data generated from the attribute configuration file
-    :type attr_config: dict
-    :param comid_col: The column name of the comid in geodataframe as returned by `fs_retr_nhdp_comids_geom`, defaults to 'comid'
-    :type comid_col: str, optional
+    :param path_attr_config: path to the attribute configuration file
+    :type path_attr_config: str | os.PathLike
+    :param id_col: The column name of the comid in geodataframe as returned by `fs_retr_nhdp_comids_geom`, defaults to 'featureID'
+    :type id_col: str, optional
     :param test_size: The fraction of data reserved for test data, defaults to 0.3
     :type test_size: float, optional
     :param random_state: The random state/random seed number, defaults to 42
@@ -862,27 +968,31 @@ def split_train_test_comid_wrap(dir_std_base:str|os.PathLike,
         'sub_train_ids': the comids corresponding to training
     :rtype: dict
     """
+    # Changelog/contributions
+    # 2025-05-19 refactor to pass path_attr_config in lieu of attr_config, change default id_col to featureID, GL
+    
+
     dict_gdf_comids = dict()
     for ds in datasets:
     
         # Generate the geodataframe in a standard format
-        dict_resp_gdf = combine_resp_gdf_comid_wrap(dir_std_base,ds,attr_config )
+        dict_resp_gdf = combine_resp_gdf_comid_wrap(dir_std_base,ds,path_attr_config=path_attr_config )
     
         dict_gdf_comids[ds] = dict_resp_gdf['gdf_comid']
 
     if len(datasets) > 1:
-        common_comid = find_common_comid(dict_gdf_comids, column = comid_col)
+        common_locid = find_common_comid(dict_gdf_comids, column = id_col)
     else:
-        common_comid = dict_gdf_comids[ds]['comid'].tolist()
+        common_locid = dict_gdf_comids[ds][id_col].tolist()
     
     # Create the train/test split() of comids. Note that duplicates are possible and must be removed!
-    df_common_comids = pd.DataFrame({'comid':common_comid}).dropna().drop_duplicates()
-    train_ids, test_ids = train_test_split(df_common_comids, test_size=test_size, random_state=random_state)
+    df_common_locids = pd.DataFrame({id_col:common_locid}).dropna().drop_duplicates()
+    train_ids, test_ids = train_test_split(df_common_locids, test_size=test_size, random_state=random_state)
 
     # Compile results into a standard structure
     split_dict = {'dict_gdf_comids' : dict_gdf_comids,
-                'sub_test_ids': test_ids[comid_col],
-                'sub_train_ids': train_ids[comid_col]}
+                'sub_test_ids': test_ids[id_col],
+                'sub_train_ids': train_ids[id_col]}
     return split_dict
 
 

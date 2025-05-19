@@ -80,12 +80,18 @@ class TestAttrConfigAndVars(unittest.TestCase):
            
         self.assertEqual(attr_obj.attrs_cfg_dict, expected_attrs_cfg_dict)
         print("✅ test_read_attr_config test passed.")
+import unittest
+from unittest.mock import patch
+import pandas as pd
+import dask.dataframe as dd
+import os
 
 class TestFsReadAttrComid(unittest.TestCase):   
     @patch('fs_algo.fs_algo_train_eval.dd.read_parquet')
-    def test_fs_read_attr_comid(self, mock_read_parquet):
+    def test_fs_read_attr_comid(self, mock_dd_read_parquet):
         print("    Testing fs_read_attr_comid")
-        # Mock DataFrame
+
+        # Create a Dask DataFrame from a Pandas DataFrame
         mock_pdf = pd.DataFrame({
             'data_source': ['hydroatlas__v1','hydroatlas__v1'],
             'dl_timestamp': ['2024-07-26 08:59:36','2024-07-26 08:59:36'],
@@ -94,46 +100,50 @@ class TestFsReadAttrComid(unittest.TestCase):
             'featureID': ['1520007','1520007'],
             'featureSource': ['COMID','COMID']
         })
-        #result = fs_algo_train_eval.fs_read_attr_comid(dir_db_attrs=dir_db_attrs, comids_resp=comids_resp, attrs_sel=attrs_sel)
-        # Use unittest.mock.patch to mock pd.read_parquet
-        with patch('pandas.read_parquet', return_value=mock_pdf) as mock_read_parquet:
-            dir_db_attrs = 'mock_dir'
-            comids_resp = ['1520007']
-            attrs_sel = 'all'
+        mock_ddf = dd.from_pandas(mock_pdf, npartitions=1)
 
-            result = fs_algo_train_eval.fs_read_attr_comid(dir_db_attrs=dir_db_attrs,
-                                        comids_resp=comids_resp,
-                                        attrs_sel=attrs_sel)
-            
-            # Assertions and print
-            assert mock_read_parquet.called, "pandas.read_parquet was not called"
-            assert result.shape[0] == 2, f"Expected 2 rows, got {result.shape[0]}"
-            assert '1520007' in result['featureID'].values, "'1520007' not in featureID column"
-            assert 'pet_mm_s01' in result['attribute'].values, "'pet_mm_s01' not in attribute column"
-            assert 'COMID' in result['featureSource'].values, "'COMID' not in featureSource column"
-            assert 'value' in result.columns, "'value' column missing"
-            assert 'data_source' in result.columns, "'data_source' column missing"
+        # Patch Dask read_parquet to return this mock DDF
+        mock_dd_read_parquet.return_value = mock_ddf
 
-            print("✅ fs_read_attr_comid muliple-row test passed.")
+        # Inputs
+        dir_db_attrs = 'mock_dir'
+        comids_resp = ['1520007']
+        attrs_sel = ['pet_mm_s01', 'cly_pc_sav']
 
-            # When only one attribute requested
-            single_result = fs_algo_train_eval.fs_read_attr_comid(dir_db_attrs=dir_db_attrs,
-                                                                comids_resp= comids_resp,attrs_sel= ['pet_mm_s01'])
-            self.assertIn('pet_mm_s01',single_result['attribute'].values)
-            self.assertNotIn('cly_pc_sav',single_result['attribute'].values)
+        # Call function
+        result_df = fs_algo_train_eval.fs_read_attr_comid(
+            dir_db_attrs=dir_db_attrs,
+            comids_resp=comids_resp,
+            attrs_sel=attrs_sel
+        )
 
-            # When COMID requested that doesn't exist
-            with self.assertWarns(UserWarning):
-                    fs_algo_train_eval.fs_read_attr_comid(dir_db_attrs=dir_db_attrs,
-                                                                comids_resp= ['010101010'],
-                                                                attrs_sel= ['pet_mm_s01'])
+        # Assertions
+        self.assertEqual(result_df.shape[0], 2)
+        self.assertIn('1520007', result_df['featureID'].values)
+        self.assertIn('pet_mm_s01', result_df['attribute'].values)
+        self.assertIn('COMID', result_df['featureSource'].values)
+        self.assertIn('value', result_df.columns)
+        self.assertIn('data_source', result_df.columns)
+        print("✅ fs_read_attr_comid muliple-row test passed.")
 
-            # When attribute requested that doesn't exist
-            with self.assertWarns(UserWarning):
+        # When only one attribute requested
+        single_result = fs_algo_train_eval.fs_read_attr_comid(dir_db_attrs=dir_db_attrs,
+                                                            comids_resp= comids_resp,attrs_sel= ['pet_mm_s01'])
+        self.assertIn('pet_mm_s01',single_result['attribute'].values)
+        self.assertNotIn('cly_pc_sav',single_result['attribute'].values)
+
+        # When COMID requested that doesn't exist
+        with self.assertWarns(UserWarning):
                 fs_algo_train_eval.fs_read_attr_comid(dir_db_attrs=dir_db_attrs,
-                                                comids_resp= comids_resp,
-                                                attrs_sel= ['nonexistent'])
-            print("✅ fs_read_attr_comid single-row test passed.")
+                                                            comids_resp= ['010101010'],
+                                                            attrs_sel= ['pet_mm_s01'])
+
+        # When attribute requested that doesn't exist
+        with self.assertWarns(UserWarning):
+            fs_algo_train_eval.fs_read_attr_comid(dir_db_attrs=dir_db_attrs,
+                                            comids_resp= comids_resp,
+                                            attrs_sel= ['nonexistent'])
+        print("✅ fs_read_attr_comid single-row test passed.")
 
 class TestCheckAttributesExist(unittest.TestCase):
     print('Testing _check_attributes_exist')
