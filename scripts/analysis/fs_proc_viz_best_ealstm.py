@@ -84,7 +84,7 @@ if __name__ == "__main__":
     if same_test_ids:
         # Must first establish which comids to use in the train-test split
         split_dict = fsate.split_train_test_comid_wrap(dir_std_base=dir_std_base, 
-                    datasets=datasets, attr_config=attr_cfig.attr_config,
+                    datasets=datasets, path_attr_config=path_attr_config,
                     comid_col='comid', test_size=test_size,
                     random_state=seed)
         # If we use all the same comids for testing, we can make inter-comparisons
