@@ -701,7 +701,7 @@ std_path_retr_gpkg <- function(path_fs_prep){
   #'. `fs_algo.fs_algo_train_eval._std_fs_prep_ds_companion_gpkg_path`
   #' @param path_fs_prep Path used for the standardized dataset created using
   #' [`fs_prep.proc_eval_metrics.proc_col_schema`]
-  #' @seealso `fs_algo.fs_algo_train_eval._std_fs_pre[_ds_companion_gpkg_path`
+  #' @seealso `fs_algo.fs_algo_train_eval._std_fs_prep_ds_companion_gpkg_path`
   #' @seealso  \link[proc.attr.hydfab]{read_fs_retr_gpkg}
   #' @seealso \link[proc.attr.hydfab]{std_dir_dataset}
   #' @export
