@@ -85,7 +85,7 @@ if __name__ == "__main__":
 
     #%%  READ COMIDS GENERATED FROM proc.attr.hydfab 
     likely_ds_types = ['training','prediction']
-    loc_id_col = 'comid'
+    col_locid = 'featureID'
     name_attr_config = fio.get('name_attr_config', None)
 
     ls_comids_attrs = list()
@@ -130,7 +130,7 @@ if __name__ == "__main__":
     uniq_cmbo_absent = list(set(must_have_uniq_cmbo) - set(df_attr_all['uniq_cmbo']))
 
     # Split items not in series back into comids and attributes
-    df_missing = pd.DataFrame({'comid':[x.split('_')[0] for x in uniq_cmbo_absent],
+    df_missing = pd.DataFrame({col_locid:[x.split('_')[0] for x in uniq_cmbo_absent],
                                'attribute': [re.sub(r'^\d+_','',x) for x in uniq_cmbo_absent],
                                'config_file' : Path(path_tfrm_cfig).name,
                                 'uniq_cmbo':np.nan,
