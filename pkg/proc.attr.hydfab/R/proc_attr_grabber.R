@@ -2637,148 +2637,6 @@ std_path_miss_tfrm_io <- function(path_missing_attrs,  read=TRUE, df_miss=NULL){
 }
 
 ######## MISSING COMID-ATTRIBUTES ##########
-fs_attrs_miss_wrap <- function(path_attr_config){
-  #' @title DEPRECATED. Wrapper searching for comid-attribute data identified as
-  #'  missing
-  #' @details Use fs_attrs_miss_mlti_wrap instead.
-  #' Given missing comid-attribute pairings previously identified
-  #'  from fs_tfrm_attrs.py, and generated as a file by python function
-  #'  `fs_algo.tfrm_attr.write_missing_attrs`
-  #' @param path_attr_config The file path to the attribute config file
-  #' @seealso `fs_algo.tfrm_attr.write_missing_attrs` python
-  #' @seealso \link[proc.attr.hydfab]{fs_attrs_miss_mlti_wrap}
-  #' @export
-  # Changelog / Contributions
-  #. 2024-12-31 Deprecated, GL
-
-  # Generate the parameter list
-  Retr_Params <- proc.attr.hydfab::attr_cfig_parse(path_attr_config = path_attr_config)
-
-  path_missing_attrs <- proc.attr.hydfab::std_path_miss_tfrm(Retr_Params$paths$dir_db_attrs)
-  df_miss <- proc.attr.hydfab::std_path_miss_tfrm_io(path_missing_attrs, read=TRUE)
-
-  bool_chck_class_comid <- df_miss[['comid']][1] %>% as.character() %>%
-    as.numeric() %>% suppressWarnings() %>% is.na() # Is the comid non-numeric?
-  bool_chck_if_X_col <- df_miss %>% colnames() %>% grepl("X",.) %>% any()
-  bool_chck_X_loc <- df_miss %>% colnames() %>% grep("X", .) == 1
-
-  all_tests_df_miss_fmt <- c(bool_chck_class_comid,bool_chck_if_X_col,bool_chck_X_loc)
-  if(base::all(all_tests_df_miss_fmt)){
-    # We know 'X' is the first colname, so it's likely that R couldn't read
-    #. the indices (duplicate vals when written in python?)
-    cols <- colnames(df_miss)
-    # The comid column is likely labeled as 'X'
-    if ('uniq_cmbo' %in% cols){
-      new_cols <-  cols[!grepl("uniq_cmbo",cols)]
-    } else {
-      new_cols <- cols
-    }
-
-    new_cols <- new_cols[!basegrepl("X",new_cols)]
-    sub_df_miss <- df_miss[,1:(ncol(df_miss)-1)]
-    names(sub_df_miss) <- new_cols
-
-    last_col <- cols[length(cols)]
-    # and the last col (e.g. dl_dataset) may become scrambled with the 'NA' column
-    if(all(is.na(sub_df_miss[last_col])) && any(is.na(colnames(sub_df_miss)))){
-      idx_col_na <- which(is.na(colnames(sub_df_miss)))
-      sub_df_miss[last_col] <- sub_df_miss[,idx_col_na]
-      sub_df_miss[,idx_col_na] <- NULL
-    }
-    df_miss <- sub_df_miss
-  } else if (any(grepl("index",colnames(df_miss))) && !bool_chck_class_comid &&
-             !bool_chck_if_X_col){
-    # Remove the index column
-    df_miss['index'] <- NULL
-  } else if (bool_chck_class_comid){
-    stop("THERE MAY BE A FORMAT ERROR WITH THE CORRECTION. MAKE SURE LOGIC IS APPROPRIATE HERE.")
-  }
-
-  if(base::nrow(df_miss)>0){
-    message("Beginning search for missing comid-attribute pairings.")
-    df_miss$uniq_cmbo <- paste0(df_miss$comid,df_miss$attribute) # The unique comid-attr combo
-    # Read in proc.attr.hydfab package's extdata describing attributes & data sources
-    dir_extdata <- system.file("extdata",package="proc.attr.hydfab")
-    path_attr_menu <- file.path(dir_extdata, "fs_attr_menu.yaml")
-    df_attr_menu <- yaml::read_yaml(path_attr_menu)
-
-    path_attr_src_types <- file.path(dir_extdata,"attr_source_types.yml")
-    df_attr_src_types <- yaml::read_yaml(path_attr_src_types)
-
-    # Identify which attributes correspond to which datasets using the menu
-    attrs <- df_miss$attribute
-    df_miss$dl_dataset <- NA
-    for (dl_ds in names(df_attr_menu)){
-      sub_df_attr_menu <- df_attr_menu[[dl_ds]]
-      sub_attrs <- names(unlist(sub_df_attr_menu))
-      ls_locs_df <- base::lapply(attrs, function(a)
-        base::length(base::grep(a, sub_attrs))!=0 ) |>
-        base::unlist()
-      idxs_this_dl_ds <- base::which(ls_locs_df==TRUE)
-      if(length(idxs_this_dl_ds)>0){
-        print(glue::glue("Found attributes from {dl_ds} dataset"))
-        df_miss$dl_dataset[idxs_this_dl_ds] <- unlist(df_attr_src_types[[dl_ds]])[["name"]]
-      } else {
-        print(glue::glue("No attributes correspond to {dl_ds} dataset"))
-      }
-    }
-
-    # Check to make sure all attrs identified
-    if(base::any(base::is.na(df_miss$dl_dataset))){
-      unk_attrs <- df_miss$attribute[which(is.na(df_miss$dl_dataset))]
-      str_unk_attrs <- paste0(unk_attrs, collapse = ", ")
-      warning(glue::glue("Could not identify datasets for the following attributes:
-                       \n{str_unk_attrs}"))
-    }
-
-    filter_df <- df_miss
-    ls_sub_dt <- list() # NOTE consider removing this object if memory issues arise
-    # Attempt to retrieve missing attributes for each comid of interest
-    for (comid in unique(df_miss$comid)){
-
-      sub_df_miss <- df_miss[df_miss$comid == comid,]
-
-
-      var_ls <- lapply(unique(sub_df_miss$dl_dataset),
-                       function(dl_ds) sub_df_miss[sub_df_miss$dl_dataset == dl_ds,'attribute'])
-      names(var_ls) <- unique(sub_df_miss$dl_dataset)
-
-      Retr_Params$vars <- var_ls
-
-      # Note dt_cmbo contains all data for a comid, not just the requested data!
-      dt_cmbo <- proc.attr.hydfab::proc_attr_wrap(comid=comid,
-                                                  Retr_Params=Retr_Params,
-                                                  lyrs="network",overwrite=FALSE,
-                                                  hfab_retr=FALSE)
-
-
-      sub_dt_cmbo <- dt_cmbo %>% subset(attribute %in% unlist(Retr_Params$vars))
-      sub_dt_cmbo$uniq_cmbo <- paste0(sub_dt_cmbo$featureID,sub_dt_cmbo$attribute)
-
-      ls_sub_dt[[comid]] <- sub_dt_cmbo # Tracking the new data
-      # TODO drop NA values?
-
-      if(base::any(base::is.na(sub_dt_cmbo$value))){
-        stop(paste0("PROBLEM: {comid} has some NA values"))
-      }
-
-      # If data successfully retrieved, remove from the missing list.
-      filter_df <- filter_df[!filter_df$uniq_cmbo %in% sub_dt_cmbo$uniq_cmbo,]
-
-    }
-
-    if (base::nrow(filter_df)== 0){
-      message("Successfully found all missing attributes!")
-    } else {
-      message("Some missing comid-attribute pairings still remain")
-    }
-    # Now update the transformation's missing comid-attribute pairing file
-    proc.attr.hydfab::std_path_miss_tfrm_io(path_missing_attrs,df_miss=filter_df,read=FALSE)
-
-  } else {
-    message("No missing comid-attribute pairings.")
-  }
-}
 
 uniq_id_loc_attr <- function(comids,attrs){
   #' @title define the unique identifier of comid-attribute pairings
@@ -2798,6 +2656,7 @@ fs_attrs_miss_mlti_wrap <- function(path_attr_config){
   #' @export
   # Changelog / Contributions
   #. 2024-12-31 Originally created, GL
+  #. 2025-05-20 refactor, rename comid to featureID
 
   # Generate the parameter list
   Retr_Params <- proc.attr.hydfab::attr_cfig_parse(path_attr_config = path_attr_config)
@@ -2805,23 +2664,33 @@ fs_attrs_miss_mlti_wrap <- function(path_attr_config){
   # Missing attributes specifically needed for transformation
   path_missing_attrs <- proc.attr.hydfab::std_path_miss_tfrm(Retr_Params$paths$dir_db_attrs)
   df_miss <- proc.attr.hydfab::std_path_miss_tfrm_io(path_missing_attrs, read=TRUE)
+  if("featureID" %in% base::colnames(df_miss)){
+    col_locid <- "featureID"
+  } else if("comid" %in% base::colnames(df_miss)){
+    # mitigating potential incompatibilities with oconus refactor by changing to featureID
+    col_locid <- "featureID"
+    df_miss <- df_miss %>% dplyr::rename(featureID = "comid")
+  } else {
+    stop("Unexpected format for missing transformation data")
+  }
+
   # Remove any null comids:
-  idxs_none <- base::which(df_miss$comid == "None")
+  idxs_none <- base::which(df_miss[[col_locid]] == "None")
   if(base::length(idxs_none)>0){
     df_miss <- df_miss[-idxs_none,]
   }
-  df_miss$uniq_cmbo <- proc.attr.hydfab:::uniq_id_loc_attr(df_miss$comid,df_miss$attribute)
+  df_miss$uniq_cmbo <- proc.attr.hydfab:::uniq_id_loc_attr(df_miss[[col_locid]],df_miss$attribute)
   if(base::nrow(df_miss)>0){
     message("Beginning search for missing comid-attribute pairings.")
     # The unique comid-attr combo:
-    df_miss$uniq_cmbo <- proc.attr.hydfab:::uniq_id_loc_attr(df_miss$comid,
+    df_miss$uniq_cmbo <- proc.attr.hydfab:::uniq_id_loc_attr(df_miss[[col_locid]],
                                                              df_miss$attribute)
 
 
 
-    # Group by 'comid' and aggregate the sets of 'attribute' values
+    # Group by 'featureID' and aggregate the sets of 'attribute' values
     grouped <- df_miss %>%
-      dplyr::group_by(comid) %>%
+      dplyr::group_by(featureID) %>%
       dplyr::summarize(attribute = list(unique(attribute))) %>%
       dplyr::ungroup()
 
@@ -2829,10 +2698,10 @@ fs_attrs_miss_mlti_wrap <- function(path_attr_config){
     grouped <- grouped %>%
       dplyr::mutate(attribute = sapply(attribute, function(x) paste(sort(x), collapse = ",")))
 
-    # Find which 'comid' values share the same collections of 'attribute' values
+    # Find which 'featureID' values share the same collections of 'attribute' values
     shared_values <- grouped %>%
       dplyr::group_by(attribute) %>%
-      dplyr::summarize(comid = list(comid)) %>%
+      dplyr::summarize(featureID = list(featureID)) %>%
       dplyr::ungroup()
     ############# Map needed attributes to names in menu #################
     # Read in proc.attr.hydfab package's extdata describing attributes & data sources
@@ -2846,10 +2715,10 @@ fs_attrs_miss_mlti_wrap <- function(path_attr_config){
     # Identify which attributes correspond to which datasets using the menu
     # by looping over each unique grouping of comid-attribute pairings
     filter_df <- df_miss
-    ls_have_uniq_cmbo <- list()
+    ls_have_uniq_cmbo <- base::list()
     for(row in 1:base::nrow(shared_values)){
       sub_grp <- shared_values[row,]
-      comids <- sub_grp['comid'][[1]][[1]]
+      comids <- sub_grp[[col_locid]][[1]][[1]]
       attrs <- base::strsplit(sub_grp['attribute'][[1]],',')[[1]]
       #attrs <- df_miss$attribute
       vars_ls <- list()
