@@ -14,6 +14,10 @@ Refer to the example config file, e.g.
 
 Usage:
 python fs_tfrm_attrs.py "/path/to/tfrm_config.yaml"
+
+Changelog/contributions
+2024 originally created, GL
+2025-05-20 refactor: address oconus compatibility
 """
 
 import argparse
@@ -28,6 +32,8 @@ import subprocess
 import numpy as np
 import os
 import re
+from operator import is_not
+from functools import partial
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = 'process the algorithm config file')
@@ -98,7 +104,8 @@ if __name__ == "__main__":
             print(f"No basin comids acquired from standardized metadata.")
 
     # Compile unique comid values
-    comids = list(set(ls_comid + ls_comids_attrs))
+    comids = list(filter(partial(is_not, None), set(ls_comid + ls_comids_attrs)))
+    
     #%% Parse aggregation/transformations in config file
     tfrm_cfg_attrs = tfrm_cfg[idx_tfrm_attrs]
 
@@ -120,7 +127,7 @@ if __name__ == "__main__":
                                                storage_options=None,
                                                read_type='all',reindex=True)
     # Create unique combination of comid-attribute pairings:
-    df_attr_all['uniq_cmbo'] = df_attr_all['featureID'].astype(str) + '_' + df_attr_all['attribute'].values
+    df_attr_all['uniq_cmbo'] = df_attr_all[col_locid].astype(str) + '_' + df_attr_all['attribute'].values
     
     # ALL NEEDED UNIQUE COMBOS:
     must_have_uniq_cmbo = [f"{comid}_{var}" for comid in comids for var in all_retr_vars]

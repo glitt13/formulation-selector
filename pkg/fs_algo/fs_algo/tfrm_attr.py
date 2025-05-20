@@ -212,8 +212,13 @@ def _sub_tform_attr_ddf(all_attr_ddf: dd.DataFrame,
     :type func: Callable[[Iterable[float]]]
     :return: Aggregated attribute value
     :rtype: float
+
+    Changelog/contributions
+    2024 originally created, GL
+    2025-05-20 fix to enforce float64 type for value column, GL
     """
     sub_attr_ddf= all_attr_ddf[all_attr_ddf['attribute'].isin(retr_vars)]
+    sub_attr_ddf['value'] = sub_attr_ddf['value'].astype('float64') # ensure the value column is float
     attr_val = sub_attr_ddf['value'].map_partitions(func, meta=('value','float64')).compute()
     return attr_val
 
@@ -382,6 +387,8 @@ def std_path_miss_tfrm(dir_db_attrs: str | os.PathLike) -> os.PathLike:
     :return: The path inside 
     `Path(dir_db_attrs/Path(missing/needed_loc_attrs.csv))`
     :rtype: os.PathLike
+    ..seealso::
+        `proc.attr.hydfab::std_path_miss_tfrm` companion function
     """
     path_need_attrs = Path(Path(dir_db_attrs) / Path('missing_tform/needed_loc_attrs_for_tform.csv'))
     path_need_attrs.parent.mkdir(parents=True,exist_ok=True)
@@ -402,6 +409,11 @@ def write_missing_attrs(attrs_retr_sub:list, dir_db_attrs: str | os.PathLike,
     missing attributes file writing to help understand which transformation
     processing config identified missing attributes
     :type path_tfrm_cfig: str | os.PathLike
+
+    # Changelog / Contributions
+    # 2024 originally created, GL
+    # 2025-05-20 refactor to write featureID col instead of comid, GL
+
     """
     # Create path where needed attributes are saved
     path_need_attrs = std_path_miss_tfrm(dir_db_attrs)
@@ -414,13 +426,19 @@ def write_missing_attrs(attrs_retr_sub:list, dir_db_attrs: str | os.PathLike,
     else:
         print(f"Absolutely no attribute data found for comid {comid}. Acquire it!")
 
-    df_need_attrs_comid = pd.DataFrame({'comid' : comid,
+    df_need_attrs_comid = pd.DataFrame({'featureID' : comid,
                                         'attribute' : attrs_retr_sub,
                                         'config_file' : Path(path_tfrm_cfig).name,
                                         'uniq_cmbo':np.nan,
                                         'dl_dataset':np.nan
                                         })
-
+    # TODO remove this once the oconus refactor (rename featureID) stabilizes
+    df_need_tfrm_exst = pd.read_csv(path_need_attrs)
+    if df_need_tfrm_exst.columns.str.contains('comid').any():
+        df_need_tfrm_exst.rename(columns={'comid':'featureID'}, inplace=True)
+        df_need_tfrm_exst.to_csv(path_need_attrs,index=False)
+        
+    # Append the new rows to the existing dataframe
     df_need_attrs_comid.to_csv(path_need_attrs, mode = 'a',
                                 header= not path_need_attrs.exists(),
                                 index=False)
@@ -434,7 +452,7 @@ def tfrm_attr_comids_wrap(comids: Iterable, path_tfrm_cfig: str | os.PathLike):
         If attributes required as inputs for transformation are missing, calls R processing 
         from `proc.attr.hydfab` package and attempts to retrieve the needed attributes
     
-    :param comids: list of comids of interest
+    :param comids: list of location ids (e.g. comids/hf_uids) of interest
     :type comids: Iterable
     :param path_tfrm_cfig: Path to transformation config file (the attribute config file must also be in same directory!)
     :type path_tfrm_cfig: str | os.PathLike
@@ -522,7 +540,8 @@ def tfrm_attr_comids_wrap(comids: Iterable, path_tfrm_cfig: str | os.PathLike):
             # Retrieve the variables of interest for the function
             try:
                 df_attr_sub = fsate.fs_read_attr_comid(dir_db_attrs, comids_resp=[str(comid)], attrs_sel=attrs_retr_sub,
-                                _s3 = None,storage_options=None,read_type='filename')
+                                _s3 = None,storage_options=None,read_type='filename') 
+                # NOTE read_type='filename' best when only retrieving one location at a time
             except:
                 warnings.warn(f'Could not acquire comid {comid} attributes. Skipping to next comid.')
                 warnings.warn(f'Missing attributes include {"|".join(attrs_retr_sub)}')
@@ -557,9 +576,14 @@ def tfrm_attr_comids_wrap(comids: Iterable, path_tfrm_cfig: str | os.PathLike):
                         retr_vars=attrs_retr_sub, func = func_tfrm)
             
             if any(pd.isnull(attr_val)):
-                raise ValueError("Unexpected NULL value returned after " +
-                                  "aggregating and transforming attributes. " +
-                                  f"Inspect {new_var} with comid {comid}")
+                # Null values can be returned if input attributes are all null
+                need_vals = ddf_loc_attrs['value'][ddf_loc_attrs['attribute'].isin(attrs_retr_sub)].compute()
+                if any(pd.isnull(need_vals)):
+                    warnings.warn(f"Null values returned for {attrs_retr_sub} with featureID {comid}. ")
+                else:
+                    raise ValueError("Unexpected NULL value returned after " +
+                                "aggregating and transforming attributes. " +
+                                f"Inspect {new_var} with featureID {comid}")
 
             # Populate new values in the new dataframe
             new_df = _gen_tform_df(all_attr_ddf=ddf_loc_attrs, 
