@@ -183,7 +183,9 @@ def fs_read_attr_comid(dir_db_attrs:str | os.PathLike, comids_resp:list | Iterab
     :param storage_options: future feature, defaults to None
     :type storage_options: future feature, optional
     :param read_type: should all parquet files be lazy-loaded, assign 'all'
-     otherwise just files with comids_resp in the file name? assign 'filename'. Defaults to 'all', which should be fastest
+     otherwise just files with comids_resp in the file name? assign 'filename'. Defaults to 'all',
+     which should be fastest when querying multiple locations. For single locations, the 'filename'
+     approach is fastest.
     :type read_type: str
     :param reindex: Should attribute dataframe be reindexed? Default False
     :type reindex: bool
@@ -249,13 +251,9 @@ def fs_read_attr_comid(dir_db_attrs:str | os.PathLike, comids_resp:list | Iterab
     attr_df_sub = _check_attr_rm_dupes(attr_df=attr_df_sub)
 
     # Run check that all variables are present across all basins
-
     dict_rslt = _check_attributes_exist(attr_df_sub,attrs_sel)
     attr_df_sub, attrs_sel_ser = dict_rslt['df_attr'], dict_rslt['attrs_sel']
-    print("!!!!!!!!!!!!!!!!!!!!!!!!")
-    print(attr_df_sub['value'])
-    print(type(attr_df_sub['value']))
-    print("---------------------------------")
+
     if not pd.api.types.is_float_dtype(attr_df_sub['value']):
         warnings.warn("Forcing all attribute values to be float")
         attr_df_sub['value'] = np.float64(attr_df_sub['value'])
