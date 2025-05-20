@@ -288,7 +288,7 @@ if __name__ == "__main__":
                             min_err = min(min_err, total_err.min())
                             max_err = max(max_err, total_err.max())
 
-            # TODO extract y_pred for each model
+            # ----- Extract y_pred for each algorithm -----
             dict_test_gdf = dict()
             for algo_str in train_eval.algs_dict.keys():
 
@@ -319,7 +319,7 @@ if __name__ == "__main__":
   
                 # Merge the test_gdf with the prediction dataframe
                 test_gdf = test_gdf.merge(df_test, left_on=col_locid, right_on=col_locid, how='left')
-                # TODO oconus: once comid is no longer a column, make sure that gdf featureID corresponds to appropriate featureSource
+            
                 # Add details on dataset, response variable, and algorithm
                 test_gdf.loc[:,'dataset'] = ds
                 test_gdf.loc[:,'metric'] = metr
