@@ -113,7 +113,7 @@ attr_cfig_parse <- function(path_attr_config){
   var_names_sub <- base::names(sub_attr_sel)
 
   # Consider transformation dependencies here
-  name_tform_config <- try(base::unlist(raw_config$file_io)[['name_tform_config']])
+  name_tform_config <- try(base::unlist(raw_config$file_io)[['name_tform_config']],silent = TRUE)
   if(!"try-error" %in% base::class(name_tform_config)){
     # Create standardized path to config file
     path_tfrm_config <- proc.attr.hydfab::build_cfig_path(path_attr_config,name_tform_config)
@@ -924,29 +924,36 @@ fs_retr_nhdp_comids_geom <- function(gage_ids,featureSource='nwissite',
           message(glue::glue("Attempting manual connection to api for {nldi_feat$featureID}"))
           url_build <- base::paste0("https://api.water.usgs.gov/nldi/linked-data/nwissite/",
                                     nldi_feat$featureID,"?f=json")
-          json_file <- jsonlite::read_json(url_build)
-          site_feature <- tibble::tibble(identifier=nldi_feat$featureID,
-                comid=json_file$features[[1]]$properties$comid,
-                geometry=sf::st_sfc(sf::st_point(
-                  base::c(json_file$features[[1]]$geometry$coordinates[[2]],
-                    json_file$features[[1]]$geometry$coordinates[[1]])),crs=epsg)
-                )
+          json_file <- try(jsonlite::read_json(url_build))
+          if("try-error" %in% json_file){ # e.g. USGS-08059400 BVWT2 1292054 Sister Grove Creek near Blue Ridge TX
+            warning(glue::glue("Could not retrieve {nldi_feat$featureID} via NLDI"))
+            site_feature <- tibble::tibble(identifier=nldi_feat$featureID,comid=NA,
+                                           geometry = sf::st_sfc(sf::st_point(),crs=epsg))
           } else {
-            # Try again with discover_nhdplus_id
-            warning(glue::glue("^^ Could not retrieve geometry for {nldi_feat$featureID}."))
-            comid <- try(nhdplusTools::discover_nhdplus_id(point=site_feature$geometry))
-            if("try-error" %in% base::class(comid)){ # Assign NA values for everything
-              site_feature <- tibble::tibble(identifier=nldi_feat$featureID,comid=NA,
-                                       geometry=sf::st_sfc(sf::st_point(),crs=epsg))
-              warning(glue::glue("try-error comid - Consider adding hydrofabric integration  (e.g. oCONUS??) for \n",
-                               "{gage_id}"))
-            } else { # Assign NA values for geometry
-              site_feature <- tibble::tibble(identifier=nldi_feat$featureID,comid=comid,
-                                       geometry = sf::st_sfc(sf::st_point(),crs=epsg))
-              warning(glue::glue("else comid - Consider adding hydrofabric integration  (e.g. oCONUS??) for \n",
-                               "{gage_id}"))
-            }
+            site_feature <- tibble::tibble(identifier=nldi_feat$featureID,
+                                           comid=json_file$features[[1]]$properties$comid,
+                                           geometry=sf::st_sfc(sf::st_point(
+                                             base::c(json_file$features[[1]]$geometry$coordinates[[2]],
+                                                     json_file$features[[1]]$geometry$coordinates[[1]])),crs=epsg)
+            )
           }
+
+      } else {
+        # Try again with discover_nhdplus_id
+        warning(glue::glue("^^ Could not retrieve geometry for {nldi_feat$featureID}."))
+        comid <- try(nhdplusTools::discover_nhdplus_id(point=site_feature$geometry))
+        if("try-error" %in% base::class(comid)){ # Assign NA values for everything
+          site_feature <- tibble::tibble(identifier=nldi_feat$featureID,comid=NA,
+                                   geometry=sf::st_sfc(sf::st_point(),crs=epsg))
+          warning(glue::glue("try-error comid - Consider adding hydrofabric integration  (e.g. oCONUS??) for \n",
+                           "{gage_id}"))
+        } else { # Assign NA values for geometry
+          site_feature <- tibble::tibble(identifier=nldi_feat$featureID,comid=comid,
+                                   geometry = sf::st_sfc(sf::st_point(),crs=epsg))
+          warning(glue::glue("else comid - Consider adding hydrofabric integration  (e.g. oCONUS??) for \n",
+                           "{gage_id}"))
+        }
+      }
       }
       if("sfc_LINESTRING" %in% base::class(site_feature$geometry)){
         # We want a singular point for the comid, so pick the middle point
@@ -1958,6 +1965,7 @@ retr_comids <- function(gage_ids,featureSource,featureID,dir_db_attrs,
         }
       }
     }
+
     ls_comid[[i]] <- comid
   }
 
@@ -2068,6 +2076,7 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
   # The missing comids to be sought out in OCONUS hydrofabric domains
   idxs_na_id <- base::which(base::is.na(just_comids))
   if(base::length(idxs_na_id) > 0){  # assumed to be oCONUS if comid unavailable
+    # TODO assumption that oCONUS isn't always true, e.g. USGS-08170950 returned NA for comid but is in TX from get_nldi_feature(nldi_feature = nldi_feat)
     gage_ids_for_hf <- gage_ids[idxs_na_id] # Locations in AK, PR, HI
 
     # Convert into the nwissite form as defined by 'featureID'
@@ -2089,6 +2098,21 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
     } else {
       stop("Problem with indexing assumption")
     }
+  }
+  # TODO ADD one more NA check here, e.g. for gage_id = "08170950"
+  # What to do? NLDI search for lat/lon. If lat/lon exist, find comid
+  idxs_still_na_id <- base::which(base::is.na(just_comids))
+  if(base::length(idxs_still_na_id)>0){
+    base::message("Some identifiers not found. Checking for conus search")
+    gage_ids_for_lat_lon_srch <- gage_ids[idxs_still_na_id]
+    # TODO call proc.attr.hydfab::retr_hf_id_xy
+
+    # # TODO find which identifiers have coordinates
+    # dt_hfuid_cpl <- rbind(dt_hfuid,dt_hfuid)
+    # # TODO perform coordinate-based search for identifier (hydrofabric??)
+    # # TODO adapt the hf_uid to consider xy queries, and to accomodate both conus and oconus
+    #
+    # Retr_Params$paths$path_hf <- "/Users/guylitt/noaa/hydrofabric/v2.2/ls_conus.gpkg"
   }
 
   # ---------- RETRIEVE DESIRED ATTRIBUTE DATA FOR EACH LOCATION ------------- #
