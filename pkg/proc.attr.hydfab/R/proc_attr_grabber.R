@@ -2105,14 +2105,19 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
   if(base::length(idxs_still_na_id)>0){
     base::message("Some identifiers not found. Checking for conus search")
     gage_ids_for_lat_lon_srch <- gage_ids[idxs_still_na_id]
-    # TODO call proc.attr.hydfab::retr_hf_id_xy
 
-    # # TODO find which identifiers have coordinates
-    # dt_hfuid_cpl <- rbind(dt_hfuid,dt_hfuid)
-    # # TODO perform coordinate-based search for identifier (hydrofabric??)
-    # # TODO adapt the hf_uid to consider xy queries, and to accomodate both conus and oconus
-    #
-    # Retr_Params$paths$path_hf <- "/Users/guylitt/noaa/hydrofabric/v2.2/ls_conus.gpkg"
+
+
+    # TODO generate a data.frame that contains XY coordinates column
+    dt_nldi_feat <- proc.attr.hydfab::retr_nldi_feat(gage_ids=gage_ids_for_lat_lon_srch,featureSource,featureID)
+    # TODO add path_hf from updated attr_config
+    # Retr_Params$paths$path_hf <- "~/noaa/hydrofabric/v2.2/ls_conus.gpkg"
+    comids_from_lat_lon_srch <- proc.attr.hydfab::retr_hf_id_xy(sf_df = dt_nldi_feat,
+                                                                path_gpkg=Retr_Params$paths$path_hf,
+                                                                geom_col="geometry")
+
+    # TODO integrate any comids just found from lat/lon search into list of just_comids
+
   }
 
   # ---------- RETRIEVE DESIRED ATTRIBUTE DATA FOR EACH LOCATION ------------- #
@@ -2147,6 +2152,41 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
 
   return(dt_site_feat)
 }
+
+
+retr_nldi_feat <- function(gage_ids,featureSource,featureID){
+  #' @title Query the NLDI for site features
+  #' @param gage_ids array of gage_id values to be queried for catchment attributes
+  #' @param featureSource The \link[nhdplusTools]{get_nldi_feature}feature featureSource,
+  #' e.g. 'nwissite'
+  #' @param featureID a glue-configured conversion of gage_id into a recognized
+  #' featureID for  \link[nhdplusTools]{get_nldi_feature}. E.g. if gage_id
+  #' represents exactly what the nldi_feature$featureID should be, then
+  #'  featureID="{gage_id}". In other instances, conversions may be necessary,
+  #'  e.g. featureID="USGS-{gage_id}". When defining featureID, it's expected
+  #'  that the term 'gage_id' is used as a variable in glue syntax to create featureID
+  #' @export
+  # Changelog/contributions
+  # 2025-05-28 Originally created, GL
+
+  ls_nldi_feat <- list()
+  for(i in 1:length(gage_ids)){
+    nldi_feat <- base::list(featureSource =featureSource,
+                            featureID = base::as.character(glue::glue(featureID)) # This should expect {'gage_id'} as a variable!
+    )
+    site_feature <- try(nhdplusTools::get_nldi_feature(nldi_feature = nldi_feat))
+    if("try-error" %in% base::class(site_feature)){
+      ls_site_feat[[i]] <- data.frame(sourceName=NA,identifier=nldi_feat$featureID,
+                                      comid=NA,name=NA,X=NA,Y=NA,geometry=NA)
+    } else {
+      ls_site_feat[[i]] <- site_feature
+    }
+  }
+  dt_nldi_feat <- data.table::rbindlist(ls_site_feat,fill = TRUE,ignore.attr=TRUE,use.names = TRUE)
+  return(dt_nldi_feat)
+}
+
+
 
 read_loc_data <- function(loc_id_filepath, loc_id, fmt = 'csv'){
   #' @title Read location identifiers
