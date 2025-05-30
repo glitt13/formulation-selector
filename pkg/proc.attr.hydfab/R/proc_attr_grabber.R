@@ -1539,15 +1539,15 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
   # 2025-05-28 fix: fix logic around NULL being considered a missing attr
   # TODO integrate _id_attrs_sel_wrap here
   vars_ls <- Retr_Params$vars
-  
+
   # ------- Retr_Params$vars format checker --------- #
   # Check requested variables for retrieval are compatible/correctly formatted:
   nada <- proc.attr.hydfab:::wrap_check_vars(vars_ls)
-  
+
   # ----------- existing dataset checker ----------- #
   # Define the path to the attribute parquet file (name contains comid)
   # All the filepaths for each comid
-  
+
   # Remove NA ids (then add them back in!)
   comids_with_na <- comids
   idxs_ids_na <- base::which(base::is.na(comids))
@@ -1557,7 +1557,7 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
     # comids_attrs_need <- comids[base::unlist(base::lapply(paths_attrs[base::which(!base::is.na(comids))],
     #                                                       function(x) !base::file.exists(x)))]
   }
-  
+
   paths_attrs <- proc.attr.hydfab::std_path_attrs(comid=comids,
                                                   dir_db_attrs=Retr_Params$paths$dir_db_attrs)
   # The comids that are stored already (have) & those that are new (need)
@@ -1565,14 +1565,14 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
                                                         function(x) base::file.exists(x)))]
   comids_attrs_need <- comids[base::unlist(base::lapply(paths_attrs[base::which(!base::is.na(comids))],
                                                         function(x) !base::file.exists(x)))]
-  
-  
+
+
   # The full paths of attribute data for e/ comid that we (1) have and (2) need
   paths_attrs_have <- paths_attrs[base::unlist( # Do have these comids
     base::lapply(paths_attrs, function(x) base::file.exists(x)))]
   paths_attrs_need <-paths_attrs[base::unlist( # Don't have these comids
     base::lapply(paths_attrs, function(x) !base::file.exists(x)))]
-  
+
   # From those comid locs that we do have, do we have all needed attrs?
   ls_attr_exst <- base::lapply(paths_attrs_have,
                                function(x) proc.attr.hydfab::proc_attr_exst_wrap(
@@ -1580,15 +1580,15 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
                                  vars_ls=vars_ls,
                                  bucket_conn=NA))
   base::names(ls_attr_exst) <- paths_attrs_have
-  
+
   # ----- Extract the need vars sublists to each location list
   need_vars_ls <- base::lapply(ls_attr_exst, function(x) x$need_vars_ls)
   # NOTE: DO NOT call chck_need_vars_fmt here b/c we first need miss_var_types_by_file logic
   if(!is.null(need_vars_ls %>% unlist() %>% unique())){
-    
+
     # Run check on need_vars format to get into appropriate format
     need_vars_refmt <- proc.attr.hydfab:::chck_need_vars_fmt(need_vars_ls)
-    
+
     # Use pre-transformed form, need_vars_ls, to identify indices of interest
     miss_var_types_by_file <- base::lapply(need_vars_ls, function(x) base::names(x))
     # The indices corresponding to locations missing vars, based on need_vars
@@ -1601,7 +1601,7 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
   # ----- compile the existing data into a single data.table
   ls_dt_exst <- base::lapply(ls_attr_exst, function(x) x$dt_all)
   dt_exst_all <- data.table::rbindlist(ls_dt_exst,use.names = TRUE,fill = TRUE)
-  
+
   # -------------------------------------------------------------------------- #
   # ------------------ new attribute grab & write updater -------------------- #
   # This section retrieves attribute data that is not yet part of the database
@@ -1611,7 +1611,7 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
   # Acquire attributes for locations that haven't been retrieved yet
   if(base::length(comids_attrs_need)>0 )  {
     # We'll need all variables for these new locations that don't have data
-    
+
     # Grab all the attribute data for these comids that don't exist yet
     ls_attr_data[['new_comid']] <- proc.attr.hydfab::retr_attr_new(
       locids=comids_attrs_need,
@@ -1620,7 +1620,7 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
     # Compile all locations into a single datatable
     dt_new_dat <- data.table::rbindlist(ls_attr_data[['new_comid']],
                                         use.names = TRUE,fill=TRUE)
-    
+
     # Write new data to file for e/ comid because we know comid has no attributes
     for(new_comid in dt_new_dat$featureID){
       sub_dt_new_loc <- dt_new_dat[dt_new_dat$featureID==new_comid,]
@@ -1637,12 +1637,12 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
   # --------------------- Locations that need some vars ---------------------- #
   # This section finds missing variables for locations that already have some data
   # Acquire attributes that still haven't been retrieved (but some attrs exist for a given location)
-  
+
   if(base::length(idxs_still_need_them)>0){
     comids_attrs_still_need <- comids_attrs_have[idxs_still_need_them]
     still_need_vars <- need_vars_ls[idxs_still_need_them] %>%
       proc.attr.hydfab:::chck_need_vars_fmt()# Run check on format
-    
+
     if(base::is.null(still_need_vars)){
       stop("Still don't have logic figured out correctly for defining variables.")
     }
@@ -1651,10 +1651,10 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
       locids=comids_attrs_still_need,
       need_vars=still_need_vars,
       paths_ha=Retr_Params$paths$paths_ha)
-    
+
     dt_prexst_dat <- data.table::rbindlist(ls_attr_data[['pre-exist']],
                                            use.names = TRUE,fill=TRUE )
-    
+
     # Write new attribute data to pre-existing comid file
     for(exst_comid in base::unique(dt_prexst_dat$featureID)){
       sub_dt_new_attrs <- dt_prexst_dat[dt_prexst_dat$featureID==exst_comid,]
@@ -1673,7 +1673,7 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
   ls_attrs <- purrr::flatten(ls_attr_data)
   dt_all <- data.table::rbindlist(ls_attrs,use.names=TRUE,fill=TRUE) %>%
     dplyr::mutate(dplyr::across(dplyr::where(is.factor), as.character))
-  
+
   # Check/reporting which comids could not acquire certain attributes
   # Find comid values that do not have all expected attribute values
   if(base::nrow(dt_all)>0){
@@ -1681,15 +1681,15 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
                                                 attr_vars = Retr_Params$vars,
                                                 dir_db_attrs <- Retr_Params$paths$dir_db_attrs)
   }
-  
+
   if(filter_vars && "attribute" %in% base::names(dt_all)){
     dt_all <- dt_all %>%
       dplyr::filter(attribute %in% base::unname(base::unlist(Retr_Params$vars)))
   }
-  
+
   # Remove any duplicates
   dt_all <- dt_all[!base::duplicated(dt_all),]
-  
+
   return(dt_all)
 }
 
@@ -2104,25 +2104,22 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
       stop("Problem with indexing assumption")
     }
   }
-  # TODO ADD one more NA check here, e.g. for gage_id = "08170950"
-  # What to do? NLDI search for lat/lon. If lat/lon exist, find comid
   idxs_still_na_id <- base::which(base::is.na(just_comids))
-  if(base::length(idxs_still_na_id)>0){
-    base::message("Some identifiers not found. Checking for conus search")
+  if(base::length(idxs_still_na_id)>0 && !base::is.null(Retr_Params$paths$path_hf)){
+    # One more NA check here in cases where the lat/lon may be found, e.g. gage_id = "08170950"
+    base::message("Some identifiers not found. Checking conus NLDI for coordinates.")
     gage_ids_for_lat_lon_srch <- gage_ids[idxs_still_na_id]
+    # Generate a data.frame that contains XY coordinates column
+    dt_nldi_feat <- proc.attr.hydfab::retr_nldi_feat(gage_ids=gage_ids_for_lat_lon_srch,
+                                                     featureSource,featureID)
 
-
-
-    # TODO generate a data.frame that contains XY coordinates column
-    dt_nldi_feat <- proc.attr.hydfab::retr_nldi_feat(gage_ids=gage_ids_for_lat_lon_srch,featureSource,featureID)
-    # TODO add path_hf from updated attr_config
-    # Retr_Params$paths$path_hf <- "~/noaa/hydrofabric/v2.2/ls_conus.gpkg"
-    comids_from_lat_lon_srch <- proc.attr.hydfab::retr_hf_id_xy(sf_df = dt_nldi_feat,
+    # Search for comid using a lat/lon query of the hydrofabric
+    comids_from_lat_lon_srch <- proc.attr.hydfab::retr_hf_id_xy(df_sf = dt_nldi_feat,
                                                                 path_gpkg=Retr_Params$paths$path_hf,
                                                                 geom_col="geometry")
 
-    # TODO integrate any comids just found from lat/lon search into list of just_comids
-
+    # integrate any comids just found from lat/lon search into list of just_comids
+    just_comids[idxs_still_na_id] <- comids_from_lat_lon_srch
   }
 
   # ---------- RETRIEVE DESIRED ATTRIBUTE DATA FOR EACH LOCATION ------------- #
@@ -2172,7 +2169,7 @@ retr_nldi_feat <- function(gage_ids,featureSource,featureID){
   #'  that the term 'gage_id' is used as a variable in glue syntax to create featureID
   #' @export
   # Changelog/contributions
-  # 2025-05-28 Originally created, GL
+  # 2025-05-29 Originally created, GL
 
   ls_nldi_feat <- list()
   for(i in 1:length(gage_ids)){
@@ -2181,13 +2178,13 @@ retr_nldi_feat <- function(gage_ids,featureSource,featureID){
     )
     site_feature <- try(nhdplusTools::get_nldi_feature(nldi_feature = nldi_feat))
     if("try-error" %in% base::class(site_feature)){
-      ls_site_feat[[i]] <- data.frame(sourceName=NA,identifier=nldi_feat$featureID,
+      ls_nldi_feat[[i]] <- data.frame(sourceName=NA,identifier=nldi_feat$featureID,
                                       comid=NA,name=NA,X=NA,Y=NA,geometry=NA)
     } else {
-      ls_site_feat[[i]] <- site_feature
+      ls_nldi_feat[[i]] <- site_feature
     }
   }
-  dt_nldi_feat <- data.table::rbindlist(ls_site_feat,fill = TRUE,ignore.attr=TRUE,use.names = TRUE)
+  dt_nldi_feat <- data.table::rbindlist(ls_nldi_feat,fill = TRUE,ignore.attr=TRUE,use.names = TRUE)
   return(dt_nldi_feat)
 }
 

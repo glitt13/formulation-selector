@@ -192,6 +192,92 @@ testthat::test_that("read_hfab_layer",{
 
 
 })
+#
+# test_that("retr_hf_id_xy returns correct hf_id values with mocked get_subset", {
+#
+#   # Create dummy sf POINT object with EPSG 4326
+#   coords <- data.frame(
+#     id = c("A", "B"),
+#     lon = c(-98.2, -97.5),
+#     lat = c(30.0, 29.5)
+#   )
+#
+#   points_sf <- st_as_sf(coords, coords = c("lon", "lat"), crs = 4326)
+#
+#   # Add NA geometry row to test geometry filtering
+#   points_sf$geometry[2] <- NA
+#
+#   # Dummy path to geopackage
+#   path_gpkg <- "dummy/path/to.gpkg"
+#
+#   # Create mock network layer return values
+#   dummy_network_1 <- data.frame(
+#     hf_id = c(103, 101),
+#     hf_hydroseq = c(20, 25)
+#   )
+#
+#   dummy_return <- list(network = dummy_network_1)
+#
+#   # Mock function to return dummy network based on input coordinates
+#   mock_get_subset <- mock(
+#     dummy_return,
+#     cycle = TRUE
+#   )
+#
+#   # Stub the namespaced call to hfsubsetR::get_subset inside retr_hf_id_xy
+#   stub(
+#     where = retr_hf_id_xy,
+#     what = "hfsubsetR::get_subset",
+#     how = mock_get_subset
+#   )
+#
+#   # Run function
+#   result <- retr_hf_id_xy(points_sf, path_gpkg)
+#   print(result)
+#   # Expected: first point gets hf_id 101 (lowest hydroseq), second is NA
+#   expect_equal(result, c(101, 101))
+#
+#   # Check that get_subset was called only once (only 1 non-NA point)
+#   # expect_called(mock_get_subset, 1)
+# })
+
+testthat::test_that("retr_hf_id_xy errors on missing geometry column", {
+  df_missing_geom <- data.frame(id = 1)
+  testthat::expect_error(
+    retr_hf_id_xy(df_missing_geom, "path.gpkg", geom_col = "geometry"),
+    "The expected geometry column geometry is not present"
+  )
+})
+
+testthat::test_that("retr_hf_id_xy errors if geometry is not POINT", {
+  line <- sf::st_sfc(sf::st_linestring(matrix(c(0,0, 1,1), ncol=2, byrow=TRUE)), crs=4326)
+  df <- data.frame(id = 1)
+  df_sf <- sf::st_sf(df, geometry = line)
+  testthat::expect_error(
+    proc.attr.hydfab::retr_hf_id_xy(df_sf, "path.gpkg"),
+    "Must convert df_sf geometry column to POINT"
+  )
+})
+
+testthat::test_that("retr_hf_id_xy warns if CRS is missing", {
+  pt <- st_sfc(st_point(c(-98.2, 30.0)))
+  df <- st_sf(id = 1, geometry = pt)
+  testthat::expect_error(
+    testthat::expect_warning(
+      proc.attr.hydfab::retr_hf_id_xy(df, "path.gpkg"),
+    "EPSG not specified. Assuming EPSG=4326"
+  ))
+})
+
+testthat::test_that("retr_hf_id_xy errors if CRS is not 4326", {
+  pt <- st_sfc(st_point(c(-98.2, 30.0)), crs = 3857)
+  df <- st_sf(id = 1, geometry = pt)
+  testthat::expect_error(
+    proc.attr.hydfab::retr_hf_id_xy(df, "path.gpkg"),
+    "Problem with EPSG not being 4326"
+  )
+})
+
 
 # ##### Building up mock data for retr_hfab_id_wrap unit testing
 # # Create a temporary GeoPackage for testing

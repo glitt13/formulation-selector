@@ -257,7 +257,7 @@ retr_state_terr_postal <- function(lat, lon) {
 
 custom_hf_id <- function(df, col_vpu = "vpu",col_id = "divide_id"){
   #' @title Build a custom hydrofabric id that is unique to place across all domains
-  #' @param df The dataframe for a specific location corresponding to the
+  #' @param df The dataframe for a specific location corresponding to the hydrofabric network
   #' @param col_vpu The column in df representing the vpu
   #' @param col_id The column in df representing the hydrofabric id
   #' hydrofabric 'network'. Default 'divide_id' e.g. cat-447 avoids the
@@ -303,6 +303,68 @@ retr_hfab_id_usgs_gage <- function(gage_id,ntwk){
 
   return(hf_id)
 }
+
+
+retr_hf_id_xy <- function(df_sf, path_gpkg, geom_col ="geometry"){
+  #' @title Retrieve the hydrofabric id using xy coordinates query to hydrofabric gpkg
+  #' @description Given an sf object with a POINT geometry column `geom_col`,
+  #' pass the point column name, search for the location using hfsubsetR,
+  #' and pick the nearest downstream point with a hydrofabric id.
+  #' @details For CONUS locations, the comid will be returned.
+  #' @param df_sf data.frame with a POINT geometry column
+  #' @param path_hf filepath to the hydrofabric gpkg of interest
+  #' @param geom_col The column name for the sf geometry object in df_sf. Default 'geometry'
+  #' @seealso \link[proc.attr.hydfab]{retr_hfab_id_coords}
+  #' @seealso \link[proc.attr.hydfab]{retr_comids_coords}
+  #' @export
+  # TODO For OCONUS locations, the unique identifier should be returned.
+  # Changelog/contributions
+  # 2025-05-28 Originally created, GL
+
+  if(!geom_col %in% base::names(df_sf)){
+    msg_miss_col <- glue::glue("The expected geometry column {geom_col} is not present in data.frame")
+    stop(msg_miss_col)
+  } else if(!"sfc_POINT" %in% base::class(df_sf[[geom_col]])){
+    stop("Must convert df_sf geometry column to POINT geometry class")
+  }
+
+
+  if(!base::is.null(sf::st_crs(df_sf[[geom_col]])$epsg) &&
+     !base::is.na(sf::st_crs(df_sf[[geom_col]])$epsg)){
+      if(sf::st_crs(df_sf[[geom_col]])$epsg != 4326){
+        stop("Problem with EPSG not being 4326. Consider transformation here.")
+      }
+  } else {
+    warning("EPSG not specified. Assuming EPSG=4326 for xy-based hf_id query.")
+  }
+
+  # Find NA vals in geometry column and remove from consideration for xy query
+  idxs_geom_na <- base::which(base::is.na(df_sf[[geom_col]]))
+  if(base::length(idxs_geom_na)>0){
+    #
+    df_sf_orig <- df_sf
+    df_sf <- df_sf_orig[-idxs_geom_na,]
+  }
+  xy_mat <- sf::st_coordinates(df_sf[[geom_col]])
+
+  ls_retr_ntwk <- base::lapply(1:base::nrow(xy_mat), function(i)
+    hfsubsetR::get_subset(xy=xy_mat[i,],gpkg=path_gpkg, lyrs = "network")$network)
+  hf_ids_coords <- base::lapply(ls_retr_ntwk, function(ntwk)
+    ntwk$hf_id[base::which(ntwk$hf_hydroseq == base::min(ntwk$hf_hydroseq,na.rm=TRUE))][1]) %>%
+    base::unlist()
+
+  if(base::length(idxs_geom_na)>0){
+    # Repopulate hf_ids vector with NA vals in same order as provided dataframe
+    idxs_nonna <- which(!is.na(df_sf_orig[[geom_col]]))
+    df_sf_orig$hf_id <- NA
+    df_sf_orig$hf_id[idxs_nonna] <- hf_ids_coords
+    hf_ids_coords <- df_sf_orig$hf_id
+  }
+
+  return(hf_ids_coords)
+}
+
+
 # ------ Grab the hydrofabric ids via a lat/lon search -------
 retr_hfab_id_coords <- function(path_gpkg, ntwk, epsg_domn,lon,lat,
                                 epsg_coords = 4326){
@@ -315,6 +377,8 @@ retr_hfab_id_coords <- function(path_gpkg, ntwk, epsg_domn,lon,lat,
   #' @param lon Longitude
   #' @param lat Latitude
   #' @param epsg_coords The EPSG code corresponding to `lat` and `lon`. Default 4326
+  #' @seealso \link[proc.attr.hydfab]{retr_hf_id_xy}
+  #' @seealso \link[proc.attr.hydfab]{retr_comids_coords}
   #' @export
   #'
   # Identify the point of interest, converted into the hydrofabric domain's CRS
@@ -324,7 +388,6 @@ retr_hfab_id_coords <- function(path_gpkg, ntwk, epsg_domn,lon,lat,
   } else {
     stop("PROBLEM: the epsg_domn has not been defined.")
   }
-
 
   # Extract flowpath_id for intersecting divide
   origin <-  sf::read_sf(path_gpkg,layer= "divides",
@@ -348,12 +411,15 @@ retr_comids_coords <- function(df, col_lat = "latitude",
                                    col_lon="longitude",col_crs = NULL,
                                    crs=4326){
   #' @title Iterate over each coordinate in a dataframe to retrieve comid
+  #' @description Comid retrieval from coordinates using nhdplusTools
   #' @param df Dataframe containing lat/lon columns
   #' @param col_lat The column name for the latitude data
   #' @param col_lon The column name for the longitude data
   #' @param col_crs Default NULL, column name for the CRS. If NULL, `crs` arg
   #' will be used.
   #' @param crs The CRS to use when `col_crs` is NULL. Default 4326.
+  #' @seealso \link[proc.attr.hydfab]{retr_hfab_id_coords}
+  #' @seealso \link[proc.attr.hydfab]{retr_comids_coords}
   #' @export
   # TODO update once discover_nhdplus_id() can handle batch processing
   # https://github.com/DOI-USGS/nhdplusTools/issues/417
