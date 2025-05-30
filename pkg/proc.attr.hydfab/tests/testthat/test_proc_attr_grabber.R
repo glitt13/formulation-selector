@@ -447,6 +447,57 @@ testthat::test_that('comid_instead_of_nwissite',{
   testthat::expect_true(base::is.na(test_mix$value[test_mix$gage_id == non_comid]))
 })
 
+testthat::test_that("retr_nldi_feat returns expected result with mocked get_nldi_feature", {
+
+  # Example gage ID that will return NA for comid but non-NA for everything else
+  gage_ids <- c("08170950")
+
+  # Expected input to get_nldi_feature
+  expected_input <- base::list(featureSource = "nwissite",
+                               featureID = "USGS-08170950")
+
+  # Create mock return value
+  mock_result <- base::data.frame(
+    sourceName = "NWIS Surface Water Sites",
+    identifier = "USGS-08170950",
+    comid = NA,
+    name = "Blanco Rv at Fischer Store Rd nr Fischer, TX",
+    X = -98.20036,
+    Y = 30.00058,
+    geometry = sf::st_sfc(sf::st_point(c(-98.20036, 30.00058)), crs = 4326)
+  )
+
+  # Create mock function using mockery
+  mock_get_nldi_feature <- mockery::mock(mock_result)
+
+  # Use `stub()` from mockery to replace the function inside retr_nldi_feat
+  mockery::stub(
+    where = retr_nldi_feat,
+    what = "nhdplusTools::get_nldi_feature",
+    how = mock_get_nldi_feature
+  )
+
+  # Run the function
+  result <- proc.attr.hydfab::retr_nldi_feat(
+    gage_ids = gage_ids,
+    featureSource = "nwissite",
+    featureID = "USGS-{gage_id}"
+  )
+
+  testthat::expect_s3_class(result, "data.table")
+  testthat::expect_equal(result$identifier[1], "USGS-08170950")
+  testthat::expect_equal(result$name[1], "Blanco Rv at Fischer Store Rd nr Fischer, TX")
+  testthat::expect_equal(base::round(result$X[1],5), base::round(-98.20036,5))
+  testthat::expect_equal(base::round(result$Y[1],5), base::round(30.00058,5))
+  testthat::expect_s3_class(result$geometry[1], "sfc_POINT")
+
+  # Check row count matches gage_ids length
+  testthat::expect_equal(base::nrow(result), base::length(gage_ids))
+
+})
+
+
+
 testthat::test_that("fs_retr_nhdp_comids_geom_wrap",{
   # Testing the comid/gage_id/geometry mappings wrapper
   # UNITTEST TASKS FOR MARCH 13

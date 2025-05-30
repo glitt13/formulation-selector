@@ -7,7 +7,7 @@
 custom_hf_id(df, col_vpu = "vpu", col_id = "divide_id")
 }
 \arguments{
-\item{df}{The dataframe for a specific location corresponding to the}
+\item{df}{The dataframe for a specific location corresponding to the hydrofabric network}
 
 \item{col_vpu}{The column in df representing the vpu}
 

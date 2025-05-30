@@ -25,5 +25,10 @@ will be used.}
 \item{crs}{The CRS to use when \code{col_crs} is NULL. Default 4326.}
 }
 \description{
-Iterate over each coordinate in a dataframe to retrieve comid
+Comid retrieval from coordinates using nhdplusTools
+}
+\seealso{
+\link[proc.attr.hydfab]{retr_hfab_id_coords}
+
+\link[proc.attr.hydfab]{retr_comids_coords}
 }

@@ -26,3 +26,8 @@ Retrieve hydrofabric IDs via coordinates
 Assumes the hydrofabric domain (e.g. AK, HI) is already determined
 via the path_gpkg
 }
+\seealso{
+\link[proc.attr.hydfab]{retr_hf_id_xy}
+
+\link[proc.attr.hydfab]{retr_comids_coords}
+}
