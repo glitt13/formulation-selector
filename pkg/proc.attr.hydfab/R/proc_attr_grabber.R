@@ -403,7 +403,7 @@ retrieve_attr_exst <- function(comids, vars, dir_db_attrs, bucket_conn=NA){
     stop(glue::glue("The attribute database path does not exist:
                       {dir_db_attrs}"))
   }
-  if(!any(base::grepl(".parquet", base::list.files(dir_db_attrs)))){
+  if(!any(base::grepl(".parquet", tools::file_ext(base::list.files(dir_db_attrs))))){
     warning(glue::glue("The following path does not contain expected
                           .parquet files: {dir_db_attrs}"))
   }
@@ -2244,8 +2244,8 @@ std_path_dataset <- function(dir_dataset, ds_filenames = ''){
   fns <- base::lapply(ds_filenames,
                       function(x) files_ds[base::grep(x,files_ds)]) %>% unlist()
 
-  if (base::any(base::grepl(".nc",fns))){ # Read in a netcdf file
-    fn_nc <- fns[base::grep(".nc",fns)]
+  if (base::any(base::grepl("nc",tools::file_ext(fns)))){ # Read in a netcdf file
+    fn_nc <- fns[base::grep("nc",tools::file_ext(fns))]
     if(length(fn_nc)!=1){
       stop(glue::glue("Expected that only one netcdf file exists in dir:\n{dir_ds}"))
     }
