@@ -792,19 +792,15 @@ fs_retr_nhdp_comids_geom_wrap <- function(path_save_gpkg,
 
   # Changelog/Contributions
   #. 2025-03-07 Originally created, GL
-
+  #. 2025-06-04 bugfix, idxs_gage_ids logic, GL
   sf_comid_in <- proc.attr.hydfab::read_fs_retr_gpkg(path_save_gpkg)
 
   if(!base::is.null(sf_comid_in)){ # Read in
     # TODO address what to do when gage_id not a column
-    idxs_gage_ids <- base::which(gage_ids %in% sf_comid_in$gage_id)
+    idxs_gage_ids <- base::which(sf_comid_in$gage_id %in% gage_ids)
     if(base::length(idxs_gage_ids) == base::length(gage_ids)){
       # All gage ids present, subset to the gage_ids of interest
-      sf_comid <- sf_comid_in[idxs_gage_ids,] %>%
-        # MUST PROVIDE GAGE_IDS in the same dimension as originally provided,
-        # as expected in proc_attr_gageids
-        dplyr::slice(base::match(gage_ids,gage_id)) %>%
-        sf::st_as_sf(crs=epsg)
+      sf_comid <- sf_comid_in[idxs_gage_ids,] %>% sf::st_as_sf(crs=epsg)
     } else { # Need comids for additional locations
       need_gids <- gage_ids[base::which(!gage_ids %in% sf_comid_in$gage_id)]
 
@@ -2048,6 +2044,8 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
   #   2024-07-29 Originally created, GL
   #.  2025-03-07 add path_save_gpkg capability, GL
   #.  2025-05-06 add oCONUS/hydrofabric compatibility section, GL
+  #.  2025-06-04 patch - duplicate comids for different gage_ids simple error handling, GL
+
   # Path checker/maker of anything that's a directory not formatted for later glue::glue() calls
 
   if(!base::is.null(path_save_gpkg)){ # Add path save gpkg to parameter object
@@ -2132,6 +2130,16 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
                                           gage_id=as.character(gage_ids))
   dt_site_feat_retr$featureID <- as.character(dt_site_feat_retr$featureID)
   non_dupe_dt_site_feat_retr <- dt_site_feat_retr %>% dplyr::distinct()
+  if(base::any(base::duplicated(df_map_comid_gageid$featureID))){
+      idxs_dupe <- which(base::duplicated(df_map_comid_gageid$featureID))
+      gage_ids_dupe <- df_map_comid_gageid[idxs_dupe,"gage_id"]
+      warning(glue::glue("Some gageids map to the same comid:\n
+                     {paste0(gage_ids_dupe,collapse = ',')}"))
+      df_map_comids_duped <- df_map_comid_gageid[idxs_dupe,]
+      # TODO save this subset df_map_comids_duped to file???
+      df_map_comid_gageid <- df_map_comid_gageid[-idxs_dupe,]
+  }
+
   dt_site_feat <- data.table::merge.data.table(non_dupe_dt_site_feat_retr,
                                                df_map_comid_gageid,
                                                by="featureID",
@@ -2170,9 +2178,10 @@ retr_nldi_feat <- function(gage_ids,featureSource,featureID){
   #' @export
   # Changelog/contributions
   # 2025-05-29 Originally created, GL
-
+  # 2025-06-04 create gage_id object to enable glue formatting, GL
   ls_nldi_feat <- list()
   for(i in 1:length(gage_ids)){
+    gage_id <- gage_ids[i]
     nldi_feat <- base::list(featureSource =featureSource,
                             featureID = base::as.character(glue::glue(featureID)) # This should expect {'gage_id'} as a variable!
     )
