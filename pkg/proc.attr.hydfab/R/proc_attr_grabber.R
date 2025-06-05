@@ -2102,6 +2102,8 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
       stop("Problem with indexing assumption")
     }
   }
+
+  # ------------------ secondary checker using lat/lon search ---------------- #
   idxs_still_na_id <- base::which(base::is.na(just_comids))
   if(base::length(idxs_still_na_id)>0 && !base::is.null(Retr_Params$paths$path_hf)){
     # One more NA check here in cases where the lat/lon may be found, e.g. gage_id = "08170950"

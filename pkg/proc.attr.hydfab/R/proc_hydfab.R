@@ -320,7 +320,7 @@ retr_hf_id_xy <- function(df_sf, path_gpkg, geom_col ="geometry"){
   # TODO For OCONUS locations, the unique identifier should be returned.
   # Changelog/contributions
   # 2025-05-28 Originally created, GL
-
+  # 2025-06-05 add error handling with hfsubsetR::get_subset, GL
   if(!geom_col %in% base::names(df_sf)){
     msg_miss_col <- glue::glue("The expected geometry column {geom_col} is not present in data.frame")
     stop(msg_miss_col)
@@ -347,8 +347,15 @@ retr_hf_id_xy <- function(df_sf, path_gpkg, geom_col ="geometry"){
   }
   xy_mat <- sf::st_coordinates(df_sf[[geom_col]])
 
-  ls_retr_ntwk <- base::lapply(1:base::nrow(xy_mat), function(i)
-    hfsubsetR::get_subset(xy=xy_mat[i,],gpkg=path_gpkg, lyrs = "network")$network)
+  ls_retr_ntwk <- base::lapply(1:base::nrow(xy_mat), function(i) {
+    tryCatch({
+      hfsubsetR::get_subset(xy = xy_mat[i, ], gpkg = path_gpkg, lyrs = "network")$network
+    }, error = function(e) {
+      # Create hf_hydroseq of 0 & hf_id=NA to use in next step to find min val
+      tibble::tibble(base::data.frame(hf_id=NA,hf_hydroseq=0))
+    })
+  })
+  # Determine the minimum hf_hydroseq, which is the most downstream point in network
   hf_ids_coords <- base::lapply(ls_retr_ntwk, function(ntwk)
     ntwk$hf_id[base::which(ntwk$hf_hydroseq == base::min(ntwk$hf_hydroseq,na.rm=TRUE))][1]) %>%
     base::unlist()
