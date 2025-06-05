@@ -2087,19 +2087,23 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
                             function(gage_id) base::as.character(glue::glue(featureID))) %>%
                                 base::unlist()
 
-    dt_hfuid <- proc.attr.hydfab::retr_hfuids(loc_ids=loc_ids,
+    if(!base::is.null(Retr_Params$paths$path_oconus_hfab_config)){
+      dt_hfuid <- proc.attr.hydfab::retr_hfuids(loc_ids=loc_ids,
               path_oconus_hfab_config=Retr_Params$paths$path_oconus_hfab_config, # e.g. "~/git/formulation-selector/scripts/eval_ingest/bm_test25/bm_oconus_config.yaml"
               featureSource = featureSource)
 
-    if(base::nrow(dt_hfuid) == base::length(gage_ids_for_hf)){
-      # Integrate loc id back into the order of ls_retr_comid$ls_comid
-      just_comids[idxs_na_id] <- dt_hfuid$featureID
-      ls_retr_comid$ls_comid[idxs_na_id] <- dt_hfuid$featureID
-      #  Integrate loc id back into the order of ls_retr_comid$sf_comid
-      ls_retr_comid$sf_comid[idxs_na_id,"comid"] <- dt_hfuid$featureID
-      ls_retr_comid$sf_comid[idxs_na_id,"featureSource"] <- dt_hfuid$featureSource
+      if(base::nrow(dt_hfuid) == base::length(gage_ids_for_hf)){
+        # Integrate loc id back into the order of ls_retr_comid$ls_comid
+        just_comids[idxs_na_id] <- dt_hfuid$featureID
+        ls_retr_comid$ls_comid[idxs_na_id] <- dt_hfuid$featureID
+        #  Integrate loc id back into the order of ls_retr_comid$sf_comid
+        ls_retr_comid$sf_comid[idxs_na_id,"comid"] <- dt_hfuid$featureID
+        ls_retr_comid$sf_comid[idxs_na_id,"featureSource"] <- dt_hfuid$featureSource
+      } else {
+        stop("Problem with indexing assumption")
+      }
     } else {
-      stop("Problem with indexing assumption")
+      warning("oCONUS hydrofabric paths not specified. Will not consider oCONUS.")
     }
   }
 
