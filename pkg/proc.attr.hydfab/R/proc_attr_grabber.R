@@ -510,6 +510,7 @@ retr_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
   #. 2025-03 originally created, GL
   #. 2025-05-07 add s3 placeholder, GL
   #. 2025-05-08 implement s3 compatibility, GL
+  #. 2025-06-06 add another non-id column all NA checker, GL
   ls_dat_ha <- base::list()
   ctr <- 0
   for(path_ha in paths_ha){
@@ -585,8 +586,16 @@ retr_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
     # For rows with all NA values, remove them because those locations may exist
     #. in a different HydroATLAS dataset path, path_ha (e.g.  CONUS vs oCONUS)
     tot_na <- base::rowSums(base::is.na(dplyr::select(dat_ha,dplyr::all_of(ha_vars))))
-    idxs_rm <- base::which(tot_na == base::length(ha_vars))
-    if(base::length(idxs_rm)>0){
+    idxs_rm_var_chck <- base::which(tot_na >= base::length(ha_vars))
+    # Another check for dat_ha in case the above didn't work out: non-ID cols
+    possible_id_cols <- base::c(hf_id_cols,"featureID","featureSource")
+    actual_id_cols <- possible_id_cols[base::which(possible_id_cols %in% base::names(dat_ha))]
+    dat_just_vars <- dat_ha %>% dplyr::select(-dplyr::all_of(actual_id_cols))
+    tot_na_no_id_cols <- base::rowSums(base::is.na(dat_just_vars))
+    idxs_rm_no_id <- base::which(tot_na_no_id_cols == base::ncol(dat_just_vars))
+    # Combine all the indices from the different full-NA checks
+    idxs_rm <- base::unique(base::c(idxs_rm_var_chck,idxs_rm_no_id))
+    if(base::length(idxs_rm)>0){ # Removing the all - NA rows from consideration
       dat_ha <- dat_ha[-idxs_rm,]
     }
 
