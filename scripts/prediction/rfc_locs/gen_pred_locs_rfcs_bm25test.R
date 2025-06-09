@@ -33,10 +33,10 @@ main <- function(){
     stop("Input prediction configuration filepath and full path to nws_nwm_crosswalk.txt must be specified.")
   }
   pause_nldi_conns <- FALSE # Should NLDI connections be paused?
-
+  testing_dataset <- TRUE
   # Define args supplied to command line
   home_dir <- Sys.getenv("HOME")
-  path_cfig_pred <- glue::glue(as.character(args[1])) # path_cfig_pred <- glue::glue("{home_dir}/git/formulation-selector/scripts/eval_ingest/xssa_us/xssaus_pred_config.yaml")
+  path_cfig_pred <- glue::glue(as.character(args[1])) # path_cfig_pred <- glue::glue("{home_dir}/git/formulation-selector/scripts/eval_ingest/bm_test25/bm25_pred_config.yaml")
   path_nwm_crosswalk <- glue::glue(as.character(args[2])) #path_nwm_crosswalk <- "~/git/formulation-selector/scripts/prediction/rfc_locs/nws_nwm_crosswalk.txt"
   # Read in config file
   if(!base::file.exists(path_cfig_pred)){
@@ -146,52 +146,87 @@ main <- function(){
     path_save_gpkg <- proc.attr.hydfab::std_path_retr_gpkg_wrap(
       dir_std_base = Retr_Params$paths$dir_std_base,ds = ds)
 
-    tot_increment <- 50
-    seq_nums <- base::c(base::seq(from=1,nrow(df),tot_increment),nrow(df))[-1]
-    seq_num_bgn <- 1
-    ls_dt_site_feat <- list()
-    ctr <- 0
-    for(seq_num in seq_nums){
-      print(" ----------------------------------------------------- ")
-      print(glue::glue("Acquiring {seq_num} of {nrow(df)}"))
-      ctr <- ctr+1
-      sub_df <- df[seq_num_bgn:seq_num,]
-      seq_num_bgn <- seq_num+1
-      # The unique comids for each location
-      gage_ids <- base::unique(sub_df[[col_comid]])
-      # Now acquire the attributes:
-      sub_dt_site_feat <- try(proc.attr.hydfab::proc_attr_gageids(gage_ids=gage_ids,
-                                                          featureSource=featureSource,
-                                                          featureID=featureID,
-                                                          Retr_Params=Retr_Params,
-                                                          path_save_gpkg = path_save_gpkg,
-                                                          lyrs='network',
-                                                          overwrite=FALSE))
-      if(!"try-error" %in% class(sub_dt_site_feat)){
-        ls_dt_site_feat[[ctr]] <- sub_dt_site_feat
-      } else { # Reduce increments to gageids 1 by 1 in lieu of large chunks:
-        ls_subsub <- list()
-        for(gage_id in gage_ids){
-          subsub_dt_site_feat <- try(proc.attr.hydfab::proc_attr_gageids(gage_ids=gage_id,
-                                                                      featureSource=featureSource,
-                                                                      featureID=featureID,
-                                                                      Retr_Params=Retr_Params,
-                                                                      path_save_gpkg = path_save_gpkg,
-                                                                      lyrs='network',
-                                                                      overwrite=FALSE))
-          if(!"try-error" %in% class(subsub_dt_site_feat)){
-            ls_subsub[[gage_id]] <- subsub_dt_site_feat
-          } else {
-            print(glue::glue("skipping gage_id : {gage_id}"))
+    if(testing_dataset){
+      # Problematic locations with NLDI queries that need further investigation
+      gage_ids <- c("02339400","08170950","390707081443202","15200280",
+                  "15292000","15266150","06145500","15290000","15284000","0165258890",
+                  "02393500","15292800","15292700","15272380","15266110","05114000")
+      featureSource <- "nwissite"
+      featureID <- "USGS-{gage_id}"
+      Retr_Params$paths$path_hf <- "~/noaa/hydrofabric/v2.2/ls_conus.gpkg"
+      test_df <- df[which(df$usgs_id %in% gage_ids),]
+
+      # TODO add xy location subsetter, and use it for calling hfsubsetR::get_subset()
+
+      # TODO convert x and y columns to geopackage geometry column as a pre-proecessor for retr_hf_id_xy()
+
+      test_df$geometry <- sf::st_as_sf(test_df,coords = c("longitude","latitude"))
+
+
+
+
+
+
+      dt_site_feat <- proc.attr.hydfab::proc_attr_gageids(gage_ids=gage_ids,
+                                         featureSource=featureSource,
+                                         featureID=featureID,
+                                         Retr_Params=Retr_Params,
+                                         path_save_gpkg = path_save_gpkg,
+                                         lyrs='network',
+                                         overwrite=FALSE)
+
+      dt_site_feat[,c("featureID","featureSource","gage_id")] %>% unique()
+
+    } else { # Standard processing
+      tot_increment <- 50
+      seq_nums <- base::c(base::seq(from=1,nrow(df),tot_increment),nrow(df))[-1]
+      seq_num_bgn <- 1
+      ls_dt_site_feat <- list()
+      ctr <- 0
+      for(seq_num in seq_nums){
+        print(" ----------------------------------------------------- ")
+        print(glue::glue("Acquiring {seq_num} of {nrow(df)}"))
+        ctr <- ctr+1
+        sub_df <- df[seq_num_bgn:seq_num,]
+        seq_num_bgn <- seq_num+1
+        # The unique comids for each location
+        gage_ids <- base::unique(sub_df[[col_comid]])
+
+
+        # Now acquire the attributes:
+        sub_dt_site_feat <- try(proc.attr.hydfab::proc_attr_gageids(gage_ids=gage_ids,
+                                                            featureSource=featureSource,
+                                                            featureID=featureID,
+                                                            Retr_Params=Retr_Params,
+                                                            path_save_gpkg = path_save_gpkg,
+                                                            lyrs='network',
+                                                            overwrite=FALSE))
+        if(!"try-error" %in% class(sub_dt_site_feat)){
+          ls_dt_site_feat[[ctr]] <- sub_dt_site_feat
+        } else { # Reduce increments to gageids 1 by 1 in lieu of large chunks:
+          ls_subsub <- list()
+          for(gage_id in gage_ids){
+            subsub_dt_site_feat <- try(proc.attr.hydfab::proc_attr_gageids(gage_ids=gage_id,
+                                                                        featureSource=featureSource,
+                                                                        featureID=featureID,
+                                                                        Retr_Params=Retr_Params,
+                                                                        path_save_gpkg = path_save_gpkg,
+                                                                        lyrs='network',
+                                                                        overwrite=FALSE))
+            if(!"try-error" %in% class(subsub_dt_site_feat)){
+              ls_subsub[[gage_id]] <- subsub_dt_site_feat
+            } else {
+              print(glue::glue("skipping gage_id : {gage_id}"))
+            }
+            ls_dt_site_feat[[ctr]] <- data.table::rbindlist(ls_subsub,fill=TRUE)
           }
-          ls_dt_site_feat[[ctr]] <- data.table::rbindlist(ls_subsub,fill=TRUE)
         }
-      }
-      if(pause_nldi_conns){#base::any(base::grepl("usgs_vars",base::names(Retr_Params$vars)))){
-        # will be hitting NLDI and need to limit that
-        max_inc_per_hr <- 380  # max 400 NLDI queries per hour
-        frac_inc_per_hr <- tot_increment/max_inc_per_hr
-        Sys.sleep(60*61*frac_inc_per_hr)
+        if(pause_nldi_conns){#base::any(base::grepl("usgs_vars",base::names(Retr_Params$vars)))){
+          # will be hitting NLDI and need to limit that
+          max_inc_per_hr <- 380  # max 400 NLDI queries per hour
+          frac_inc_per_hr <- tot_increment/max_inc_per_hr
+          Sys.sleep(60*61*frac_inc_per_hr)
+        }
       }
     }
     # -------------generate the prediction.parquet mapper
