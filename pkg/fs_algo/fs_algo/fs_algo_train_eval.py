@@ -37,7 +37,8 @@ from mapie.regression import MapieRegressor, MapieQuantileRegressor
 from scipy.stats import norm
 import random
 import scipy.stats as st
-
+import pyarrow as pa
+import pyarrow.dataset as ds
 
 
 # %% BASIN ATTRIBUTES (PREDICTORS) & RESPONSE VARIABLES (e.g. METRICS)
@@ -200,6 +201,7 @@ def fs_read_attr_comid(dir_db_attrs:str | os.PathLike, comids_resp:list | Iterab
     # Changelog/contributions
     #  2025-04-01 Add logic to remove empty parquet files
     #  2025-05-19 refactor: remove _NA_ parquet files, udpate 'all' to dd.read_parquet, GL
+    #  2025-06-10 fix: rm accidental elif in entry point for read_type; add partitioning schema, GL
     if _s3:
         storage_options={"anon",True} # for public
         # TODO  Setup the s3fs filesystem that will be used, with xarray to open the parquet files
@@ -214,11 +216,18 @@ def fs_read_attr_comid(dir_db_attrs:str | os.PathLike, comids_resp:list | Iterab
         for file in files_rm:
             os.remove(file)
 
+    # Define a pyarrow schema of the attribute data
+    partitioning = ds.partitioning(
+        pa.schema([pa.field("featureID", pa.string()), pa.field('featureSource', pa.string()),
+                pa.field("data_source", pa.string()), pa.field('dl_timestamp', pa.string()),
+                pa.field("attribute", pa.string()), pa.field('value', pa.float64())]),flavor="hive")
+
     # ------------------- Subset based on comids of interest ------------------
-    elif read_type == 'all': # Considering all parquet files inside directory
+    if read_type == 'all': # Considering all parquet files inside directory
         # Read attribute data acquired using proc.attr.hydfab R package
         comids_resp_str = [str(s) for s in comids_resp]
-        all_attr_ddf = dd.read_parquet(dir_db_attrs, storage_options = storage_options)
+        all_attr_ddf = dd.read_parquet(dir_db_attrs, storage_options = storage_options,
+                                        engine='pyarrow',partitioning=partitioning)
         attr_ddf_subloc = all_attr_ddf[all_attr_ddf['featureID'].isin(comids_resp_str)]
     elif read_type == 'filename': # Read based on comid being located in the parquet filename
         substrings = [f'_{sub}_' for sub in comids_resp]
@@ -226,7 +235,9 @@ def fs_read_attr_comid(dir_db_attrs:str | os.PathLike, comids_resp:list | Iterab
         all_files = [file for file in Path(dir_db_attrs).iterdir() if file.is_file()]
         matching_files = [file for file in all_files if pattern.search(str(file))]
         # Read in all matching filenames and proceed
-        attr_ddf_subloc = dd.from_pandas(pd.read_parquet(matching_files),npartitions=2)
+        attr_ddf_subloc = dd.from_pandas(pd.read_parquet(matching_files,
+                                                         engine='pyarrow',partitioning=partitioning),
+                                                         npartitions=2)
     else:
         # Initialize attr_ddf_sub
         attr_ddf_sub = None
