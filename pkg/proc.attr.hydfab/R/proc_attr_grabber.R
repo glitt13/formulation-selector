@@ -1864,7 +1864,7 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
   #.  2025-03-07 add path_save_gpkg capability, GL
   #.  2025-05-06 add oCONUS/hydrofabric compatibility section, GL
   #.  2025-06-04 patch - duplicate comids for different gage_ids simple error handling, GL
-
+  #.  2025-06-10 patch - only identify duplicated featureIDs when they are not NA, GL
   # Path checker/maker of anything that's a directory not formatted for later glue::glue() calls
 
   if(!base::is.null(path_save_gpkg)){ # Add path save gpkg to parameter object
@@ -1880,11 +1880,12 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
     }
   }
 
-  # Should hydrofabric data be retrieved?
-  hfab_retr <- Retr_Params$xtra_hfab$hfab_retr
-  if(base::is.null(hfab_retr)){ # Use default in the proc_attr_wrap() function
-    hfab_retr <- base::formals(proc.attr.hydfab::proc_attr_wrap)$hfab_retr
-  }
+  # TODO remove Retr_Params$xtra_hfab$hfab_retr
+  # # Should hydrofabric data be retrieved?
+  # hfab_retr <- Retr_Params$xtra_hfab$hfab_retr
+  # if(base::is.null(hfab_retr)){ # Use default in the proc_attr_wrap() function
+  #   hfab_retr <- base::formals(proc.attr.hydfab::proc_attr_wrap)$hfab_retr
+  # }
   # ---------------------- CONUS COMID compatibility ------------------------- #
   ls_retr_comid <- proc.attr.hydfab::retr_comids(gage_ids=gage_ids,
                           featureSource=featureSource,
@@ -1905,7 +1906,7 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
     loc_ids <- base::lapply(gage_ids_for_hf,
                             function(gage_id) base::as.character(glue::glue(featureID))) %>%
                                 base::unlist()
-
+    # TODO change this after oconus path refactor??
     if(!base::is.null(Retr_Params$paths$path_oconus_hfab_config)){
       dt_hfuid <- proc.attr.hydfab::retr_hfuids(loc_ids=loc_ids,
               path_oconus_hfab_config=Retr_Params$paths$path_oconus_hfab_config, # e.g. "~/git/formulation-selector/scripts/eval_ingest/bm_test25/bm_oconus_config.yaml"
@@ -1927,6 +1928,9 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
   }
 
   # ------------------ secondary checker using lat/lon search ---------------- #
+  # NOTE: This should ideally follow the oCONUS-oriented retr_hfuids because that
+  #. looks for ids via the hydrofabric, which does not require NLDI connections.
+  #. Anything remaining NA ids addressed here by querying NLDI via lat/lon
   idxs_still_na_id <- base::which(base::is.na(just_comids))
   if(base::length(idxs_still_na_id)>0 && !base::is.null(Retr_Params$paths$path_hf)){
     # One more NA check here in cases where the lat/lon may be found, e.g. gage_id = "08170950"
@@ -1956,13 +1960,18 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
   dt_site_feat_retr$featureID <- as.character(dt_site_feat_retr$featureID)
   non_dupe_dt_site_feat_retr <- dt_site_feat_retr %>% dplyr::distinct()
   if(base::any(base::duplicated(df_map_comid_gageid$featureID))){
-      idxs_dupe <- which(base::duplicated(df_map_comid_gageid$featureID))
-      gage_ids_dupe <- df_map_comid_gageid[idxs_dupe,"gage_id"]
-      warning(glue::glue("Some gageids map to the same comid:\n
+      df_dupe <- df_map_comid_gageid %>% dplyr::group_by(featureID) %>%
+        dplyr::filter(n() > 1) %>% dplyr::select(gage_id)
+      idxs_duped_not_na <- base::which(!is.na(df_dupe$featureID))
+      if(base::length(idxs_duped_not_na)>0){
+        gage_ids_dupe <- df_dupe$gage_id[idxs_duped_not_na]
+        warning(glue::glue("Some gageids map to the same comid:\n
                      {paste0(gage_ids_dupe,collapse = ',')}"))
-      df_map_comids_duped <- df_map_comid_gageid[idxs_dupe,]
-      # TODO save this subset df_map_comids_duped to file???
-      df_map_comid_gageid <- df_map_comid_gageid[-idxs_dupe,]
+        idxs_dupe <- which(df_map_comid_gageid$gage_id %in% gage_ids_dupe)
+        df_map_comids_duped <- df_map_comid_gageid[idxs_dupe,]
+        # TODO save this subset df_map_comids_duped to file???
+        df_map_comid_gageid <- df_map_comid_gageid[-idxs_dupe,]
+      }
   }
 
   dt_site_feat <- data.table::merge.data.table(non_dupe_dt_site_feat_retr,
@@ -2454,60 +2463,6 @@ check_attr_selection <- function(attr_cfg_path = NULL, vars = NULL, verbose = TR
   return(missing_vars)
 }
 
-hfab_config_opt <- function(hfab_config,
-                            reqd_hfab=c("s3_base","s3_bucket","hf_cat_sel","source")){
-  #' @title Configure hydrofabric-relevant optional params
-  #' @description If an argument provided in the config file is NULL, first look
-  #' for default param value from the \code{proc.attr_hydfab::proc_attr_hf}.
-  #' If that is NULL, then look for default value from the
-  #' \code{hfsubsetR::get_subset()} args if that param exists there. Otherwise,
-  #' uses default param value in \code{proc.attr_hydfab::proc_attr_wrap}.
-  #' @param hfab_config The hydrofabric-specific section from the config file, hydfab_config. list.
-  #' @param reqd_hfab The non-optional item names in the hydrofabric config file
-  #' @return List with default arguments populated corresponding to hfsubetR::get_subset()
-  #' @seealso \link[hfsubsetR]{get_subset} Default args referenced using formals here
-  #' @export
-
-  # The values inside the hydrofabric configuration section from attr config file
-  vals_hfab_config <- lapply(hfab_config, function(x) x[[names(x)]])
-  names(vals_hfab_config) <-  base::lapply(hfab_config,
-                                           function(x) base::names(x)) %>%
-                base::unlist()
-  # The required variables in the hydfab_config section:
-
-  sub_hfab_config <- base::within(vals_hfab_config,base::rm(list=reqd_hfab))
-  names_sub_hfab <- names(sub_hfab_config)
-
-
-  xtra_cfig_hfab <- list()
-  for(n in names_sub_hfab){
-    x <- sub_hfab_config[[n]]
-    if(base::is.null(x)){
-      # Is this an argument inside proc_attr_hf?
-      bool_in_proc_attr_hf <- n %in%
-        base::names(base::formals(proc.attr.hydfab::proc_attr_hf))
-      # Is this an argument inside proc_attr_wrap?
-      bool_in_proc_attr_wrap <- n %in%
-        base::names(base::formals(proc.attr.hydfab::proc_attr_wrap))
-      # Is this an argument inside hsubsetR::get_subset?
-      bool_in_get_subset <- n %in%
-        base::names(base::formals(hfsubsetR::get_subset))
-
-      # Goal: default to value inside proc_attr_hf if default not NULL
-      if (!base::is.null(base::formals(proc.attr.hydfab::proc_attr_hf)[[n]])){
-        xtra_cfig_hfab[[n]] <- base::formals(proc.attr.hydfab::proc_attr_hf)[[n]]
-      } else if (bool_in_get_subset) { # Otherwise use the default value in hfsubsetR::get_subset()
-        def_val <- base::formals(hfsubsetR::get_subset)[[n]]
-        xtra_cfig_hfab[[n]] <- def_val
-      } else if (bool_in_proc_attr_wrap){ # Otherwise Use the wrapper's default value
-        xtra_cfig_hfab[[n]] <- base::formals(proc.attr.hydfab::proc_attr_wrap)[[n]]
-      }
-    } else {
-      xtra_cfig_hfab[[n]] <- x
-    }
-  }
-  return(xtra_cfig_hfab)
-}
 
 std_path_miss_tfrm <- function(dir_db_attrs){
   #' @title Create a standardized path for storing missing comid-attribute

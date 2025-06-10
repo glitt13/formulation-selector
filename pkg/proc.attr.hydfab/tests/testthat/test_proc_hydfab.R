@@ -262,15 +262,14 @@ testthat::test_that("retr_hf_id_xy errors if geometry is not POINT", {
 testthat::test_that("retr_hf_id_xy warns if CRS is missing", {
   pt <- st_sfc(st_point(c(-98.2, 30.0)))
   df <- st_sf(id = 1, geometry = pt)
-  testthat::expect_error(
-    testthat::expect_warning(
+  testthat::expect_warning(
       proc.attr.hydfab::retr_hf_id_xy(df, "path.gpkg"),
     "EPSG not specified. Assuming EPSG=4326"
-  ))
+  )
 })
 
 testthat::test_that("retr_hf_id_xy errors if CRS is not 4326", {
-  pt <- st_sfc(st_point(c(-98.2, 30.0)), crs = 3857)
+  pt <- sf::st_sfc(sf::st_point(c(-98.2, 30.0))) %>% sf::st_set_crs(3857)
   df <- st_sf(id = 1, geometry = pt)
   testthat::expect_error(
     proc.attr.hydfab::retr_hf_id_xy(df, "path.gpkg"),
