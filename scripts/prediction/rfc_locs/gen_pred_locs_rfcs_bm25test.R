@@ -15,7 +15,7 @@
 
 # Changelog/contributions
 #. 2025-05-21 adapted from gen_pred_locs_rfcs.R for bm25 oconus testing
-
+#. 2025-06-10 in a stable form
 library(nhdplusTools)
 library(proc.attr.hydfab)
 library(dplyr)
@@ -33,7 +33,7 @@ main <- function(){
     stop("Input prediction configuration filepath and full path to nws_nwm_crosswalk.txt must be specified.")
   }
   pause_nldi_conns <- FALSE # Should NLDI connections be paused?
-  testing_dataset <- TRUE
+  testing_dataset <- FALSE
   # Define args supplied to command line
   home_dir <- Sys.getenv("HOME")
   path_cfig_pred <- glue::glue(as.character(args[1])) # path_cfig_pred <- glue::glue("{home_dir}/git/formulation-selector/scripts/workflow_configs/legacy/bm_test25/bm25_pred_config.yaml")
