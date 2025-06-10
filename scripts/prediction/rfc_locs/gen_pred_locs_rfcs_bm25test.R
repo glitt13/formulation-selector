@@ -147,6 +147,8 @@ main <- function(){
       dir_std_base = Retr_Params$paths$dir_std_base,ds = ds)
 
     if(testing_dataset){
+      gage_ids <- c("15294005","50147800")
+
       # Problematic locations with NLDI queries that need further investigation
       gage_ids <- c("02339400","08170950","390707081443202","15200280",
                   "15292000","15266150","06145500","15290000","15284000","0165258890",
