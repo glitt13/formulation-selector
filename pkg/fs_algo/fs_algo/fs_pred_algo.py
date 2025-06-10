@@ -1,3 +1,17 @@
+"""Perform response variable predictions using trained algorithms that have been trained
+using fs_proc_algo_viz.py. Refers to prediction configuration file, which should have also
+been used in a user-generated, custom script that generates the predictor data to be used 
+in this prediction script.
+
+Usage:
+python fs_pred_algo.py "/path/to/datasetshortname_pred_config.yaml"
+
+# Changelog/Contributions:
+2024 Originally created, GL
+2025-06-10 Generalize to specify featureID and featureSource columns in the prediction output, GL
+
+"""
+
 import argparse
 import yaml
 import joblib
@@ -12,7 +26,6 @@ import forestci as fci
 from sklearn.model_selection import train_test_split
 
 # TODO create a function that's flexible/converts user formatted checks (a la fs_prep)
-
 
 # Predict values and evaluate predictions
 if __name__ == "__main__":
@@ -72,7 +85,7 @@ if __name__ == "__main__":
 
     #%% Run prediction
     for ds in datasets:
-         # f-string formatting of the attribute metadata's filepath
+        # f-string formatting of the attribute metadata's filepath
         path_pred_locs = f'{path_meta_pred}'.format(dir_std_base=dir_std_base,ds=ds,ds_type=ds_type, write_type=write_type)
 
         comids_pred = fsate._read_pred_comid(path_pred_locs, comid_pred_col )
@@ -98,14 +111,15 @@ if __name__ == "__main__":
         new_df_attr = df_attr[['featureID', 'attribute', 'value']]
         # Convert into wide format for model training
         df_attr_wide = new_df_attr.pivot(index='featureID', columns = 'attribute', values = 'value')
-        # df_attr_wide = df_attr.pivot(index='featureID', columns = 'attribute', values = 'value')
+
+        map_feat_srce_feat_id = df_attr[['featureID','featureSource']].drop_duplicates()
 
         # Run predictions & save output
         dir_out_alg_ds = Path(dir_out_alg_base/Path(ds))
         print(f"PREDICTING algorithm for {ds}")
-        for metric in resp_vars:
+        for resp_var in resp_vars:
             for algo in algos:
-                path_algo = fsate.std_algo_path(dir_out_alg_ds, algo=algo, metric=metric, dataset_id=ds)
+                path_algo = fsate.std_algo_path(dir_out_alg_ds, algo=algo, metric=resp_var, dataset_id=ds)
                 if not Path(path_algo).exists():
                     raise FileNotFoundError(f"The following algorithm path does not exist: \n{path_algo}")
 
@@ -133,12 +147,12 @@ if __name__ == "__main__":
                 resp_pred = pipe.predict(df_attr_sub_rmna)
 
                 # Initialize DataFrame for storing results
-                df_pred = pd.DataFrame({'featureID': comids_pred, 'prediction': resp_pred, 'metric': metric, 'dataset': ds, 'algo': algo, 'name_algo': Path(path_algo).name})
+                df_pred = pd.DataFrame({'featureID': df_attr_sub_rmna.index, 'prediction': resp_pred, 'resp_var': resp_var, 'dataset': ds, 'algo': algo, 'name_algo': Path(path_algo).name})
         
                 # If using RandomForest, calculate confidence intervals using forestci
                 if algo == 'rf' and forestci:
-                    rf_model = pipe.named_steps['randomforestregressor']  # Use the correct step name
-                    forest_ci = fci.random_forest_error(forest=rf_model, X_train_shape=X_train_shape, X_test=df_attr_sub.to_numpy())
+                    rf_algo = pipe.named_steps['randomforestregressor']  # Use the correct step name
+                    forest_ci = fci.random_forest_error(forest=rf_algo, X_train_shape=X_train_shape, X_test=df_attr_sub.to_numpy())
                     df_pred['forestci'] = forest_ci
         
                 # If MAPIE is available, compute prediction intervals
@@ -156,7 +170,15 @@ if __name__ == "__main__":
                     "If prediction uncertainty desired, re-run the algorithm training fs_proc_algo_viz.py, " \
                     "with mapie specified in the Uncertainty section of the algo config file.")
 
-                path_pred_out = fsate.std_pred_path(dir_out,algo=algo,metric=metric,dataset_id=ds)
+                path_pred_out = fsate.std_pred_path(dir_out,algo=algo,metric=resp_var,dataset_id=ds)
+
+                # Update prediction file with the featureID-featureSource mapping (and NA-filling)             
+                df_pred_mrge = pd.merge(df_pred, map_feat_srce_feat_id, how='right', on='featureID')
+                df_pred_mrge.fillna(value={'resp_var': resp_var,'dataset': ds, 'algo': algo,
+                                            'name_algo':Path(path_algo).name},inplace=True)
+                col_order = ['featureID', 'featureSource', 'prediction', 'resp_var', 'dataset', 'algo', 'name_algo']
+                df_pred_mrge = df_pred_mrge[col_order]
+
                 # Write prediction results
-                df_pred.to_parquet(path_pred_out)
-                print(f"   Completed {algo} prediction of {metric}")
+                df_pred_mrge.to_parquet(path_pred_out)
+                print(f"   Completed {algo} prediction of {resp_var}")
