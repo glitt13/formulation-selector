@@ -249,11 +249,6 @@ testthat::test_that("write_meta_nldi_feat", {
 })
 
 
-testthat::test_that("proc_attr_std_hfsub_name standardized name generator", {
-  testthat::expect_equal('hydrofab_testit_111.parquet',
-               proc.attr.hydfab:::proc_attr_std_hfsub_name(111,"testit",'parquet'))
-
-})
 
 test_that("std_attr_data_fmt standardizes attribute data correctly", {
 
@@ -639,13 +634,7 @@ testthat::test_that("hfab_config_opt",{
 
 })
 
-testthat::test_that("proc_attr_hf not a comid",{
-  testthat::expect_error(proc.attr.hydfab::proc_attr_hf(comid="13Notacomid14",
-                                                        dir_db_hydfab,
-                                                        custom_name="{lyrs}_",fileext = 'gpkg',
-                                                        lyrs=c('divides','network')[2],
-                                                        hf_cat_sel=TRUE, overwrite=FALSE)) %>% suppress_warnings()
-})
+
 
 
 testthat::test_that("grab_attrs_datasets_fs_wrap", {
@@ -892,6 +881,23 @@ rm_gpkg <- file.remove(filz_gpkg)
 # })
 # Read in data of expected format
 if (!ignore_deprecated_tests){
+
+  testthat::test_that("proc_attr_std_hfsub_name standardized name generator", {
+    testthat::expect_equal('hydrofab_testit_111.parquet',
+                           proc.attr.hydfab:::proc_attr_std_hfsub_name(111,"testit",'parquet'))
+
+  })
+
+
+  testthat::test_that("proc_attr_hf not a comid",{
+    # DEPRECATED FUNCTION (Dec, 2024)
+    testthat::expect_error(proc.attr.hydfab::proc_attr_hf(comid="13Notacomid14",
+                                                          dir_db_hydfab,
+                                                          custom_name="{lyrs}_",fileext = 'gpkg',
+                                                          lyrs=c('divides','network')[2],
+                                                          hf_cat_sel=TRUE, overwrite=FALSE)) %>% suppress_warnings()
+  })
+
   # proc_attr_wrap deprecated as of Dec, 2024
   testthat::test_that("DEPRECATED_proc_attr_wrap", {
     Retr_Params_all <- Retr_Params
