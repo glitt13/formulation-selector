@@ -265,7 +265,7 @@ def _gen_tform_df(all_attr_ddf: dd.DataFrame, new_var_id: str,
     for a single location
     :rtype: pd.DataFrame
     .. seealso::
-        The `proc.attr.hydfab` R package and the `proc_attr_wrap` function
+        The `proc.attr.hydfab` R package and the `proc_attr_wrap` (DEPRECATED) function
         that generates the standardized attribute parquet file formats
     """
     if all_attr_ddf['featureID'].nunique().compute() != 1:
