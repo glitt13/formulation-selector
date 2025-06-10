@@ -28,10 +28,13 @@ hydrofabric locations, postal codes, and expected CRS geopackage filepaths}
 \item{epsg_coords}{The CRS for the lat/lon data inside \code{dt_need_hf}}
 }
 \description{
-Retrieve hydrofabric IDs wrapper
+Retrieve the unique ids used in the hydrofabric, as an hf_uid.
+If an ID isn't unique (e.g. an oCONUS hf_id as of hydrofabric v2.2,
+then a unique id is built)
 }
 \details{
 Intended for situations when comids unavailable, generally as OCONUS
+More work needed to make this fully compatible with CONUS locations.
 }
 \seealso{
 prep_oconus_hydroatlas.R also creates the hf_uid using custom_hf_id()

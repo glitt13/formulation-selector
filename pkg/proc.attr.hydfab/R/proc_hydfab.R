@@ -459,7 +459,11 @@ retr_hfab_id_wrap <- function(dt_need_hf, path_oconus_hfab_config,
                               col_usgsId="usgsId",col_lon='longitude',
                               col_lat='latitude',epsg_coords=4326){
   #' @title Retrieve hydrofabric IDs wrapper
+  #' @description Retrieve the unique ids used in the hydrofabric, as an hf_uid.
+  #' If an ID isn't unique (e.g. an oCONUS hf_id as of hydrofabric v2.2,
+  #'  then a unique id is built)
   #' @details Intended for situations when comids unavailable, generally as OCONUS
+  #' More work needed to make this fully compatible with CONUS locations.
   #' @param dt_need_hf data.table of needed locations
   #' @param path_oconus_hfab_config File path to yaml config mapping of OCONUS
   #' hydrofabric locations, postal codes, and expected CRS geopackage filepaths
@@ -476,6 +480,7 @@ retr_hfab_id_wrap <- function(dt_need_hf, path_oconus_hfab_config,
   #. 2025-05-07 add warning/error handling if path_oconus_hfab_config does not exist, GL
   #. 2025-05-09 add dir_base as an object, GL
   #. 2025-05-13 error handling when conus comid provided, GL
+  #. 2025-06-10 fix creating need_hf_missing_path, modify logic when need_hf_nopath_std doesn't help dt_need_hf, GL
   dir_base <- system.file("extdata",package="proc.attr.hydfab")
 
   # Parse the hydrofabric config file
@@ -569,8 +574,7 @@ retr_hfab_id_wrap <- function(dt_need_hf, path_oconus_hfab_config,
     } # End for loop over unique gpkg paths
     # Now work with any NA paths:
     if(base::any(base::is.na(unique(dt_need_hf[[col_gpkg_path]])))){
-      need_hf_missing_path <- dt_need_hf[base::is.na(unique(dt_need_hf[[col_gpkg_path]])),]
-
+      need_hf_missing_path <- dt_need_hf[base::is.na(dt_need_hf[[col_gpkg_path]]),]
       # need_hf_missing_path$featureID <- need_hf_missing_path[,col_usgsId]
       # need_hf_missing_path$featureSource <- featureSource
 
@@ -579,6 +583,7 @@ retr_hfab_id_wrap <- function(dt_need_hf, path_oconus_hfab_config,
         need_hf_nopath_std <- proc.attr.hydfab::std_feat_id(df=need_hf_missing_path,
                                                             name_featureSource ="COMID",
                                                             col_featureID = "comid")
+        # need_hf_nopath_std does not have the 'hf_uid' column that dt_have_hf has
       } else {
         stop("THERE IS A PROBLEM HERE - WE DON'T HAVE THE CUSTOM HFUID NOR COMID.")
       }
@@ -603,12 +608,22 @@ retr_hfab_id_wrap <- function(dt_need_hf, path_oconus_hfab_config,
     }
 
     if(base::exists("need_hf_nopath_std") && base::exists("dt_have_hf")){
-      # Both oconus paths and assumed conus comid ids combine
-      dt_have_hf <- data.table::rbindlist(list(dt_have_hf,need_hf_nopath_std),
-                              use.names = TRUE,fill = TRUE,ignore.attr = TRUE)
-
+      if( base::nrow(dt_have_hf) < base::nrow(dt_need_hf)) {
+        # Both oconus paths and assumed conus comid ids combine
+        dt_have_hf_chck <- data.table::rbindlist(list(dt_have_hf,need_hf_nopath_std),
+                                            use.names = TRUE,fill = TRUE,ignore.attr = TRUE)
+        if(base::nrow(dt_have_hf_chck)<= base::nrow(dt_need_hf)){
+          dt_have_hf <- dt_have_hf_chck
+        } else {
+          stop("UNEXPECTED DIMENSIONS when building dt_have_hf. Fix retr_hfab_id_wrap.")
+          # Might want to see if there is content in need_hf_nopath_std that isn't in dt_have_hf
+        }
+      }
     } else if (base::exists("need_hf_nopath_std")){ # No OCONUS hf_uids provided
       dt_have_hf <- need_hf_nopath_std # This has already been standardized
+    } else if(base::exists("need_hf_nopath_std")){
+      stop("UNEXPECTED DIMENSIONS based on need_hf_nopath_std. Fix retr_hfab_id_wrap.")
+      # Might want to see if there is content in need_hf_nopath_std that isn't in dt_have_hf
     }
 
   } else { # No mapping to oCONUS possible...

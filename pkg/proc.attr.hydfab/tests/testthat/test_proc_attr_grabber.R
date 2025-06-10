@@ -371,19 +371,22 @@ testthat::test_that('proc_attr_gageids',{
                   base::suppressWarnings()
   testthat::expect_true(all(unlist(unname(Retr_Params_ha$vars)) %in% dt_comids_ha$attribute))
 
-  # TODO figure out what's wrong here. The confusion is that it works when calling the second time, but not the first
-  # # test a wrong featureSource
-  # testthat::expect_error(proc.attr.hydfab::proc_attr_gageids(gage_ids=ls_fs_std$gage_ids[2],
-  #                                                  featureSource='notasource',
-  #                                                  featureID=ls_fs_std$featureID,
-  #                                                  Retr_Params=Retr_Params,
-  #                                                  lyrs="network",overwrite=FALSE),
-  #                          regexp="Problem with comid database logic")
+  # test a wrong featureSource
+  testthat::expect_warning(proc.attr.hydfab::proc_attr_gageids(gage_ids=ls_fs_std$gage_ids[2],
+                                                   featureSource='notasource',
+                                                   featureID=ls_fs_std$featureID,
+                                                   Retr_Params=Retr_Params,
+                                                   path_save_gpkg=NULL,
+                                                   lyrs="network",overwrite=FALSE))
+                           #regexp="following gage_id values did not")
+                           #regexp="Problem with comid database logic")
 
   if(file.exists(path_meta_loc)){ # need to delete this to avoid problems
     # that arise from further testing (e.g. notasource)
     file.remove(path_meta_loc)
   }
+
+
   # Expect 'skipping' this gage_id b/c NA doesn't exist
   testthat::expect_warning(proc.attr.hydfab::proc_attr_gageids(gage_ids=c(NA),
                                                               featureSource='nwissite',
@@ -391,7 +394,7 @@ testthat::test_that('proc_attr_gageids',{
                                                               Retr_Params=Retr_Params,
                                                               path_save_gpkg = NULL,
                                                               lyrs="network",overwrite=FALSE),
-                           regexp="following hydrofabric ids could not be found in the HydroATLAS")
+                           regexp="following gage_id values did not return ")
 
 })
 
@@ -604,35 +607,6 @@ testthat::test_that('retrieve_attr_exst', {
                                             dir_db_attrs_pkg))
 })
 
-
-
-testthat::test_that("hfab_config_opt",{
-  config_in <- yaml::read_yaml(file.path(dir_base, 'xssa_attr_config_all_vars_avail.yaml'))
-  reqd_hfab <- c("s3_base","s3_bucket","hf_cat_sel","source")
-  hfab_config <- proc.attr.hydfab::hfab_config_opt(config_in$hydfab_config,
-                                                   reqd_hfab=reqd_hfab)
-
-  testthat::expect_true(!base::any(reqd_hfab %in% names(hfab_config)))
-
-  # A NULL hfab_retr is set to the default val in proc.attr.hydfab::proc_attr_wrap()
-  hfab_cfg_edit <- config_in$hydfab_config
-  names_cfg_edit <- lapply(hfab_cfg_edit, function(x) names(x)) %>% unlist()
-  idx_hfab_retr <- grep("hfab_retr", names_cfg_edit)
-  hfab_cfg_edit[[idx_hfab_retr]] <- list(hfab_retr = NULL)
-  testthat::expect_identical(base::formals(proc.attr.hydfab::proc_attr_wrap)$hfab_retr,
-                             proc.attr.hydfab::hfab_config_opt(hfab_cfg_edit,
-                                                               reqd_hfab=reqd_hfab)$hfab_retr)
-  # A NULL hf_version is set to the default val in proc_attr_wrap()
-  hfab_cfg_hfsubsetr <- config_in$hydfab_config
-  names_cfg_hfsubsetr <- lapply(hfab_cfg_hfsubsetr, function(x) names(x)) %>% unlist()
-  idx_hfver <- grep("hf_version", names_cfg_hfsubsetr)
-  hfab_cfg_hfsubsetr[[idx_hfver]] <- list(hf_version=NULL)
-
-  testthat::expect_identical(base::formals(hfsubsetR::get_subset)$hf_version,
-                             hfab_config_opt(hfab_cfg_hfsubsetr,
-                                             reqd_hfab=reqd_hfab)$hf_version)
-
-})
 
 
 
@@ -897,6 +871,36 @@ if (!ignore_deprecated_tests){
                                                           lyrs=c('divides','network')[2],
                                                           hf_cat_sel=TRUE, overwrite=FALSE)) %>% suppress_warnings()
   })
+
+
+  testthat::test_that("hfab_config_opt",{
+    config_in <- yaml::read_yaml(file.path(dir_base, 'xssa_attr_config_all_vars_avail.yaml'))
+    reqd_hfab <- c("s3_base","s3_bucket","hf_cat_sel","source")
+    hfab_config <- proc.attr.hydfab::hfab_config_opt(config_in$hydfab_config,
+                                                     reqd_hfab=reqd_hfab)
+
+    testthat::expect_true(!base::any(reqd_hfab %in% names(hfab_config)))
+
+    # A NULL hfab_retr is set to the default val in proc.attr.hydfab::proc_attr_wrap()
+    hfab_cfg_edit <- config_in$hydfab_config
+    names_cfg_edit <- lapply(hfab_cfg_edit, function(x) names(x)) %>% unlist()
+    idx_hfab_retr <- grep("hfab_retr", names_cfg_edit)
+    hfab_cfg_edit[[idx_hfab_retr]] <- list(hfab_retr = NULL)
+    testthat::expect_identical(base::formals(proc.attr.hydfab::proc_attr_wrap)$hfab_retr,
+                               proc.attr.hydfab::hfab_config_opt(hfab_cfg_edit,
+                                                                 reqd_hfab=reqd_hfab)$hfab_retr)
+    # A NULL hf_version is set to the default val in proc_attr_wrap()
+    hfab_cfg_hfsubsetr <- config_in$hydfab_config
+    names_cfg_hfsubsetr <- lapply(hfab_cfg_hfsubsetr, function(x) names(x)) %>% unlist()
+    idx_hfver <- grep("hf_version", names_cfg_hfsubsetr)
+    hfab_cfg_hfsubsetr[[idx_hfver]] <- list(hf_version=NULL)
+
+    testthat::expect_identical(base::formals(hfsubsetR::get_subset)$hf_version,
+                               hfab_config_opt(hfab_cfg_hfsubsetr,
+                                               reqd_hfab=reqd_hfab)$hf_version)
+
+  })
+
 
   # proc_attr_wrap deprecated as of Dec, 2024
   testthat::test_that("DEPRECATED_proc_attr_wrap", {
