@@ -24,8 +24,6 @@ options(arrow.unsafe_metadata = TRUE)
 dir_base <- system.file("extdata",package="proc.attr.hydfab")
 # Refer to temp_dir <- tempdir() in setup.R
 temp_dir <- local_temp_dir() # If running this on your own, source 'setup.R' first.
-dir_db_hydfab <- file.path(temp_dir,'hfab')
-dir_db_hydfab <- file.path(temp_dir,'hfab')
 path_meta <- paste0(temp_dir,"/{ds}/nldi_feat_{ds}_{ds_type}.{write_type}")
 dir_db_attrs <- file.path(temp_dir,'attrs') # used for temporary attr retrieval
 dir_db_attrs_pkg <- system.file("extdata","attributes_pah",package="proc.attr.hydfab")# permanent package location
