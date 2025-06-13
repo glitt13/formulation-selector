@@ -14,7 +14,9 @@ import warnings
     formulation metrics and/or hydrologic signatures.
 
 :raises ValueError: When the algorithm config file path does not exist
-:note python fs_proc_algo.py "/path/to/algo_config.yaml"
+
+Example: 
+    >>> python fs_proc_algo.py "/path/to/algo_config.yaml"
 
 
 Changelog/Contributions
