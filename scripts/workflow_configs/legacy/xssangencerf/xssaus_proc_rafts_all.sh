@@ -10,7 +10,7 @@ echo "Using system home directory as basis for all paths: $HOME"
 DIR_REPO="$HOME/git/formulation-selector/" # The system-specific path to the formulation-selector repo
 DIR_CONFIG="${DIR_REPO}/scripts/workflow_configs/legacy/xssa_us/"
 DIR_PRED="${DIR_REPO}/scripts/prediction/rfc_locs/"
-DIR_PY="${DIR_REPO}/pkg/fs_algo/fs_algo/"
+DIR_PY="${DIR_REPO}/pkg/fs_algo/fs_algo/flow/"
 DIR_R="${DIR_REPO}/pkg/proc.attr.hydfab/flow/"
 
 echo "Running processing from $DIR_CONFIG"
