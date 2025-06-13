@@ -4,7 +4,7 @@ been used in a user-generated, custom script that generates the predictor data t
 in this prediction script.
 
 Usage:
-python fs_pred_algo.py "/path/to/datasetshortname_pred_config.yaml"
+    >>> python fs_pred_algo.py "/path/to/datasetshortname_pred_config.yaml"
 
 # Changelog/Contributions:
 2024 Originally created, GL
