@@ -39,7 +39,6 @@ path_ha <- glue::glue("{dir_base}/hydroatlas_vars_sub.parquet")
 
 # Refer to temp_dir <- tempdir() in setup.R
 temp_dir <- local_temp_dir() # If running this on your own, source 'setup.R' first.
-dir_db_hydfab <- file.path(temp_dir,'hfab')
 path_meta <- paste0(temp_dir,"/{ds}/nldi_feat_{ds}_{ds_type}.{write_type}")
 dir_db_attrs <- file.path(temp_dir,'attrs') # used for temporary attr retrieval
 dir_db_attrs_pkg <- system.file("extdata","attributes_pah",package="proc.attr.hydfab")# permanent package location
@@ -53,8 +52,7 @@ ha_vars <- c('pet_mm_s01', 'cly_pc_sav')#, 'cly_pc_uav') # hydroatlas variables
 sc_vars <- c() # TODO look up variables. May need to select datasets first
 usgs_vars <- c('TOT_TWI','TOT_PRSNOW')#,'TOT_POPDENS90','TOT_EWT','TOT_RECHG')
 
-Retr_Params <- list(paths = list(dir_db_hydfab=dir_db_hydfab,
-                                 dir_db_attrs=dir_db_attrs,
+Retr_Params <- list(paths = list(dir_db_attrs=dir_db_attrs,
                                  paths_ha = c(path_ha),
                                  dir_std_base = dir_user,
                                  path_meta=path_meta),
@@ -855,7 +853,7 @@ rm_gpkg <- file.remove(filz_gpkg)
 # })
 # Read in data of expected format
 if (!ignore_deprecated_tests){
-
+  dir_db_hydfab <- file.path(temp_dir,'hfab')
   testthat::test_that("proc_attr_std_hfsub_name standardized name generator", {
     testthat::expect_equal('hydrofab_testit_111.parquet',
                            proc.attr.hydfab:::proc_attr_std_hfsub_name(111,"testit",'parquet'))
@@ -863,8 +861,12 @@ if (!ignore_deprecated_tests){
   })
 
 
+
   testthat::test_that("proc_attr_hf not a comid",{
     # DEPRECATED FUNCTION (Dec, 2024)
+    dir_db_hydfab <- Retr_Params$paths$dir_db_hydfab %>%
+      base::gsub(pattern=temp_dir,
+                 replacement =local_temp_dir2() )
     testthat::expect_error(proc.attr.hydfab::proc_attr_hf(comid="13Notacomid14",
                                                           dir_db_hydfab,
                                                           custom_name="{lyrs}_",fileext = 'gpkg',

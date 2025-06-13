@@ -61,7 +61,6 @@ main <- function(){
   io_cfig <- cfig_attr[['file_io']]
   dir_base <- glue::glue(base::unlist(io_cfig)[['dir_base']])
   dir_std_base <- glue::glue(base::unlist(io_cfig)[['dir_std_base']])
-  dir_db_hydfab <- glue::glue(base::unlist(io_cfig)[['dir_db_hydfab']])
   dir_db_attrs <- glue::glue(base::unlist(io_cfig)[['dir_db_attrs']])
 
   # ----------------------- TRANSFORMATION CONFIGURATION --------------------- #

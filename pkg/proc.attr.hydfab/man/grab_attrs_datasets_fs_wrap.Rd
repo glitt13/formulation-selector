@@ -15,7 +15,6 @@ grab_attrs_datasets_fs_wrap(
 \item{Retr_Params}{list of parameters built for grabbing catchment attribute data. List objects include the following:
 \itemize{
 \item \code{paths} list of directories or paths used to acquire and save data These include the following:
-\item \code{paths$dir_db_hydfab} the local path to where hydrofabric data are saved
 \item \code{path$dir_db_attrs} local path for saving catchment attributes as parquet files
 \item \code{path$paths_ha} the local or s3 location(s) of tabular data file with HydroATLAS downscaled to hydrofabric divide
 \item \code{path$dir_std_base} the location of user_data_std containing dataset that were standardized by \pkg{fs_prep}.
