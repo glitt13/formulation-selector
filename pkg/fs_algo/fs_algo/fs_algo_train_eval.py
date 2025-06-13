@@ -202,6 +202,7 @@ def fs_read_attr_comid(dir_db_attrs:str | os.PathLike, comids_resp:list | Iterab
     #  2025-04-01 Add logic to remove empty parquet files
     #  2025-05-19 refactor: remove _NA_ parquet files, udpate 'all' to dd.read_parquet, GL
     #  2025-06-10 fix: rm accidental elif in entry point for read_type; add partitioning schema, GL
+    #  2025-06-13 feat: add timestamp datetime coercion, GL
     if _s3:
         storage_options={"anon",True} # for public
         # TODO  Setup the s3fs filesystem that will be used, with xarray to open the parquet files
@@ -274,10 +275,13 @@ def fs_read_attr_comid(dir_db_attrs:str | os.PathLike, comids_resp:list | Iterab
                       which may be problematic for some algo training/testing. \
                       \nConsider reprocessing the attribute grabber (proc.attr.hydfab R package)',
                       UserWarning)
-        
-    # TODO should re-indexing happen???
+    
     if reindex:
         attr_df_sub = attr_df_sub.reindex()
+
+    # Coerce the timestamp column to datetime
+    if 'dl_timestamp' in attr_df_sub.columns:
+        attr_df_sub['dl_timestamp'] = pd.to_datetime(attr_df_sub['dl_timestamp'], errors='coerce')
 
     return attr_df_sub
 
