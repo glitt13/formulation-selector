@@ -10,7 +10,9 @@ import numpy as np
     formulation metrics and/or hydrologic signatures.
 
 :raises ValueError: When the algorithm config file path does not exist
-:note python fs_proc_algo.py "/path/to/algo_config.yaml"
+
+Example:
+    >>> python fs_proc_algo.py "/path/to/algo_config.yaml"
 
 """
 
@@ -87,7 +89,7 @@ if __name__ == "__main__":
         metrics = dat_resp.attrs['metric_mappings'].split('|')
 
         # %% COMID retrieval and assignment to response variable's coordinate
-        [featureSource,featureID] = fsate._find_feat_srce_id(dat_resp,attr_cfig.attr_config) # e.g. ['nwissite','USGS-{gage_id}']
+        [featureSource,featureID] = fsate._find_feat_srce_id(dat_resp,col_schema = attr_cfig.attr_config['col_schema']) # e.g. ['nwissite','USGS-{gage_id}']
         gdf_comid = fsate.fs_retr_nhdp_comids_geom(featureSource=featureSource,
                                             featureID=featureID,
                                             gage_ids=dat_resp['gage_id'].values)
