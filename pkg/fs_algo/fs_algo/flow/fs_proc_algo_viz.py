@@ -350,7 +350,7 @@ if __name__ == "__main__":
                                                     metr,algo_str,
                                                     y_pis = y_pis, alpha_val = alpha_val,
                                                     min_err = min_err, max_err = max_err,
-                                                    split_type='test',
+                                                    split_type='test_mapie',
                                                     colname_data='prediction')                        
                                 
             # Generate analysis path out:
