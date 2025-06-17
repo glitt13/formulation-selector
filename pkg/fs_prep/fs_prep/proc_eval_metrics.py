@@ -476,6 +476,9 @@ def check_fix_nwissite_gageids(df:pd.DataFrame, gage_id_col:str,
     :return: The provided `df`, modified in cases when inappropriate `gage_id_col`'s data format found
     :rtype: pd.DataFrame
 
+    Changelog/contributions:
+        2024 originally created, GL
+        2025-06-17 fix: ensure str in gage_id build, and ensure gage_id_col in dataframe contains all str type
     """
 
     ls_still_bad = list()
@@ -533,4 +536,5 @@ def check_fix_nwissite_gageids(df:pd.DataFrame, gage_id_col:str,
             df=cmbo_df.copy()                
             if len(ls_still_bad)>0:
                 warnings.warn("Some gage_id values still not recognized by USGS nwissite dataset.")
+        df[gage_id_col] = df[gage_id_col].astype(str)
     return df
