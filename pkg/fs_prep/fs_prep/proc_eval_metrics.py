@@ -494,7 +494,7 @@ def check_fix_nwissite_gageids(df:pd.DataFrame, gage_id_col:str,
                                         ).loc[0]['nhdplus_comid'] 
             except: # Could not process this particular gid
                 ls_bad_ids.append(gid)                                                     
-        ls_prezero = ['0'+x for x in ls_bad_ids]
+        ls_prezero = ['0'+str(x) for x in ls_bad_ids]
 
         print(f"Checking whether prepending '0' fixes {len(ls_prezero)} total gage_ids that were not recognized during the first check")
         print(f"This may take {round(len(ls_prezero)/60/3.2,2)} minutes for the second check.")
