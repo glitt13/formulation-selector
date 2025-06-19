@@ -1958,8 +1958,8 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
   non_dupe_dt_site_feat_retr <- dt_site_feat_retr %>% dplyr::distinct()
   if(base::any(base::duplicated(df_map_comid_gageid$featureID))){
       df_dupe <- df_map_comid_gageid %>% dplyr::group_by(featureID) %>%
-        dplyr::filter(n() > 1) %>% dplyr::select(gage_id)
-      idxs_duped_not_na <- base::which(!is.na(df_dupe$featureID))
+        dplyr::filter(dplyr::n() > 1) %>% dplyr::select(gage_id)
+      idxs_duped_not_na <- base::which(!base::is.na(df_dupe$featureID))
       if(base::length(idxs_duped_not_na)>0){
         gage_ids_dupe <- df_dupe$gage_id[idxs_duped_not_na]
         warning(glue::glue("Some gageids map to the same comid:\n
