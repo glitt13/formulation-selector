@@ -85,7 +85,7 @@ if __name__ == "__main__":
         path_fs_dat_resp =  fsate._std_fs_prep_ds_paths(dir_std_base=dir_std_base,ds=ds,mtch_str='*.nc')
         path_gpkg_fs_prep = fsate._std_fs_prep_ds_companion_gpkg_path(path_fs_dat_resp[0])
         gdf_all = gpd.read_file(path_gpkg_fs_prep)
-        gdf_all = gdf_all.rename(columns={'featIDgpkg':'featureID','featSrcegpkg':'featureSource'})
+        gdf_all = gdf_all.rename(columns={'featureID':'featIDgpkg','featureSource':'featSrcegpkg'})
 
         for metr in resp_vars:
             for algo_str in pred_cfg.pred_cfg_dict.get('algo_type'):
