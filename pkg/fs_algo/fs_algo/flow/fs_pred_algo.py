@@ -34,15 +34,13 @@ if __name__ == "__main__":
     # NOTE pred_config should contain the path for path_algo_config
     args = parser.parse_args()
 
-    path_pred_config = Path(args.path_pred_config) #Path(f'~/git/formulation-selector/scripts/workflow_configs/legacy/xssa/xssa_pred_config.yaml') 
-    with open(path_pred_config, 'r') as file:
-        pred_cfg = yaml.safe_load(file)
-    
-    mapie_alpha = pred_cfg.get('MAPIE_alpha', None)
+    path_pred_config = Path(args.path_pred_config) # Path(f'~/git/formulation-selector/scripts/workflow_configs/legacy/xssa/xssa_pred_config.yaml') 
+    pred_cfg = fsate.PredConfigParser(path_pred_config)
+    pred_cfg._read_pred_config()
 
     #%%  READ CONTENTS FROM THE ATTRIBUTE CONFIG
-    path_attr_config = fsate.build_cfig_path(path_pred_config,pred_cfg.get('name_attr_config',None))
-    path_algo_config = fsate.build_cfig_path(path_pred_config,pred_cfg.get('name_algo_config',None))
+    path_attr_config = fsate.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_attr_config'))
+    path_algo_config = fsate.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_algo_config'))
     
     attr_cfig = fsate.AttrConfigAndVars(path_attr_config)
     attr_cfig._read_attr_config()
@@ -59,9 +57,9 @@ if __name__ == "__main__":
     name_attr_csv = algo_cfg.get('name_attr_csv',None)
     colname_attr_csv = algo_cfg.get('colname_attr_csv',None)
     # Determine whether random forest confidence intervals computed during model training:
-    fci = algo_cfg.get('uncertainty',{}).get('fci',{})
-    if len(fci)>0:
-        forestci = fci[0].get('forestci',False)
+    fci_flag = algo_cfg.get('uncertainty',{}).get('fci',{})
+    if len(fci_flag)>0:
+        forestci = fci_flag[0].get('forestci',False)
     else:
         forestci = False
     # Attributes needed for prediction:
@@ -74,19 +72,20 @@ if __name__ == "__main__":
     dir_out = fsate.fs_save_algo_dir_struct(dir_base).get('dir_out')
     dir_out_alg_base = fsate.fs_save_algo_dir_struct(dir_base).get('dir_out_alg_base')
     #%% PREDICTION FILE'S COMIDS (IMPLICIT ASSUMPTION: Each dataset processes the same IDS)
-    path_meta_pred = pred_cfg.get('path_meta')
-    comid_pred_col = pred_cfg.get('pred_file_comid_colname')
-    write_type = pred_cfg.get('write_type')
-    ds_type = pred_cfg.get('ds_type')
+    path_meta_pred = pred_cfg.pred_cfg_dict.get('path_meta')
+    comid_pred_col = pred_cfg.pred_cfg_dict.get('pred_file_comid_colname')
+    write_type = pred_cfg.pred_cfg_dict.get('write_type')
+    ds_type = pred_cfg.pred_cfg_dict.get('ds_type')
     
     #%% prediction config
-    resp_vars = pred_cfg.get('algo_response_vars')
-    algos = pred_cfg.get('algo_type')
+    resp_vars = pred_cfg.pred_cfg_dict.get('algo_response_vars')
+    algos = pred_cfg.pred_cfg_dict.get('algo_type')
 
     #%% Run prediction
     for ds in datasets:
         # f-string formatting of the attribute metadata's filepath
-        path_pred_locs = f'{path_meta_pred}'.format(dir_std_base=dir_std_base,ds=ds,ds_type=ds_type, write_type=write_type)
+        path_pred_locs = fsate.build_pred_locs_path(path_meta_template=path_meta_pred, dir_std_base=dir_std_base, 
+                                                    ds=ds,ds_type=ds_type, write_type=write_type)
 
         comids_pred = fsate._read_pred_comid(path_pred_locs, comid_pred_col )
 
@@ -156,6 +155,7 @@ if __name__ == "__main__":
                     df_pred['forestci'] = forest_ci
         
                 # If MAPIE is available, compute prediction intervals
+                mapie_alpha = pred_cfg.pred_cfg_dict.get('mapie_alpha')
                 if 'mapie' in pipeline_data and mapie_alpha:
                     mapie = pipeline_data['mapie']
                     y_pred_mapie, y_pis = mapie.predict(df_attr_sub, alpha=mapie_alpha)

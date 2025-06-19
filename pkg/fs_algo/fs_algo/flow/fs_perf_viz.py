@@ -57,10 +57,11 @@ if __name__ == "__main__":
 
     # Get features from the pred config file --------------------------
     path_pred_config = fsate.build_cfig_path(path_viz_config,viz_cfg.get('name_pred_config',None)) # currently, this gives the pred config path, not the attr config path
-    pred_cfg = yaml.safe_load(open(path_pred_config, 'r'))
-    path_attr_config = fsate.build_cfig_path(path_pred_config,pred_cfg.get('name_attr_config',None)) 
-    ds_type = pred_cfg.get('ds_type')
-    write_type = pred_cfg.get('write_type')
+    pred_cfg = fsate.PredConfigParser(path_pred_config)
+    pred_cfg._read_pred_config()
+    path_attr_config = fsate.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_attr_config',None)) 
+    ds_type = pred_cfg.pred_cfg_dict.get('ds_type')
+    write_type = pred_cfg.pred_cfg_dict.get('write_type')
 
     # Get features from the attr config file --------------------------
     attr_cfg = fsate.AttrConfigAndVars(path_attr_config)
@@ -97,7 +98,7 @@ if __name__ == "__main__":
         engine = 'zarr'
 
     # Access the location metadata for prediction sites
-    path_meta_pred = pred_cfg.get('path_meta')
+    path_meta_pred = pred_cfg.pred_cfg_dict.get('path_meta')
 
     # Location for accessing existing outputs and saving plots
     dir_out = fsate.fs_save_algo_dir_struct(dir_base).get('dir_out')
@@ -109,7 +110,9 @@ if __name__ == "__main__":
 
     # Loop through all datasets
     for ds in datasets:
-        path_meta_pred = f'{path_meta_pred}'.format(ds = ds, dir_std_base = dir_std_base, ds_type = ds_type, write_type = write_type)
+        # path_meta_pred = f'{path_meta_pred}'.format(ds = ds, dir_std_base = dir_std_base, ds_type = ds_type, write_type = write_type)
+        path_meta_pred = fsate.build_pred_locs_path(path_meta_template=path_meta_pred, dir_std_base=dir_std_base, 
+                                                    ds=ds,ds_type=ds_type, write_type=write_type)
         meta_pred = pd.read_parquet(path_meta_pred)
 
         # Loop through all algorithms

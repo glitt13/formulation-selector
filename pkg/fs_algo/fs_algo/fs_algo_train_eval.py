@@ -119,6 +119,110 @@ class AttrConfigAndVars:
                             'dir_base': dir_base,
                             'home_dir': home_dir,
                             'datasets': datasets}
+
+# %% PREDICTION CONFIGURATION
+class PredConfigParser:
+    def __init__(self, path_pred_config: str):
+        self.path_pred_config = path_pred_config
+        self.pred_cfg_dict = None
+
+    def _read_pred_config(self) -> dict:
+        """
+        Read and parse the prediction configuration YAML file.
+
+        Sets:
+            self.pred_cfg_dict (dict): Parsed and formatted config items, including:
+                - Required: `name_attr_config`, `name_algo_config`, `name_tfrm_config`,
+                            `path_meta`, `write_type`, `ds_type`, `pred_file_comid_colname`,
+                            `path_tfrm_script`, `conda_env`
+                - Parsed from attribute config: `datasets`, `dir_base`, `dir_std_base`, `home_dir`
+                - Optional: `algo_response_vars`, `algo_type`, `MAPIE_alpha`
+        Returns:
+            dict: Same dictionary stored in self.pred_cfg_dict
+        Raises:
+            ValueError: If any REQUIRED config fields are missing.
+        """
+
+        if not Path(self.path_pred_config).exists():
+            raise FileNotFoundError(f"Prediction config file not found: {self.path_pred_config}")
+
+        # Load prediction config YAML
+        with open(self.path_pred_config, 'r') as file:
+            pred_cfg = yaml.safe_load(file)
+
+        # --- Required top-level prediction keys ---
+        required_pred_keys = [
+            "name_attr_config", "name_algo_config",
+            "ds_type", "write_type", "path_meta", "pred_file_comid_colname"
+        ]
+
+        missing_keys = [k for k in required_pred_keys if k not in pred_cfg or pred_cfg[k] is None]
+        if missing_keys:
+            raise ValueError(
+                f"Missing required keys in prediction config file: {missing_keys}\n"
+                f"Config path: {self.path_pred_config}\n"
+            )
+
+        # Extract required fields
+        name_attr_config     = pred_cfg["name_attr_config"]
+        name_algo_config     = pred_cfg["name_algo_config"]
+        write_type           = pred_cfg["write_type"]
+        ds_type              = pred_cfg["ds_type"]
+        path_meta            = pred_cfg["path_meta"]
+        pred_file_comid_colname = pred_cfg["pred_file_comid_colname"]
+
+        # Resolve full path to attribute config
+        path_attr_config = build_cfig_path(self.path_pred_config, name_attr_config)
+        # TODO Integrate AttrConfigParser here once available
+
+        # --- Load attribute config using AttrConfigAndVars ---
+        attr_cfg = AttrConfigAndVars(path_attr_config)
+        attr_cfg._read_attr_config()
+
+        home_dir     = attr_cfg.attrs_cfg_dict.get('home_dir') 
+        dir_base     = attr_cfg.attrs_cfg_dict.get('dir_base')
+        dir_std_base = attr_cfg.attrs_cfg_dict.get('dir_std_base')
+        datasets     = attr_cfg.attrs_cfg_dict.get('datasets')
+
+        # Check if dir_base exists
+        if not Path(dir_base).exists():
+            raise FileNotFoundError(f"Resolved dir_base path does not exist: {dir_base}")
+
+        # Check if dir_std_base exists
+        if not Path(dir_std_base).exists():
+            raise FileNotFoundError(f"Resolved dir_base path does not exist: {dir_std_base}")
+
+        # Optional prediction config values
+        name_tfrm_config     = pred_cfg.get("name_tfrm_config", None)
+        path_tfrm_script     = pred_cfg.get("path_tfrm_script", None)
+        conda_env            = pred_cfg.get("conda_env", None)
+        algo_response_vars = pred_cfg.get("algo_response_vars", [])
+        algo_type = pred_cfg.get("algo_type", [])
+        mapie_alpha = pred_cfg.get("MAPIE_alpha", None)
+
+        # Compile dictionary
+        self.pred_cfg_dict = {
+            'algo_response_vars': algo_response_vars,
+            'algo_type': algo_type,
+            'datasets': datasets,
+            'path_meta': path_meta,
+            'write_type': write_type,
+            'ds_type': ds_type,
+            'dir_std_base': dir_std_base,
+            'dir_base': dir_base,
+            'home_dir': home_dir,
+            'name_attr_config': name_attr_config,
+            'name_algo_config': name_algo_config,
+            'name_tfrm_config': name_tfrm_config,
+            'path_tfrm_script': path_tfrm_script,
+            'conda_env': conda_env,
+            'pred_file_comid_colname': pred_file_comid_colname,
+            'mapie_alpha': mapie_alpha,
+            'path_pred_config': self.path_pred_config,
+        }
+
+        return self.pred_cfg_dict    
+    
 def _define_home_dir(attr_config:dict) -> os.PathLike:
     """Define the home directory of this system
 
@@ -509,6 +613,26 @@ def build_cfig_path(path_known_config:str | os.PathLike, path_or_name_cfig:str |
         warnings.warn("The configuration file may not have specified the path or file name.",UserWarning)
         path_cfig = None
     return path_cfig
+
+def build_pred_locs_path(path_meta_template: str | os.PathLike,dir_std_base: str | os.PathLike,
+    ds: str,ds_type: str,write_type: str) -> Path:
+    """
+    Build the full path to the prediction metadata location using formatting template.
+
+    :param path_meta_template: f-string template for the path, e.g. "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.{write_type}"
+    :param dir_std_base: Base directory for standardized data
+    :param ds: Dataset name
+    :param ds_type: Dataset type, e.g., 'prediction'
+    :param write_type: File extension/type, e.g., 'csv' or 'parquet'
+    :return: Full formatted Path to prediction metadata file
+    """
+    path_str = path_meta_template.format(
+        dir_std_base=dir_std_base,
+        ds=ds,
+        ds_type=ds_type,
+        write_type=write_type
+    )
+    return Path(path_str)
 
 def fs_save_algo_dir_struct(dir_base: str | os.PathLike ) -> dict:
     """Generate a standard file saving directory structure

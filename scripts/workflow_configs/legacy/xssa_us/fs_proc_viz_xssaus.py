@@ -27,15 +27,14 @@ if __name__ == "__main__":
 
     home_dir = Path.home()
     path_pred_config = Path(args.path_pred_config) # path_pred_config=Path(f"{home_dir}/git/formulation-selector/scripts/workflow_configs/legacy/xssa_us/xssaus_pred_config.yaml")
+    pred_cfg = fsate.PredConfigParser(path_pred_config)
+    pred_cfg._read_pred_config()
 
-    with open(path_pred_config, 'r') as file:
-        pred_cfg = yaml.safe_load(file)
-
-    response_vars = pred_cfg['algo_response_vars']
+    response_vars = pred_cfg.pred_cfg_dict.get('algo_response_vars')
 
     #%%  READ CONTENTS FROM THE ATTRIBUTE CONFIG
-    path_attr_config = fsate.build_cfig_path(path_pred_config,pred_cfg.get('name_attr_config',None))
-    # path_algo_config = fsate.build_cfig_path(path_pred_config,pred_cfg.get('name_algo_config',None))
+    path_attr_config = fsate.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_attr_config',None))
+    # path_algo_config = fsate.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_algo_config'))
 
     
     attr_cfig = fsate.AttrConfigAndVars(path_attr_config)
