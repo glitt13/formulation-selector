@@ -8,7 +8,7 @@ import numpy as np
 import geopandas as gpd
 from shapely import wkt
 import matplotlib.pyplot as plt
-import xarray as xr
+
 import warnings             
 
 """Workflow script to generate a map of predictions
@@ -87,28 +87,21 @@ if __name__ == "__main__":
         gdf_all = gpd.read_file(path_gpkg_fs_prep)
         gdf_all = gdf_all.rename(columns={'featIDgpkg':'featureID','featSrcegpkg':'featureSource'})
 
-        # CUSTOM MUNGING
-        #gdf_nonnwis = gdf_all[gdf_all['featureSource']!= 'nwissite']
-       # gdf_sel = gdf_nonnwis[gdf_nonnwis['featureID'].isin(comids_pred)]
-        # TODO combine gdf_sel with the prediction values
-        # gdf_sel= gdf_all[['gage_id','X','Y','geometry','name','featureID']]
-        # ---- END ccustom munging
-
         for metr in resp_vars:
-            algo_str = 'rf'
+            for algo_str in pred_cfg.pred_cfg_dict.get('algo_type'):
+          
+                # Read in the prediction file for each response variable
+                path_pred_in = fsate.std_pred_path(dir_out=dir_out,algo=algo_str,metric=metr,dataset_id=ds)
+        
+                df_pred = pd.read_parquet(path_pred_in)
 
-            # TODO read in the prediction file for each response variable
-            path_pred_in = fsate.std_pred_path(dir_out=dir_out,algo=algo_str,metric=metr,dataset_id=ds)
-      
-            df_pred = pd.read_parquet(path_pred_in)
+                gdf_pred = gdf_all.merge(df_pred,how='right', right_on='featureID',left_on='comid')
 
-            gdf_pred = gdf_all.merge(df_pred,how='right', right_on='featureID',left_on='comid')
-
-            #gdf_pred = gdf_pred.dropna(subset='gage_id')
-            #%% PREDICT                 
-            fsate.plot_map_pred_wrap(gdf_pred,
-                            dir_out_viz_base, ds,
-                                metr,algo_str,
-                                split_type=analysis_str,
-                                colname_data='prediction')
-                        
+                #gdf_pred = gdf_pred.dropna(subset='gage_id')
+                #%% PREDICT                 
+                fsate.plot_map_pred_wrap(gdf_pred,
+                                dir_out_viz_base, ds,
+                                    metr,algo_str,
+                                    split_type=analysis_str,
+                                    colname_data='prediction')
+                            
