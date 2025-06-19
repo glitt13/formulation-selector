@@ -1,5 +1,4 @@
-# RaFTS processing the Mai et al, 2022 model metrics 
-#  (denoted xssa in the dir structure/filenames)
+# RaFTS processing fake response variables for oconus testing
 
 # Instructions:
 # 1. Must first modify all config files (and the dir paths in this file) to your needs!
