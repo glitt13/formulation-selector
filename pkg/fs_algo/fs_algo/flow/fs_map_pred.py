@@ -27,23 +27,25 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     path_pred_config = Path(args.path_pred_config) #Path(f'~/git/formulation-selector/scripts/eval_ingest/xssangencerf/xssangencerf_pred_config.yaml') 
-    with open(path_pred_config, 'r') as file:
-        pred_cfg = yaml.safe_load(file)
+    analysis_str = args.analysis_str
 
+    pred_cfg = fsate.PredConfigParser(path_pred_config)
+    pred_cfg._read_pred_config()
+    
     #%% PREDICTION FILE'S COMIDS (IMPLICIT ASSUMPTION: Each dataset processes the same IDS)
-    path_meta_pred = pred_cfg.get('path_meta')
-    comid_pred_col = pred_cfg.get('pred_file_comid_colname')
-    write_type = pred_cfg.get('write_type')
-    ds_type = pred_cfg.get('ds_type')
+    path_meta_pred = pred_cfg.pred_cfg_dict.get('path_meta')
+    comid_pred_col = pred_cfg.pred_cfg_dict.get('pred_file_comid_colname')
+    write_type = pred_cfg.pred_cfg_dict.get('write_type')
+    ds_type = pred_cfg.pred_cfg_dict.get('ds_type')
     
     #%% prediction config
-    resp_vars = pred_cfg.get('algo_response_vars')
-    algos = pred_cfg.get('algo_type')
+    resp_vars = pred_cfg.pred_cfg_dict.get('algo_response_vars')
+    algos = pred_cfg.pred_cfg_dict.get('algo_type')
 
-    path_meta_pred = pred_cfg.get('path_meta')
+    path_meta_pred = pred_cfg.pred_cfg_dict.get('path_meta')
     #%%  READ CONTENTS FROM THE ATTRIBUTE CONFIG
-    path_attr_config = fsate.build_cfig_path(path_pred_config,pred_cfg.get('name_attr_config',None))
-    path_algo_config = fsate.build_cfig_path(path_pred_config,pred_cfg.get('name_algo_config',None))
+    path_attr_config = fsate.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_attr_config',None))
+    path_algo_config = fsate.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_algo_config'))
 
     with open(path_algo_config, 'r') as file:
         algo_cfg = yaml.safe_load(file)
@@ -75,7 +77,8 @@ if __name__ == "__main__":
     dir_out = dirs_std_dict.get('dir_out')
 
     for ds in datasets: 
-        path_pred_locs = f'{path_meta_pred}'.format(dir_std_base=dir_std_base,ds=ds,ds_type=ds_type, write_type=write_type)
+        path_pred_locs = fsate.build_pred_locs_path(path_meta_template=path_meta_pred, dir_std_base=dir_std_base, 
+                                                    ds=ds,ds_type=ds_type, write_type=write_type)
         comids_pred = fsate._read_pred_comid(path_pred_locs, comid_pred_col )
        
 
@@ -106,6 +109,6 @@ if __name__ == "__main__":
             fsate.plot_map_pred_wrap(gdf_pred,
                             dir_out_viz_base, ds,
                                 metr,algo_str,
-                                split_type='analysis_str',
+                                split_type=analysis_str,
                                 colname_data='prediction')
                         

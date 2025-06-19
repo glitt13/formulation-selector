@@ -24,7 +24,7 @@ from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.metrics import mean_squared_error, r2_score
 import tempfile
 from pathlib import Path
-from fs_algo.fs_algo_train_eval import AlgoTrainEval, AttrConfigAndVars
+import fs_algo.fs_algo_train_eval as fsate
 from fs_algo import fs_algo_train_eval
 import warnings
 import xarray as xr
@@ -36,7 +36,7 @@ from sklearn.utils import resample
 from sklearn.pipeline import Pipeline
 from mapie.regression import MapieRegressor
 import yaml
-
+import shutil
 
 # %% UNIT TESTING FOR AttrConfigAndVars
 parent_dir_test = Path(__file__).parent
@@ -59,7 +59,7 @@ class TestAttrConfigAndVars(unittest.TestCase):
     def test_read_attr_config(self, mock_home, mock_file):
         print('    Testing _read_attr_config')
         path = '/path/to/config.yaml'
-        attr_obj = AttrConfigAndVars(path)
+        attr_obj = fsate.AttrConfigAndVars(path)
         attr_obj._read_attr_config()
 
         # Test if the file is opened with the correct path
@@ -398,7 +398,7 @@ class TestAlgoTrainEval(unittest.TestCase):
         }
         
         # Instantiate AlgoTrainEval class
-        self.train_eval = AlgoTrainEval(df=self.df, attrs=self.attrs, 
+        self.train_eval = fsate.AlgoTrainEval(df=self.df, attrs=self.attrs, 
                                         algo_config=self.algo_config,
                                         uncertainty=uncertainty_cfg,
                                  dir_out_alg_ds=self.dir_out_alg_ds, dataset_id=self.dataset_id,
@@ -583,7 +583,7 @@ class TestAlgoTrainEvalMlti(unittest.TestCase):
             }]
         }
 
-        self.algo_train_eval = AlgoTrainEval(df=self.df, attrs=self.attrs, algo_config=self.algo_config,
+        self.algo_train_eval = fsate.AlgoTrainEval(df=self.df, attrs=self.attrs, algo_config=self.algo_config,
                                              uncertainty=uncertainty_cfg,
                                               dir_out_alg_ds=self.dir_out_alg_ds,dataset_id=self.dataset_id,
                                               metr=self.metric, test_size=self.test_size, rs=self.rs,
@@ -715,7 +715,7 @@ class TestAlgoTrainEvalSngl(unittest.TestCase):
         self.algo_config_grid = dict()
         self.grid_search_algs=list()
 
-        self.algo_train_eval = AlgoTrainEval(
+        self.algo_train_eval = fsate.AlgoTrainEval(
             df=self.df, attrs=self.attrs, algo_config=self.algo_config, 
             uncertainty=uncertainty_cfg,
             dir_out_alg_ds=self.dir_out_alg_ds,
@@ -723,12 +723,12 @@ class TestAlgoTrainEvalSngl(unittest.TestCase):
         )
 
     @patch('fs_algo.fs_algo_train_eval.joblib.dump')
-    @patch.object(AlgoTrainEval, 'calculate_bagging_ci')
-    @patch.object(AlgoTrainEval, 'calculate_mapie')
-    @patch.object(AlgoTrainEval, 'split_data')
-    @patch.object(AlgoTrainEval, 'select_algs_grid_search')
-    @patch.object(AlgoTrainEval, 'train_algos_grid_search')
-    @patch.object(AlgoTrainEval, 'train_algos')
+    @patch.object(fsate.AlgoTrainEval, 'calculate_bagging_ci')
+    @patch.object(fsate.AlgoTrainEval, 'calculate_mapie')
+    @patch.object(fsate.AlgoTrainEval, 'split_data')
+    @patch.object(fsate.AlgoTrainEval, 'select_algs_grid_search')
+    @patch.object(fsate.AlgoTrainEval, 'train_algos_grid_search')
+    @patch.object(fsate.AlgoTrainEval, 'train_algos')
     def test_train_eval(self, mock_train_algos, mock_train_algos_grid_search,
                         mock_select_algs_grid_search, mock_split_data,
                         mock_calc_bagging_ci,mock_calc_mapie, mock_dump):
@@ -820,7 +820,7 @@ class TestAlgoTrainEvalBasic(unittest.TestCase):
             }]
         }
         
-        self.algo = AlgoTrainEval(df=self.df, attrs=self.attrs, algo_config=self.algo_config,
+        self.algo = fsate.AlgoTrainEval(df=self.df, attrs=self.attrs, algo_config=self.algo_config,
                                   uncertainty=uncertainty_cfg,
                                   dir_out_alg_ds=self.dir_out_alg_ds, dataset_id=self.dataset_id, 
                                   metr=self.metric, test_size=self.test_size, rs=self.rs, 
@@ -894,7 +894,7 @@ class TestReadMetadata(unittest.TestCase):
 
         # Use real attr_config.yaml
         path_attr_config = Path(dir_test_data, "attr_config.yaml")
-        attr_cfig = fs_algo_train_eval.AttrConfigAndVars(path_attr_config)
+        attr_cfig = fsate.AttrConfigAndVars(path_attr_config)
         
         # Patch AttrConfigAndVars and mock its instance
         with patch("fs_algo.fs_algo_train_eval.AttrConfigAndVars") as MockAttrClass:
@@ -920,3 +920,121 @@ class TestReadMetadata(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+# %% Creating Unit tests for PredConfigParser
+class TestPredConfigParser(unittest.TestCase):
+
+    def setUp(self):
+        # Create temporary directory for config files
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.test_path = Path(self.temp_dir.name)
+
+        # Create dummy dir_base and dir_std_base
+        self.dir_base = self.test_path / "base"
+        self.dir_base.mkdir()
+        self.dir_std_base = self.dir_base / "std"
+        self.dir_std_base.mkdir()
+
+        # Also create dir_db_attrs if referenced
+        self.dir_db_attrs = self.dir_base / "db_attrs"
+        self.dir_db_attrs.mkdir()
+
+        # Attribute config file
+        self.attr_config = {
+            'file_io': [
+                {'home_dir': str(self.test_path)},
+                {'dir_base': str(self.dir_base)},
+                {'dir_std_base': str(self.dir_std_base)},
+                {'dir_db_attrs': str(self.dir_db_attrs)}
+            ],
+            'formulation_metadata': [
+                {'datasets': ['test_dataset']}
+            ],
+            'attr_select': [
+                {'static_vars': ['slope', 'elevation']}
+            ]
+        }
+        
+        self.path_attr_config = self.test_path / "attr_config.yaml"
+        with open(self.path_attr_config, 'w') as f:
+            yaml.dump(self.attr_config, f)
+
+        # Prediction config file
+        self.pred_config = {
+            "name_attr_config": self.path_attr_config.name,
+            "name_algo_config": "algo.yaml",
+            "name_tfrm_config": "tfrm.yaml",
+            "path_tfrm_script": "/some/script.py",
+            "conda_env": "test_env",
+            "ds_type": "eval",
+            "write_type": "parquet",
+            "path_meta": "path/meta/{ds}",
+            "pred_file_comid_colname": "feature_id",
+            "algo_response_vars": ["runoff"],
+            "algo_type": ["rf"],
+            "MAPIE_alpha": 0.1
+        }
+        self.path_pred_config = self.test_path / "pred_config.yaml"
+        with open(self.path_pred_config, 'w') as f:
+            yaml.dump(self.pred_config, f)
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def test_read_pred_config_success(self):
+        parser = fsate.PredConfigParser(str(self.path_pred_config))
+        cfg = parser._read_pred_config()
+
+        self.assertEqual(cfg['ds_type'], 'eval')
+        self.assertEqual(cfg['write_type'], 'parquet')
+        self.assertEqual(cfg['datasets'], ['test_dataset'])
+        self.assertEqual(cfg['algo_type'], ['rf'])
+        self.assertEqual(cfg['path_pred_config'], str(self.path_pred_config))
+        self.assertEqual(cfg['dir_base'], str(self.dir_base))
+        self.assertEqual(cfg['dir_std_base'], str(self.dir_std_base))
+
+    def test_read_pred_config_missing_required(self):
+        # Remove a required field
+        del self.pred_config["write_type"]
+        with open(self.path_pred_config, 'w') as f:
+            yaml.dump(self.pred_config, f)
+
+        parser = fsate.PredConfigParser(str(self.path_pred_config))
+        with self.assertRaises(ValueError) as context:
+            parser._read_pred_config()
+        self.assertIn("Missing required keys", str(context.exception))
+
+    def test_nonexistent_pred_config_file(self):
+        parser = fsate.PredConfigParser(str(self.test_path / "nonexistent.yaml"))
+        with self.assertRaises(FileNotFoundError):
+            parser._read_pred_config()
+
+    def test_missing_dir_base_or_std(self):
+        # Delete dir_base to simulate missing directory
+        self.dir_std_base.rmdir()
+        shutil.rmtree(self.dir_base)
+
+        parser = fsate.PredConfigParser(str(self.path_pred_config))
+        with self.assertRaises(FileNotFoundError) as context:
+            parser._read_pred_config()
+        self.assertIn("Resolved dir_base path does not exist", str(context.exception))
+
+def test_build_pred_locs_path():
+    # Given
+    template = "{dir_std_base}/{ds}/pred_{ds}_{ds_type}.{write_type}"
+    dir_std_base = "/test/standardized"
+    ds = "camels"
+    ds_type = "prediction"
+    write_type = "parquet"
+
+    # When
+    result_path = fsate.build_pred_locs_path(template, dir_std_base, ds, ds_type, write_type)
+
+    # Then
+    expected = Path("/test/standardized/camels/pred_camels_prediction.parquet")
+    assert result_path == expected
+
+if __name__ == '__main__':
+    unittest.main()
+
+    
