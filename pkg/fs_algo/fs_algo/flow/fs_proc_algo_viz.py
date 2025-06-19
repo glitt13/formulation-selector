@@ -167,7 +167,8 @@ if __name__ == "__main__":
             locids_with_na_attrs = [x for x in df_attr_wide.index if x not in df_attr_wide_dropna.index]
             warnings.warn(f"Dropping {df_attr_wide.shape[0] - df_attr_wide_dropna.shape[0]} total locations from analysis \
             for correlation/PCA assessment due to NA values, reducing dataset to {df_attr_wide_dropna.shape[0]} points")
-            print(f"Locations with missing attribute data include:\n{'\n'.join(locids_with_na_attrs)}")
+            missing_locs_str = '\n'.join(locids_with_na_attrs)
+            print(f"Locations with missing attribute data include:\n{missing_locs_str}")
             frac_na = (df_attr_wide.shape[0] - df_attr_wide_dropna.shape[0])/df_attr_wide.shape[0]
             if frac_na > 0.1:
                 raise UserWarning(f"!!!!{np.round(frac_na*100,1)}%  of data are NA values and will be discarded before training/testing!!!!")
