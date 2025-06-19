@@ -17,7 +17,7 @@ retrieve_attr_exst <- function(comids, vars, dir_db_attrs, bucket_conn=NA){
   #' more data are needed, acquire attribute data acquisition using proc_attr_wrap().
   #' Runs checks on input arguments and retrieved contents, generating warnings
   #' if requested comids and/or variables were completely absent from the dataset
-  #' @param comids character class. The comids of interest.
+  #' @param comids character class. The comids/hf_uids/etc. of interest.
   #' @param vars character class. The attribute variables of interest.
   #' @param dir_db_attrs character class. The path where data
   #' @param bucket_conn Default NA. Placeholder in case a bucket connection is
