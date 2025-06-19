@@ -1248,7 +1248,7 @@ retr_attr_new <- function(locids,need_vars,paths_ha){
 
 std_path_attrs <- function(comid, dir_db_attrs){
   #' @title standardized path to attribute parquet file
-  #' @param comid character. USGS COMID value of interest
+  #' @param comid character. USGS COMID/hf_uid/etc. value of interest
   #' @param dir_db_attrs character. Directory where attribute .parquet files live
   #' @seealso \link[proc.attr.hydfab]{proc_attr_wrap}
   #' @seealso `fs_algo.fs_algo_train_eval.fs_read_attr_comid()` python function
@@ -1424,7 +1424,7 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
   #' Note a refactor needed with \link[proc.attr.hydfab]{proc_attr_exst_wrap} if
   #' we want to be more efficient with retrieving only the needed variables as
   #' defined in Retr_Params$vars
-  #' @param comids list of character. The common identifier USGS location codes for surface water features.
+  #' @param comids list of character. The common identifier USGS location codes/hf_uid/etc. for surface water features.
   #' @param Retr_Params list. List of list structure with parameters/paths needed to acquire variables of interest
   #' @param lyrs character. The layer names of interest from the hydrofabric gpkg. Default 'network'
   #' @param overwrite boolean. Should the hydrofabric cloud data acquisition be redone and overwrite any local files? Default FALSE.
@@ -2043,7 +2043,8 @@ read_loc_data <- function(loc_id_filepath, loc_id, fmt = 'csv'){
   #' @export
   # Changelog / contributions
   #  2024-08-09 Originally created
-
+  # TODO 2025-06-19 adapt this function to handle different featureIDs owing to
+  #.  multiple featureSources
   if (!base::is.null(loc_id_filepath)){
     # Figure out the colnames of everything in the dataset.
     cols <- arrow::open_dataset(loc_id_filepath, format = fmt) %>% base::colnames()
@@ -2225,6 +2226,8 @@ grab_attrs_datasets_fs_wrap <- function(Retr_Params,lyrs="network",overwrite=FAL
   if (!base::is.null(Retr_Params$loc_id_read$loc_id_filepath)){
     # NOTE 2024-10-25: this feature hasn't been fully developed and may be ignored
     # Generate list of identifiers
+    # TODO 2025-06-19 adapt this section to handle different featureIDs owing to
+    #.  multiple featureSources
     dat_loc <- proc.attr.hydfab::read_loc_data(Retr_Params$loc_id_read$loc_id_filepath,
                                                Retr_Params$loc_id_read$gage_id,
                                                fmt = Retr_Params$loc_id_read$fmt)
