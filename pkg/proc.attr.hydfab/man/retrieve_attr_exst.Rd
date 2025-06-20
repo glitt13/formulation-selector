@@ -9,7 +9,7 @@ retrieve_attr_exst(comids, vars, dir_db_attrs, bucket_conn = NA)
 retrieve_attr_exst(comids, vars, dir_db_attrs, bucket_conn = NA)
 }
 \arguments{
-\item{comids}{character class. The comids of interest.}
+\item{comids}{character class. The comids/hf_uids/etc. of interest.}
 
 \item{vars}{character class. The attribute variables of interest.}
 
