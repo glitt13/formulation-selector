@@ -5,12 +5,15 @@
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
-
+import os
+import sys
+sys.path.insert(0,os.path.abspath('fs_algo/'))
+from fs_algo import __version__ as version
 
 project = 'Formulation Selector Algorithms'
 copyright = '2024, Guy Litt'
-author = 'Guy Litt'
-release = "0.0.4"
+author = 'Guy Litt, Soroush Sorourian, Lauren Bolotin, Ben Choat'
+release = version
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
