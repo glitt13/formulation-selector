@@ -2592,6 +2592,8 @@ def plot_map_pred_wrap(test_gdf,dir_out_viz_base, ds,
     dir_out_basemap = path_pred_map_plot.parent.parent
     states = gen_conus_basemap(dir_out_basemap = dir_out_basemap)
 
+    # TODO add option to print oconus basemap
+
     # Ensure the gdf matches the 4326 epsg used for states:
     test_gdf = test_gdf.to_crs(4326)
 
