@@ -14,7 +14,7 @@ proc_attr_mlti_wrap(
 )
 }
 \arguments{
-\item{comids}{list of character. The common identifier USGS location codes for surface water features.}
+\item{comids}{list of character. The common identifier USGS location codes/hf_uid/etc. for surface water features.}
 
 \item{Retr_Params}{list. List of list structure with parameters/paths needed to acquire variables of interest}
 

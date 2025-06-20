@@ -7,7 +7,7 @@
 std_path_attrs(comid, dir_db_attrs)
 }
 \arguments{
-\item{comid}{character. USGS COMID value of interest}
+\item{comid}{character. USGS COMID/hf_uid/etc. value of interest}
 
 \item{dir_db_attrs}{character. Directory where attribute .parquet files live}
 }
