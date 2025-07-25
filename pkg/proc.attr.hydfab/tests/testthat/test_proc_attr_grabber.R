@@ -607,20 +607,55 @@ testthat::test_that('retrieve_attr_exst', {
 
 
 
+testthat::test_that("gen_ds_gpkg reads and subsets geopackage correctly", {
+  # Path to mock gpkg file in package inst/extdata
+  dir_db_gpkg = system.file("extdata/gpkg_dat",package="proc.attr.hydfab")
+  gpkg_path <- base::file.path(dir_db_gpkg,"all_locs.gpkg")
+
+  # Check that the test file exists
+  testthat::expect_true(file.exists(gpkg_path))
+
+  # Read in actual test gpkg so we can extract known gage_ids for test
+  sf_all <- sf::st_read(gpkg_path, quiet = TRUE)
+  test_ids <- sf_all$gage_id[1:2] # Use a couple known gage_ids for test
+
+  path_ds_gpkg <- file.path(temp_dir,"dataset.gpkg")
+  if(file.exists(path_ds_gpkg)){ # Extra sure file doesn't exist
+    file.remove(path_ds_gpkg)
+  }
+
+  proc.attr.hydfab::gen_ds_gpkg(dir_db_gpkg = dir_db_gpkg,
+                                path_save_gpkg = path_ds_gpkg,
+                                gage_ids=test_ids)
+
+  testthat::expect_true(base::file.exists(path_ds_gpkg))
+
+  sf_ds <- sf::read_sf(path_ds_gpkg, layer='outlet')
+
+  # Check that only matching gage_ids were written
+  testthat::expect_true(all(sf_ds$gage_id %in% test_ids))
+
+  # REMOVE the file that was just created
+  path_ds_gpkg <- file.path(temp_dir,"dataset.gpkg")
+  if(file.exists(path_ds_gpkg)){
+    file.remove(path_ds_gpkg)
+  }
+
+})
 
 
 testthat::test_that("grab_attrs_datasets_fs_wrap", {
   # COPY retrieve params stored in package into temp dir for standard processing
   dir_attrs_pah <- file.path(Retr_Params$paths$dir_std_base,'../attributes_pah/')
   fs::dir_copy(dir_attrs_pah, Retr_Params$paths$dir_db_attrs,overwrite = TRUE)
-
+  Retr_Params$paths$dir_db_gpkg <- file.path(Retr_Params$paths$dir_std_base,'../gpkg_dat/')
   arrow::open_dataset(dir_attrs_pah) %>% names()
 
   # Mock `path_save_gpkg` inside `save_to_gpkg`
   mock_path_save_gpkg <- file.path(temp_dir,"unit_test.gpkg")
   mockery::stub(grab_attrs_datasets_fs_wrap, "path_save_gpkg", mock_path_save_gpkg)
 
-
+  # mockery::stub(gen_ds_gpkg,"new_loc_db",TRUE)
   ls_comids_all <- proc.attr.hydfab::grab_attrs_datasets_fs_wrap(Retr_Params,
                                                                lyrs="network",
                                                                overwrite=FALSE) %>%

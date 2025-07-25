@@ -29,7 +29,6 @@ library(future.apply)
 #. 2024 originally created, GL
 
 # TODO add path_save_gpkg_custom to parsing in Retr_Params?? ...or as an argument in this fs_attrs_grab.R
-# TODO is AWS_NO_SIGN_REQUEST necessary??
 # Sys.setenv(AWS_NO_SIGN_REQUEST="YES")
 
 # Define command line argument
