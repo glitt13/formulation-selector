@@ -7,7 +7,7 @@ dependencies:
   - duecredit
   - geopandas
   - joblib
-  - mapie
+  - mapie==0.9.2
   - matplotlib
   - multidict
   - netCDF4
@@ -28,4 +28,4 @@ dependencies:
   - pip:
       - forestci==0.7
       - -e ../pkg/fs_prep
-      - -e ../pkg/fs_proc
+      - -e ../pkg/fs_algo
