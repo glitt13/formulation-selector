@@ -40,7 +40,7 @@ if __name__ == "__main__":
     parser.add_argument('path_tfrm_cfig', type=str, help='Path to the YAML configuration file specific for algorithm training')
     args = parser.parse_args()
 
-    path_tfrm_cfig = Path(args.path_tfrm_cfig)#path_tfrm_cfig = Path(f'~/git/formulation-selector/scripts/workflow_configs/legacy/xssa/xssa_attrs_tform.yaml') 
+    path_tfrm_cfig = Path(args.path_tfrm_cfig).expanduser()#path_tfrm_cfig = Path(f'~/git/formulation-selector/scripts/workflow_configs/legacy/xssa/xssa_attrs_tform.yaml') 
 
     with open(path_tfrm_cfig, 'r') as file:
         tfrm_cfg = yaml.safe_load(file)

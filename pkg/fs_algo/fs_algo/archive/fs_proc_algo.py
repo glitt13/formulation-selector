@@ -23,42 +23,37 @@ if __name__ == "__main__":
 
     path_algo_config = Path(args.path_algo_config) #Path(f'~/git/formulation-selector/scripts/workflow_configs/legacy/xssa/xssa_algo_config.yaml') 
 
-    with open(path_algo_config, 'r') as file:
-        algo_cfg = yaml.safe_load(file)
+    # Initialize algo configuration class for extracting attributes
+    algo_cfig = fsate.AlgoConfigParser(path_algo_config)
+    algo_cfig._read_algo_config()
+
+    # Extract variables from dictionary created by AlgoConfigParser
+    algo_config = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["algo_config"]
     
-    # Ensure the string literal is converted to a tuple for `hidden_layer_sizes`
-    algo_config = {k: algo_cfg['algorithms'][k] for k in algo_cfg['algorithms']}
-    if algo_config['mlp'][0].get('hidden_layer_sizes',None): # purpose: evaluate string literal to a tuple
-        algo_config['mlp'][0]['hidden_layer_sizes'] = ast.literal_eval(algo_config['mlp'][0]['hidden_layer_sizes'])
+    # Generate variable algo_config_og
     algo_config_og = algo_config.copy()
 
-    verbose = algo_cfg['verbose']
-    test_size = algo_cfg['test_size']
-    seed = algo_cfg['seed']
-    read_type = algo_cfg.get('read_type','all') # Arg for how to read attribute data using comids in fs_read_attr_comid(). May be 'all' or 'filename'.
-    confidence_levels = algo_cfg.get('confidence_levels',95)
-    
-    uncertainty_cfg = algo_cfg.get('uncertainty', {})
+    verbose = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["verbose"]
+    test_size = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["test_size"]
+    seed = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["seed"]
+    read_type = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["read_type"] # Arg for how to read attribute data using comids in fs_read_attr_comid(). May be 'all' or 'filename'.
+    uncertainty_cfg = algo_cfig.algo_cfg_unc_dict["algo_unc_dict"]["uncertainty_cfg"]
+    confidence_levels = algo_cfig.algo_cfg_unc_dict["algo_unc_dict"]["uncertainty_cfg"].get("confidence_levels")
 
     #%% Attribute configuration
-    name_attr_config = algo_cfg.get('name_attr_config', Path(path_algo_config).name.replace('algo','attr')) 
-    path_attr_config = fsate.build_cfig_path(path_algo_config, name_attr_config)
+    path_attr_config = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["path_attr_config"]
     
-    if not Path(path_attr_config).exists():
-        raise ValueError(f"Ensure that 'name_attr_config' as defined inside {path_algo_config.name} \
-                          \n is also in the same directory as the algo config file {path_algo_config.parent}" )
     print("BEGINNING algorithm training, testing, & evaluation.")
 
     # Initialize attribute configuration class for extracting attributes
     attr_cfig = fsate.AttrConfigAndVars(path_attr_config)
     attr_cfig._read_attr_config()
 
-
-
     # Grab the attributes of interest from the attribute config file,
     #  OR a .csv file if specified in the algo config file.
-    name_attr_csv = algo_cfg.get('name_attr_csv')
-    colname_attr_csv = algo_cfg.get('colname_attr_csv')
+    name_attr_csv = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["name_attr_csv"]
+    colname_attr_csv = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["colname_attr_csv"]
+
     attrs_sel = fsate._id_attrs_sel_wrap(attr_cfig=attr_cfig,
                     path_cfig=path_attr_config,
                     name_attr_csv = name_attr_csv,

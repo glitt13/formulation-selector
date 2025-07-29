@@ -26,7 +26,7 @@ if __name__ == "__main__":
     # NOTE pred_config should contain the path for path_algo_config
     args = parser.parse_args()
 
-    path_pred_config = Path(args.path_pred_config) #Path(f'~/git/formulation-selector/scripts/workflow_configs/legacy/xssangencerf/xssangencerf_pred_config.yaml') 
+    path_pred_config = Path(args.path_pred_config).expanduser() #Path(f'~/git/formulation-selector/scripts/workflow_configs/legacy/xssangencerf/xssangencerf_pred_config.yaml') 
     analysis_str = args.analysis_str
 
     pred_cfg = fsate.PredConfigParser(path_pred_config)
@@ -47,24 +47,20 @@ if __name__ == "__main__":
     path_attr_config = fsate.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_attr_config',None))
     path_algo_config = fsate.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_algo_config'))
 
-    with open(path_algo_config, 'r') as file:
-        algo_cfg = yaml.safe_load(file)
-    # Ensure the string literal is converted to a tuple for `hidden_layer_sizes`
-    algo_config = algo_cfg.get('algorithms')
-    if algo_config['mlp'][0].get('hidden_layer_sizes',None): # purpose: evaluate string literal to a tuple
-        algo_config['mlp'][0]['hidden_layer_sizes'] = ast.literal_eval(algo_config['mlp'][0]['hidden_layer_sizes'])
+    # Initialize algo configuration class for extracting attributes
+    algo_cfig = fsate.AlgoConfigParser(path_algo_config)
+    algo_cfig._read_algo_config()
+
+    # Extract variables from dictionary created by AlgoConfigParser
+    algo_config = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["algo_config"]
+    
+    # Generate variable algo_config_og
     algo_config_og = algo_config.copy()
 
-    metrics = algo_cfg.get('metrics',None)
-
-    name_attr_config = algo_cfg.get('name_attr_config', Path(path_algo_config).name.replace('algo','attr')) 
-    path_attr_config = fsate.build_cfig_path(path_algo_config, name_attr_config)
+    metrics = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["metrics"]
 
     attr_cfig = fsate.AttrConfigAndVars(path_attr_config)
     attr_cfig._read_attr_config()
-
-
-
 
     dir_base = attr_cfig.attrs_cfg_dict.get('dir_base')
     dir_std_base = attr_cfig.attrs_cfg_dict.get('dir_std_base')

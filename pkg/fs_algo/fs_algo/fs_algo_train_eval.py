@@ -5,6 +5,7 @@ from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.preprocessing import StandardScaler, FunctionTransformer
 from sklearn.pipeline import make_pipeline, Pipeline
 from sklearn.model_selection import GridSearchCV,learning_curve
+import inspect
 import numpy as np
 import pandas as pd
 import xarray as xr
@@ -39,7 +40,189 @@ import random
 import scipy.stats as st
 import pyarrow as pa
 import pyarrow.dataset as ds
+import ast
 
+# %% ALGO CONFIG FILE PARSER
+class AlgoConfigParser:
+    ## Initialize a new instance of the class AlgoConfigParser
+    def __init__(self, path_algo_config: str | os.PathLike):
+        self.path_algo_config = path_algo_config
+        self.algo_cfg_unc_dict = dict()
+
+    ## Define a function to read algo configuration parameters from the YAML config file
+    def _read_algo_config(self ) -> dict:
+        """A function that extracts parameters for the algorith and uncertainty from yaml configuration file.
+        
+        :param path_algo_config: Full path (folder and name of file) of algorithm config file
+        :type path_algo_config: str | os.PathLike
+        Returns a dictionary with two dictionaries containing parameter values.
+            :param algorithms: Selected algorithm(s), refer to AlgoTrainEval.train_algos to see what options are present (e.g. rf, mlp)
+            :type algorithms: string
+                :param rf: Random Forest algorithm
+                :type rf: string, OPTIONAL, STRONGLY RECOMMENDED
+                    :Additional rf parameters can be included, refer to sklearn.ensemble.RandomForestRegressor for arguments to pass here - otherwise defaults will be used
+                :param mlp: Multi-layer Perceptron Regressor Algorithm
+                :type mlp: string, OPTIONAL
+                    :Additional mlp parameters can be included, refer to sklearn.neural_network.MLPRegressor for arguments to pass here - otherwise defaults will be used
+            :param test_size: The proportion of dataset to be used for testing, defaults to 0.3. All values should be between 0 and 1.
+            :type test_size:  float
+            :param seed: The starting point for the random number generator, defaults to 32
+            :type seed: int
+            :param read_type: 'filename' # Optional. Recommend 'filename' for faster data loading. Should all parquet files be lazy-loaded, assign 'all'. Otherwise just files with comids_resp in the file name? assign 'filename'.
+            :param read_type: OPTIONAL. All parquet files loaded, assign 'all'. Just files with comids_resp in the filename, assign 'filename'. Defaults to 'all'
+            :type read_type: str
+            :param metrics: OPTIONAL. The metrics (hydraulic signature identifier) of interest for processing.
+            Defaults to 'all', all metrics in the input dataset will be processed
+            :type metrics: ??sublist structure??
+            :param make_plots: If True plots are created & saved to file. Defaults to False
+            :type make_plots: bool, OPTIONAL
+            :param same_test_ids: Are all datasets being compared required to have the same test ID? If False, algos will be trained true to the test_size, 
+            but the train_test split may not be the same across each dataset (particularly total basins differ). Defaults to True
+            :type same_test_ids: bool, OPTIONAL
+            :param verbose: Should the train/test/eval provide printouts on progress? Defaults to True.
+            :type verbose: bool, OPTIONAL
+            :param uncertainty_cfg: Uncertainty analyses to be run. Defaults to "{}"
+            :type uncertainty_cfg: str, OPTIONAL
+                :param confidence_levels: Confidence levels for confidence interval calculations.  
+                :type confidence_levels: list, OPTIONAL, REQUIRED if a value was read for n_algos
+                :param forestci: Applies forestci to estimate confidence intervals for the model training based on the variance of predictions from 
+                trees in the random forest model. For more details, see: https://github.com/scikit-learn-contrib/forest-confidence-interval
+                :type forestci: str, OPTIONAL
+                    :param fci_flag: If True use Forestci model to calculate confidence interval for rf model
+                    :type fci_flag: bool
+                :param bagging: Enables bootstrap aggregating (bagging) to calculate confidence intervals during the model training 
+                by training multiple models on resampled data. More broadly applicable than forestci.
+                :type bagging: str, OPTIONAL
+                    :param n_algos: Number of bootstrap runs for Bagging confidence interval calculation (integer). 
+                    Bagging ci calculation is disabled if n_algos is empty
+                    :type n_algos: int, OPTIONAL
+                :param mapie: Applies the MAPIE (Model Agnostic Prediction Interval Estimator) framework to estimate **prediction intervals**, 
+                which provide bounds around individual predicted values. Supports many model types
+                See documentation for details: https://mapie.readthedocs.io/en/stable/index.html
+                :type mapie: str, OPTIONAL
+                    :param alpha: Alpha parameter (0 < α < 1) in an array format to calculate MAPIE prediction intervals
+                    :type alpha: list, OPTIONAL, MAPIE prediction interval estimation will be enabled if not empty
+                    :param method: MAPIE method: 'plus' (CV+) or 'minmax' (CV-minmax). For more information and other methods, refer to:
+                    https://mapie.readthedocs.io/en/stable/theoretical_description_regression.html
+                    :type method: str, OPTIONAL, but REQUIRED if MAPIE_alpha provided
+                    :param cv: Specifies the number of cross-validation folds
+                    :type cv: str, OPTIONAL, but REQUIRED if MAPIE_alpha provided
+                    :param agg_function: Option selection, either 'mean' or 'median'
+                    :type agg_function: str, OPTIONAL, but REQUIRED if MAPIE_alpha provided
+        :return: Dictionary of algorithm input parameters, required and optional
+
+        # Changelog/contributions
+        #  2025-07-29 - Converted fs_proc_algo_viz.py config file read section to function, Justin Clark
+        """
+        if not Path(self.path_algo_config).exists():
+            raise ValueError(f"Ensure that algo config file is defined" )
+        
+        with open(self.path_algo_config, 'r') as file:
+            algo_cfg = yaml.safe_load(file)
+
+        # Algorithm selection and parameters
+        algo_config = algo_cfg.get('algorithms')
+        if algo_config is None:
+            raise KeyError("Missing required 'algorithms' section in YAML config.")
+
+        # Ensure the string literal is converted to a tuple for `hidden_layer_sizes`
+        if algo_config.get('mlp',None):
+            if algo_config['mlp'][0].get('hidden_layer_sizes',None): # purpose: evaluate string literal to a tuple
+                algo_config['mlp'][0]['hidden_layer_sizes'] = ast.literal_eval(algo_config['mlp'][0]['hidden_layer_sizes'])
+
+        # Use the signature of AlgoTrainEval for default values
+        sig = inspect.signature(AlgoTrainEval.__init__)   
+        # Generate dictionary "algo_cfg_dict" with primary training parameters
+        algo_cfg_dict = {'algo_config' : algo_config,
+                            'test_size': algo_cfg.get('test_size', sig.parameters['test_size'].default),        # Must be between 0 and 1
+                            'seed': algo_cfg.get('seed', sig.parameters['rs'].default),
+                            'read_type': algo_cfg.get('read_type', 'filename'), #DEFAULT to 'filename'
+                            'metrics': algo_cfg.get('metrics', None),
+                            'make_plots': algo_cfg.get('make_plots', False),
+                            'same_test_ids': algo_cfg.get('same_test_ids', True),
+                            'verbose': algo_cfg.get('verbose', True),
+                            'name_attr_config': algo_cfg.get('name_attr_config', Path(self.path_algo_config).name.replace('algo', 'attr')),
+                            'name_attr_csv': algo_cfg.get('name_attr_csv',None),
+                            'colname_attr_csv': algo_cfg.get('colname_attr_csv',None)
+                            }
+        
+        algo_cfg_dict['path_attr_config'] = build_cfig_path(self.path_algo_config, algo_cfg_dict['name_attr_config'])
+
+        if not algo_cfg_dict['path_attr_config'].exists():
+            raise ValueError(f"Ensure that 'name_attr_config' as defined inside {self.path_algo_config.name} \
+                              \n is also in the same directory as the algo config file {self.path_algo_config.parent}" )
+
+        # Type checks for common required parameters
+        if not isinstance(algo_cfg_dict['test_size'], (float, int)):
+            raise TypeError(f"'test_size' must be a float. Got: {type(algo_cfg_dict['test_size'])}")
+        if not (0 < algo_cfg_dict['test_size'] < 1):
+            raise ValueError(f"'test_size' must be between 0 and 1. Got: {algo_cfg_dict['test_size']}")
+        if not isinstance(algo_cfg_dict['seed'], int):
+            raise TypeError(f"'seed' must be an integer. Got: {type(algo_cfg_dict['seed'])}")
+        if not isinstance(algo_cfg_dict['read_type'], str):
+            raise TypeError(f"'read_type' must be a string. Got: {type(algo_cfg_dict['read_type'])}")
+        if algo_cfg_dict['read_type'] not in ['all', 'filename']:
+            raise ValueError(f"'read_type' must be either 'all' or 'filename'. Got: {algo_cfg_dict['read_type']}")
+        if not isinstance(algo_cfg_dict['make_plots'], bool):
+            raise TypeError(f"'make_plots' must be a boolean. Got: {type(algo_cfg_dict['make_plots'])}")
+        if not isinstance(algo_cfg_dict['same_test_ids'], bool):
+            raise TypeError(f"'same_test_ids' must be a boolean. Got: {type(algo_cfg_dict['same_test_ids'])}")
+        if not isinstance(algo_cfg_dict['verbose'], bool):
+            raise TypeError(f"'verbose' must be a boolean. Got: {type(algo_cfg_dict['verbose'])}")
+        
+        
+
+        # Generate dictionary "algo_unc_dict" with uncertainty parameters
+        algo_unc_dict = {'uncertainty_cfg': algo_cfg.get("uncertainty", {})}
+
+        if not isinstance(algo_unc_dict["uncertainty_cfg"], dict):
+            raise TypeError("The 'uncertainty' block must be a dictionary")
+
+
+        # Generate dictionary with combined training and uncertainty parameters
+        self.algo_cfg_unc_dict = {
+            'algo_cfg_dict': algo_cfg_dict,
+            'algo_unc_dict': algo_unc_dict}
+
+        # Get uncertainty configuration
+        uncertainty_cfg = self.algo_cfg_unc_dict["algo_unc_dict"]["uncertainty_cfg"]
+
+        # Error check for confidence levels data type, and use function default if not provided
+        confidence_levels = uncertainty_cfg.get("confidence_levels", sig.parameters['confidence_levels'].default)
+        # Update the algo_cfg & class object just-in-case
+        self.algo_cfg_unc_dict["algo_unc_dict"]["uncertainty_cfg"]['confidence_levels'] = confidence_levels
+        if not isinstance(confidence_levels, list):
+            raise TypeError(f"'confidence_levels' must be a list of numeric values (e.g., [90, 95]). Got: {type(confidence_levels).__name__}")
+        for level in confidence_levels:
+                if not isinstance(level, (int, float)) or not (0 < level <= 100):
+                    raise ValueError(f"Each 'confidence_levels' entry must be a number between 0 and 100. Got: {level}")
+
+        # Validate MAPIE parameters if provided
+        mapie_cfg = uncertainty_cfg.get("mapie")
+        if mapie_cfg:
+            # Flatten the list of dicts into one dictionary
+            mapie_params = {k: v for d in mapie_cfg for k, v in d.items()}
+
+            # Check A. If 'alpha' is provided, check that it is a list of floats between 0 and 1
+            alpha = mapie_params.get("alpha")
+            if alpha is not None:
+                if not isinstance(alpha, list) or not all(isinstance(a, float) and 0 < a < 1 for a in alpha):
+                    raise ValueError(f"'alpha' in MAPIE must be a list of floats between 0 and 1. Got: {alpha}")
+
+                # Check B. If alpha is provided, 'method' must be 'plus' or 'minmax'
+                method = mapie_params.get("method")
+                if method not in ["plus", "minmax"]:
+                    raise ValueError(f"If 'alpha' is provided, 'method' must be 'plus' or 'minmax'. Got: {method}")
+
+                # Check C. If alpha is provided, 'cv' must also be defined and an int
+                cv = mapie_params.get("cv")
+                if not isinstance(cv, int):
+                    raise TypeError(f"If 'alpha' is provided, 'cv' must also be defined and must be an integer. Got: {cv}")
+
+                # Check D. If alpha is provided, 'agg_function' must be 'mean' or 'median'
+                agg_function = mapie_params.get("agg_function")
+                if agg_function not in ["mean", "median"]:
+                    raise ValueError(f"If 'alpha' is provided, 'agg_function' must be 'mean' or 'median'. Got: {agg_function}")
 
 # %% BASIN ATTRIBUTES (PREDICTORS) & RESPONSE VARIABLES (e.g. METRICS)
 class AttrConfigAndVars:
@@ -60,6 +243,9 @@ class AttrConfigAndVars:
             - `datasets`: dataset names, `list[str]`
         :rtype: dict
         """
+
+        if not Path(self.path_attr_config).exists():
+            raise ValueError(f"Attribute config path does not exist")
 
         # Attribute data location:
         with open(self.path_attr_config, 'r') as file:
@@ -219,9 +405,7 @@ class PredConfigParser:
             'pred_file_comid_colname': pred_file_comid_colname,
             'mapie_alpha': mapie_alpha,
             'path_pred_config': self.path_pred_config,
-        }
-
-        return self.pred_cfg_dict    
+        }   
     
 def _define_home_dir(attr_config:dict) -> os.PathLike:
     """Define the home directory of this system
@@ -243,6 +427,7 @@ def _define_home_dir(attr_config:dict) -> os.PathLike:
         home_dir = str(Path.home())
     else:
         home_dir = home_dir_read[0]
+    home_dir = Path(home_dir).expanduser()
     return home_dir        
 
 
@@ -1168,7 +1353,7 @@ class AlgoTrainEval:
             If no parameters keys are passed, the :mod:`sklearn` algorithm's default arguments are used.
         :type algo_config: dict
         :param uncertainty: The uncertainty as read from the uncertainty yaml where each key is the uncertainty that will be run. Presently allowable keys include:
-            - `fci`:  :dict:Forestci uncertainty. Only if 'rf' algorithm is selected.
+            - `fci_flag`:  :dict:Forestci uncertainty. Only if 'rf' algorithm is selected.
             - `bagging`:  :dict:Configuration dictionary for Bagging-based confidence interval uncertainty estimation. Works for both `rf` and `mlp` algorithms.
             - `mapie`:  :dict:Configuration dictionary for MAPIE prediction interval estimation. Works for both `rf` and `mlp` algorithms.
             Each method contains sub-dict keys for the parameters that may be passed to the corresponding method.
@@ -1715,7 +1900,7 @@ class AlgoTrainEval:
                 
             # Check if forestci is enabled in self.uncertainty
             forestci_enabled = any(
-                d.get('forestci', False) for d in self.uncertainty.get('fci', [])
+                d.get('fci_flag', False) for d in self.uncertainty.get('forestfci', [])
             )
             # Compute forestci uncertainty with the best RF model
             if forestci_enabled:

@@ -31,10 +31,11 @@ from sklearn.model_selection import train_test_split
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = 'process the prediction config file')
     parser.add_argument('path_pred_config', type=str, help='Path to the YAML configuration file specific for prediction.')
+    #parser.add_argument('path_algo_config', type=str, help='Path to the YAML configuration file specific for algorithm training')
     # NOTE pred_config should contain the path for path_algo_config
     args = parser.parse_args()
 
-    path_pred_config = Path(args.path_pred_config) # Path(f'~/git/formulation-selector/scripts/workflow_configs/legacy/xssa/xssa_pred_config.yaml') 
+    path_pred_config = Path(args.path_pred_config).expanduser() # Path(f'~/git/formulation-selector/scripts/workflow_configs/legacy/xssa/xssa_pred_config.yaml') 
     pred_cfg = fsate.PredConfigParser(path_pred_config)
     pred_cfg._read_pred_config()
 
@@ -50,18 +51,19 @@ if __name__ == "__main__":
     dir_db_attrs = attr_cfig.attrs_cfg_dict.get('dir_db_attrs')
     datasets = attr_cfig.attrs_cfg_dict.get('datasets') # Identify datasets of interest
 
-    # Grab the attributes used for training - from the attribute config file,
-    #  OR a .csv file. Whatever is specified in the algo config file.
-    with open(path_algo_config, 'r') as file:
-        algo_cfg = yaml.safe_load(file)
-    name_attr_csv = algo_cfg.get('name_attr_csv',None)
-    colname_attr_csv = algo_cfg.get('colname_attr_csv',None)
+    # Initialize algo configuration class for extracting attributes
+    algo_cfig = fsate.AlgoConfigParser(path_algo_config)
+    algo_cfig._read_algo_config()
+
+    name_attr_csv = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["name_attr_csv"]
+    colname_attr_csv = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["colname_attr_csv"]
+
     # Determine whether random forest confidence intervals computed during model training:
-    fci_flag = algo_cfg.get('uncertainty',{}).get('fci',{})
-    if len(fci_flag)>0:
-        forestci = fci_flag[0].get('forestci',False)
+    forestci = algo_cfig.algo_cfg_unc_dict["algo_unc_dict"]["uncertainty_cfg"].get('forestci',{})
+    if len(forestci)>0:
+        fci_flag = forestci[0].get('fci_flag',False)
     else:
-        forestci = False
+        fci_flag = False
     # Attributes needed for prediction:
     attrs_sel = fsate._id_attrs_sel_wrap(attr_cfig=attr_cfig,
                     path_cfig=path_attr_config,
@@ -138,8 +140,9 @@ if __name__ == "__main__":
                 if df_attr_sub_rmna.shape[0] < df_attr_sub.shape[0]:
 
                     ids_na = set(df_attr_sub.index) - set(df_attr_sub_rmna.index)
+                    text_join = '\n'.join(ids_na)
                     msg_rm_na = f"Removing the following featureIDs from prediction due " + \
-                     f"to NA values:\n{'\n'.join(ids_na)}"
+                     f"to NA values:\n{text_join}"
                     warnings.warn(msg_rm_na)
 
                 # Perform prediction

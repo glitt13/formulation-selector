@@ -3,7 +3,7 @@ Unit testing for AlgoTrainEval class in the fs_algo package
 
 example
 > cd /path/to/fs_algo/fs_algo/tests/
-> python -m unittest test_algo_train_eval.py
+> python -m unittest test_algo_train_eval
 
 > coverage run -m unittest test_algo_train_eval.py  
 > coverage report
@@ -58,7 +58,7 @@ class TestAttrConfigAndVars(unittest.TestCase):
     @patch('pathlib.Path.home', return_value='/mocked/home')
     def test_read_attr_config(self, mock_home, mock_file):
         print('    Testing _read_attr_config')
-        path = '/path/to/config.yaml'
+        path = Path(dir_test_data / 'attr_config.yaml')
         attr_obj = fsate.AttrConfigAndVars(path)
         attr_obj._read_attr_config()
 
@@ -67,24 +67,19 @@ class TestAttrConfigAndVars(unittest.TestCase):
 
         # Test if Path.home() was called
         mock_home.assert_called()
-
+        print(attr_obj.attrs_cfg_dict)
         # Test the parsed data from the config
         expected_attrs_cfg_dict = {
             'attrs_sel': ['attr1', 'attr2', 'attr3'],
             'dir_db_attrs': '/mocked/home/base_dir/db_attrs',
             'dir_std_base': '/mocked/home/base_dir/std_base',
             'dir_base': '/mocked/home/base_dir',
-            'home_dir': '/mocked/home',
+            'home_dir': Path('/mocked/home'),
             'datasets': ['dataset1', 'dataset2']
         }
            
         self.assertEqual(attr_obj.attrs_cfg_dict, expected_attrs_cfg_dict)
         print("✅ test_read_attr_config test passed.")
-import unittest
-from unittest.mock import patch
-import pandas as pd
-import dask.dataframe as dd
-import os
 
 class TestFsReadAttrComid(unittest.TestCase):   
     @patch('fs_algo.fs_algo_train_eval.dd.read_parquet')
@@ -144,6 +139,79 @@ class TestFsReadAttrComid(unittest.TestCase):
                                             comids_resp= comids_resp,
                                             attrs_sel= ['nonexistent'])
         print("✅ fs_read_attr_comid single-row test passed.")
+
+# %% UNIT TESTING FOR AlgoConfigParser
+class TestAlgoConfigParser(unittest.TestCase):
+    print("Testing AlgoConfigParser")
+
+    def setUp(self):
+        self.test_data_dir = dir_test_data
+
+    def load_yaml(self, filename):
+        filepath = self.test_data_dir / filename
+        with open(filepath, "r") as f:
+            return yaml.safe_load(f), filepath
+
+    def test_01_no_uncertainty_defaults(self):
+        _, filepath = self.load_yaml("test_algo_config_01_nouncertainty.yaml")
+        config = fsate.AlgoConfigParser(filepath)
+        config._read_algo_config()
+        self.assertIsInstance(config.algo_cfg_unc_dict, dict)
+        self.assertIn("algo_cfg_dict", config.algo_cfg_unc_dict)
+        print("Completed Test AlgoConfig parsing - YAML file #1")
+
+    def test_02_uncertainty_defaults(self):
+        _, filepath = self.load_yaml("test_algo_config_02_uncertainty.yaml")
+        config = fsate.AlgoConfigParser(filepath)
+        config._read_algo_config()
+        self.assertIn("mapie", config.algo_cfg_unc_dict["algo_unc_dict"]["uncertainty_cfg"])
+        print("Completed Test AlgoConfig parsing - YAML file #2")
+
+
+    def test_03_uncertainty_params_custom(self):
+        _, filepath = self.load_yaml("test_algo_config_03_uncertainty_nodefaults.yaml")
+        config = fsate.AlgoConfigParser(filepath)
+        config._read_algo_config()
+
+        self.assertIn("algo_unc_dict", config.algo_cfg_unc_dict)
+        self.assertIn("uncertainty_cfg", config.algo_cfg_unc_dict["algo_unc_dict"])
+        self.assertIn("bagging", config.algo_cfg_unc_dict["algo_unc_dict"]["uncertainty_cfg"])
+
+        bagging_cfg = config.algo_cfg_unc_dict["algo_unc_dict"]["uncertainty_cfg"]["bagging"]
+        self.assertIsInstance(bagging_cfg, list)
+        self.assertIsInstance(bagging_cfg[0], dict)
+        self.assertIn("n_algos", bagging_cfg[0])
+        n_algos_test = 20
+        self.assertEqual(bagging_cfg[0]["n_algos"], n_algos_test)
+        print("Completed Test AlgoConfig parsing - YAML file #3")
+
+    def test_04_missing_required_parameter(self):
+        _, filepath = self.load_yaml("test_algo_config_04_errortest_parammissing.yaml")
+        config = fsate.AlgoConfigParser(filepath)
+        with self.assertRaises(KeyError) as context:
+            config._read_algo_config()
+        self.assertIn("'algorithms'", str(context.exception))
+        print("Completed Test AlgoConfig parsing - YAML file #4")
+
+    def test_05_wrong_datatype(self):
+        _, filepath = self.load_yaml("test_algo_config_05_errortest_paramdatatype.yaml")
+        config = fsate.AlgoConfigParser(filepath)
+        with self.assertRaises(TypeError) as context:
+            config._read_algo_config()
+        self.assertIn("'seed' must be an integer", str(context.exception))
+        print("Completed Test AlgoConfig parsing - YAML file #5")
+
+    def test_06_invalid_uncertainty_structure(self):
+        _, filepath = self.load_yaml("test_algo_config_06_errortest_unc_param_struct.yaml")
+        config = fsate.AlgoConfigParser(filepath)
+        with self.assertRaises(TypeError) as context:
+            config._read_algo_config()
+        self.assertIn("The 'uncertainty' block must be a dictionary", str(context.exception))
+        print("Completed Test AlgoConfig parsing - YAML file #6")
+
+
+    def test_Print(self):
+        print("✅ TestAlgoConfigParser test passed.")
 
 class TestCheckAttributesExist(unittest.TestCase):
     print('Testing _check_attributes_exist')
@@ -387,7 +455,7 @@ class TestAlgoTrainEval(unittest.TestCase):
         self.confidence_levels = [90, 95]  # Example parameters
         # self.mapie_alpha = [0.1, 0.2]
         uncertainty_cfg = {
-            'fci': [{'forestci': True}],
+            'forestci': [{'fci_flag': True}],
             'bagging': [{'n_algos': 10}],
             'mapie': [{
                 'alpha': [0.05, 0.32],
@@ -573,7 +641,7 @@ class TestAlgoTrainEvalMlti(unittest.TestCase):
         self.confidence_levels = [90, 95]  # Example parameters
         # self.mapie_alpha = [0.1, 0.2]
         uncertainty_cfg = {
-            'fci': [{'forestci': True}],
+            'forestci': [{'fci_flag': True}],
             'bagging': [{'n_algos': 10}],
             'mapie': [{
                 'alpha': [0.05, 0.32],
@@ -697,7 +765,7 @@ class TestAlgoTrainEvalSngl(unittest.TestCase):
         self.attrs = ['attr1', 'attr2']
         self.algo_config = {'mlp': {'max_iter': [100]}}
         uncertainty_cfg = {
-            'fci': [{'forestci': True}],
+            'forestci': [{'fci_flag': True}],
             'bagging': [{'n_algos': 10}],
             'mapie': [{
                 'alpha': [0.32],
@@ -748,7 +816,7 @@ class TestAlgoTrainEvalSngl(unittest.TestCase):
         self.algo_train_eval.y_test = [0.0, 0.1, 0.2]
         self.algo_train_eval.preds_dict = {}
         self.algo_train_eval.uncertainty = {
-            'fci': [{'forestci': True}],
+            'forestci': [{'fci_flag': True}],
             'bagging': [{'n_algos': 10}],
             'mapie': [{
                 'alpha': [0.32],
@@ -810,7 +878,7 @@ class TestAlgoTrainEvalBasic(unittest.TestCase):
         self.confidence_levels = [90, 95]  # Example parameters
         # self.mapie_alpha = [0.1, 0.2]
         uncertainty_cfg = {
-            'fci': [{'forestci': True}],
+            'forestci': [{'fci_flag': True}],
             'bagging': [{'n_algos': 10}],
             'mapie': [{
                 'alpha': [0.2, 0.32],
@@ -918,8 +986,6 @@ class TestReadMetadata(unittest.TestCase):
             mock_read_parquet.assert_called_once()
             pd.testing.assert_frame_equal(result, mock_df)
 
-if __name__ == "__main__":
-    unittest.main()
 
 # %% Creating Unit tests for PredConfigParser
 class TestPredConfigParser(unittest.TestCase):
