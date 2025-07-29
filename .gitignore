@@ -109,3 +109,4 @@ bower_components/
 src/vendor/
 dist/
 .Rproj.user
+.vscode
