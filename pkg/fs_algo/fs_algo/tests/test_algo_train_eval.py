@@ -1049,15 +1049,15 @@ class TestPredConfigParser(unittest.TestCase):
 
     def test_read_pred_config_success(self):
         parser = fsate.PredConfigParser(str(self.path_pred_config))
-        cfg = parser._read_pred_config()
+        parser._read_pred_config()
 
-        self.assertEqual(cfg['ds_type'], 'eval')
-        self.assertEqual(cfg['write_type'], 'parquet')
-        self.assertEqual(cfg['datasets'], ['test_dataset'])
-        self.assertEqual(cfg['algo_type'], ['rf'])
-        self.assertEqual(cfg['path_pred_config'], str(self.path_pred_config))
-        self.assertEqual(cfg['dir_base'], str(self.dir_base))
-        self.assertEqual(cfg['dir_std_base'], str(self.dir_std_base))
+        self.assertEqual(parser.pred_cfg_dict['ds_type'], 'eval')
+        self.assertEqual(parser.pred_cfg_dict['write_type'], 'parquet')
+        self.assertEqual(parser.pred_cfg_dict['datasets'], ['test_dataset'])
+        self.assertEqual(parser.pred_cfg_dict['algo_type'], ['rf'])
+        self.assertEqual(parser.pred_cfg_dict['path_pred_config'], str(self.path_pred_config))
+        self.assertEqual(parser.pred_cfg_dict['dir_base'], str(self.dir_base))
+        self.assertEqual(parser.pred_cfg_dict['dir_std_base'], str(self.dir_std_base))
 
     def test_read_pred_config_missing_required(self):
         # Remove a required field
