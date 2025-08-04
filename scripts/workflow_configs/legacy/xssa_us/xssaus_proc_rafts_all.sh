@@ -33,7 +33,7 @@ echo "Attribute transformations completed!"
 
 # Train the algorithms
 echo "Training & testing algorithms..."
-python3 "${DIR_PY}fs_proc_algo_viz.py" "${DIR_CONFIG}xssaus_attr_config.yaml"
+python3 "${DIR_PY}fs_proc_algo_viz.py" "${DIR_CONFIG}xssaus_algo_config.yaml"
 echo "Algorithm training completed!"
 
 # Print a message to indicate all scripts have finished executing
