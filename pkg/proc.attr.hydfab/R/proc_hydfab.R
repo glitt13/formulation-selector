@@ -725,6 +725,7 @@ retr_hfuids <- function(loc_ids,
   #. 2025-05-02 Originally created, GL
   #. 2025-05-06 fix accidental x in lieu of y; make NA st_sfc(NA) for geometry, GL
   #. 2025-05-13 update midpoint of lines calc & lat/lon generation, GL
+  #. 2025-08-05 Add CRS enforcement/checks for NLDI data, GL
   # Find the NLDI location from an identifier or coordinates, with the goal to acquire a network geometry point
   if(base::grepl("nwissite",featureSource)){ # Cases where USGS- is not prepended
     # The nwis argument in findNLDI tends to work better than wqp, so convert USGS-{gage_id} to {gage_id}
@@ -768,7 +769,25 @@ retr_hfuids <- function(loc_ids,
     Are the provided loc_ids in the correct format? Is the featureSource
     correct? Inspect proc.attr.hydfab::retr_hfuids."))
   }
+  # ----- CRS check/enforcement
+  # This should be EPSG:4326 b/c it's the NLDI
+  crs_from_NLDI <- base::lapply(ls_data_retr_usgs, function(x) terra::crs(x)) %>%
+    base::unlist() %>% base::unique()
+  crs_from_NLDI <- crs_from_NLDI[base::which(!base::is.null(crs_from_NLDI))]
 
+  if(base::length(crs_from_NLDI)==1){ # This is expected
+    dt_retr_usgs <- sf::st_as_sf(dt_retr_usgs, crs=crs_from_NLDI)
+    if(!base::grepl("4326", crs_from_NLDI)){
+      stop("The assumption that NLDI retrievals are EPSG:4326 is not true. Must transform.")
+    }
+  } else if (base::length(crs_from_NLDI) > 1 ){
+    if(base::all(!base::grepl("4326", crs_from_NLDI))){
+      warning("The assumption that NLDI retrievals are EPSG:4326 is not true. Must transform.")
+      print(crs_from_NLDI)
+    }
+    stop("Unexpected multiple CRS from NLDI retrievals")
+  } # Otherwise if CRS is empty, continue to ignore
+  # ----
   # For each geometry, pick the midpoint if a linestring is provided
   coords <- proc.attr.hydfab:::get_linestring_midpoint(dt_retr_usgs$geometry)
 
