@@ -427,24 +427,43 @@ file.create(dummy_config_path)
 base::on.exit(base::unlink(dummy_config_path, force = TRUE), add = TRUE)
 
 testthat::test_that("retr_hfuids works with featureSource = 'wqp'", {
-  loc_ids_wqp <- base::c("USGS-01010502", "USGS-01010503")
-  mock_wqp_calls <- mockery::mock(
-    list(origin = data.frame(
-      sourceName = "Water Quality Portal", identifier = "USGS-01010502", comid = "12347", name = "WQP Site 2",
-      X = -72.0, Y = 47.0, geometry = sf::st_sfc(sf::st_point(c(-72.0, 47.0))), stringsAsFactors = FALSE
-    )),
-    list(origin = data.frame(
-      sourceName = "Water Quality Portal", identifier = "USGS-01010503", comid = "12348", name = "Fake Site 3",
-      X = -73.0, Y = 48.0, geometry = sf::st_sfc(sf::st_point(c(-73.0, 48.0))), stringsAsFactors = FALSE
-    ))
+  loc_ids_wqp <- c("USGS-01010502", "USGS-01010503")
+
+  # Create proper sf objects with EPSG:4326
+  loc1_sf <- sf::st_sf(
+    sourceName = "Water Quality Portal",
+    identifier = "USGS-01010502",
+    comid = "12347",
+    name = "WQP Site 2",
+    X = -115.0,
+    Y = 40.0,
+    geometry = sf::st_sfc(sf::st_point(c(-115.0, 40.0)), crs = sf::st_crs(4326))
   )
 
-  stub(retr_hfuids, "dataRetrieval::findNLDI", function(wqp, ...) mock_wqp_calls(wqp = wqp, ...))
-  stub(retr_hfuids, "proc.attr.hydfab::retr_hfab_id_wrap", proc.attr.hydfab$retr_hfab_id_wrap)
+  loc2_sf <- sf::st_sf(
+    sourceName = "Water Quality Portal",
+    identifier = "USGS-01010503",
+    comid = "12348",
+    name = "Fake Site 3",
+    X = -116.0,
+    Y = 41.0,
+    geometry = sf::st_sfc(sf::st_point(c(-116.0, 41.0)), crs = sf::st_crs(4326))
+  )
 
-  result <- retr_hfuids(loc_ids = loc_ids_wqp,
-                        path_oconus_hfab_config = dummy_config_path,
-                        featureSource = "wqp")
+  # Mock findNLDI to return expected origin elements
+  mock_wqp_calls <- mockery::mock(
+    list(origin = loc1_sf),
+    list(origin = loc2_sf)
+  )
+
+  stub(proc.attr.hydfab::retr_hfuids, "dataRetrieval::findNLDI", function(wqp, ...) mock_wqp_calls(wqp = wqp, ...))
+  stub(proc.attr.hydfab::retr_hfuids, "proc.attr.hydfab::retr_hfab_id_wrap", proc.attr.hydfab$retr_hfab_id_wrap)
+
+  result <- proc.attr.hydfab::retr_hfuids(
+    loc_ids = loc_ids_wqp,
+    path_oconus_hfab_config = dummy_config_path,
+    featureSource = "wqp"
+  )
 
   expect_true(is.data.frame(result))
   expect_equal(nrow(result), 2)
@@ -452,21 +471,38 @@ testthat::test_that("retr_hfuids works with featureSource = 'wqp'", {
   expect_equal(result$hf_uid, c("hf_USGS-01010502", "hf_USGS-01010503"))
 })
 
-
 test_that("retr_hfuids works with featureSource = 'location' (assuming string loc_ids)", {
   # Based on implementation, featureSource='location' calls findNLDI(nwis=x).
   # Thus, loc_ids are expected to be string identifiers.
   loc_ids_loc <- c("myloc1", "myloc2")
-  mock_loc_calls <- mockery::mock(
-    list(origin = data.frame(
-      sourceName = "NHDPlus comid", identifier = "myloc1", comid = "777", name = "My Location 1",
-      X = -115.0, Y = 40.0, geometry = sf::st_sfc(sf::st_point(c(-115.0, 40.0))), stringsAsFactors = FALSE
-    )),
-    list(origin = data.frame(
-      sourceName = "NHDPlus comid", identifier = "myloc2", comid = "888", name = "My Location 2",
-      X = -116.0, Y = 41.0, geometry = sf::st_sfc(sf::st_point(c(-116.0, 41.0))), stringsAsFactors = FALSE
-    ))
+
+  # Create proper sf objects with EPSG:4326
+  loc1_sf <- sf::st_sf(
+    sourceName = "NHDPlus comid",
+    identifier = "myloc1",
+    comid = "777",
+    name = "My Location 1",
+    X = -115.0,
+    Y = 40.0,
+    geometry = sf::st_sfc(sf::st_point(c(-115.0, 40.0)), crs = sf::st_crs(4326))
   )
+
+  loc2_sf <- sf::st_sf(
+    sourceName = "NHDPlus comid",
+    identifier = "myloc2",
+    comid = "888",
+    name = "My Location 2",
+    X = -116.0,
+    Y = 41.0,
+    geometry = sf::st_sfc(sf::st_point(c(-116.0, 41.0)), crs = sf::st_crs(4326))
+  )
+
+  # Mock findNLDI to return expected origin elements
+  mock_loc_calls <- mockery::mock(
+    list(origin = loc1_sf),
+    list(origin = loc2_sf)
+  )
+
 
   stub(retr_hfuids, "dataRetrieval::findNLDI", function(nwis, ...) mock_loc_calls(nwis = nwis, ...))
   stub(retr_hfuids, "proc.attr.hydfab::retr_hfab_id_wrap", proc.attr.hydfab$retr_hfab_id_wrap)
@@ -492,24 +528,36 @@ test_that("retr_hfuids stops with unknown featureSource", {
     "Add another type of featureSource retrieval option here."
   )
 })
-
-
 testthat::test_that("Coordinate extraction with all NA geometries returns NA coordinates", {
-  # This tests the specific logic for coordinate extraction when geometry is present but all NA
+  # Create a valid sfc object with NA geometry and CRS
+  na_geom_sfc <- sf::st_sfc(sf::st_point(), crs = 4326)
+  na_geom_sfc[[1]] <- NA  # Explicitly set the geometry to NA
+
+  # Create an sf object with NA geometry
+  mock_sf <- sf::st_sf(
+    sourceName = "NWIS Surface Water Sites",
+    identifier = "na_geom_id",
+    comid = NA_character_,
+    name = NA_character_,
+    X = NA_real_,
+    Y = NA_real_,
+    geometry = na_geom_sfc
+  )
+
+  # Mock findNLDI return
   mock_findNLDI_na_geom <- function(nwis, ...) {
-    return(list(origin = data.frame(
-      sourceName = "NWIS Surface Water Sites", identifier = nwis, comid = NA_character_, name = NA_character_,
-      X = NA_real_, Y = NA_real_, # X, Y from NLDI usually, but error handler also makes them NA
-      geometry = sf::st_sfc(NA), # Critical: an sfc column with NA geometry
-      stringsAsFactors = FALSE
-    )))
+    list(origin = mock_sf)
   }
+
+  # Stub required functions
   stub(retr_hfuids, "dataRetrieval::findNLDI", mock_findNLDI_na_geom)
   stub(retr_hfuids, "proc.attr.hydfab::retr_hfab_id_wrap", proc.attr.hydfab$retr_hfab_id_wrap)
 
-  result <- retr_hfuids(loc_ids = "na_geom_id",
-                        path_oconus_hfab_config = dummy_config_path,
-                        featureSource = "nwissite")
+  result <- retr_hfuids(
+    loc_ids = "na_geom_id",
+    path_oconus_hfab_config = dummy_config_path,
+    featureSource = "nwissite"
+  )
 
   expect_true(is.data.frame(result))
   expect_equal(nrow(result), 1)
