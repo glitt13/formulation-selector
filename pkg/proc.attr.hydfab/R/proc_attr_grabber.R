@@ -707,7 +707,7 @@ std_path_gpkg_db <- function(dir_db_gpkg){
   #' @export
 
   if(!base::dir.exists(dir_db_gpkg)){
-    base::dir.create(dir_db_gpkg, recursive=TRUE)
+    base::dir.create(dir_db_gpkg, recursive=TRUE,showWarnings = FALSE)
   }
   path_gpkg_all <- base::file.path(dir_db_gpkg,
                                    "all_locs.gpkg")
@@ -1891,6 +1891,7 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
   #.  2025-05-06 add oCONUS/hydrofabric compatibility section, GL
   #.  2025-06-04 patch - duplicate comids for different gage_ids simple error handling, GL
   #.  2025-06-10 patch - only identify duplicated featureIDs when they are not NA, GL
+  #.  2025-08-05 move gen_ds_gpkg from grab_attrs_datasets_fs_wrap into here, GL
   # Path checker/maker of anything that's a directory not formatted for later glue::glue() calls
 
   if(!base::is.null(path_save_gpkg)){ # Add path save gpkg to parameter object
@@ -1901,15 +1902,18 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
       dir <- Retr_Params$paths[[dir_name]]
       if(!base::dir.exists(dir) && !base::grepl("\\{",dir)){
         message(glue::glue("Creating {dir}"))
-        base::dir.create(dir)
+        base::dir.create(dir,recursive = TRUE,showWarnings = FALSE)
       }
     }
   }
 
-
-
-
-
+  # --------------------- gpkg db prep for dataset ------------------------- #
+  # Copy dataset-specific geolocations from gpkg database to dataset directory
+  # Note that the db update of new locations happens in grab_attrs_datasets_fs_wrap
+  proc.attr.hydfab::gen_ds_gpkg(
+    dir_db_gpkg=Retr_Params$paths$dir_db_gpkg,
+    path_save_gpkg=path_save_gpkg,
+    gage_ids=gage_ids, epsg=4326)
 
 
   # TODO remove Retr_Params$xtra_hfab$hfab_retr
@@ -2334,12 +2338,7 @@ grab_attrs_datasets_fs_wrap <- function(Retr_Params,lyrs="network",overwrite=FAL
       path_save_gpkg <- path_save_gpkg_cstm
     }
 
-    # --------------------- gpkg db prep for dataset ------------------------- #
-    # Copy dataset-specific geolocations from gpkg database to dataset directory
-    proc.attr.hydfab::gen_ds_gpkg(
-                    dir_db_gpkg=Retr_Params$paths$dir_db_gpkg,
-                    path_save_gpkg=path_save_gpkg,
-                    gage_ids=gage_ids, epsg=4326)
+
 
     # ---------------------- Grab all needed attributes ---------------------- #
     dt_site_feat <- proc.attr.hydfab::proc_attr_gageids(gage_ids,
