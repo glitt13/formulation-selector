@@ -67,6 +67,17 @@ Retr_Params <- list(paths = list(dir_db_attrs=dir_db_attrs,
                                      domain='conus'
                                      ))
 
+# --- add the dir_db_gpkg
+# Copy the gpkg database directory to temp
+# The location inside the package
+dir_db_gpkg <- system.file("extdata/gpkg_dat",package="proc.attr.hydfab")
+gpkg_path <- base::file.path(dir_db_gpkg,"all_locs.gpkg")
+# The location to be copied into temp
+path_db_gpkg_temp <- base::file.path(temp_dir,"gpkg","all_locs.gpkg")
+dir.create(base::dirname(path_db_gpkg_temp),showWarnings = FALSE,recursive = TRUE)
+base::file.copy(gpkg_path, path_db_gpkg_temp)
+Retr_Params$paths$dir_db_gpkg <- path_db_gpkg_temp
+# ---
 ignore_deprecated_tests <- TRUE # Tests built for functions now deprecated
 # ---------------------------------------------------------------------------- #
 #                              UNIT TESTING
@@ -343,6 +354,9 @@ testthat::test_that('proc_attr_gageids',{
   Retr_Params_usgs <- Retr_Params_ha <- Retr_Params
   Retr_Params_usgs$vars <- list(usgs_vars = usgs_vars)
   Retr_Params_usgs$paths$dir_db_attrs <- file.path(Retr_Params$paths$dir_std_base,'../attributes_pah/')
+
+
+
   dt_comids <- proc.attr.hydfab::proc_attr_gageids(gage_ids=ls_fs_std$gage_ids[2],
                                       featureSource=ls_fs_std$featureSource,
                                       featureID=ls_fs_std$featureID,
@@ -360,6 +374,7 @@ testthat::test_that('proc_attr_gageids',{
     # that arise from further testing (e.g. notasource)
     file.remove(path_meta_loc)
   }
+
   dt_comids_ha <- proc.attr.hydfab::proc_attr_gageids(gage_ids=ls_fs_std$gage_ids[2],
                                                    featureSource=ls_fs_std$featureSource,
                                                    featureID=ls_fs_std$featureID,
@@ -403,6 +418,8 @@ testthat::test_that('comid_instead_of_nwissite',{
   path_save_gpkg <- file.path(temp_dir,"comid_check.gpkg")
   capt_rm <- base::file.remove(path_save_gpkg) %>% suppressWarnings()
 
+
+
   test_exst <- proc.attr.hydfab::proc_attr_gageids(gage_ids=comids_exst,
                                       featureSource='comid',
                                       featureID='{gage_id}',
@@ -441,6 +458,7 @@ testthat::test_that('comid_instead_of_nwissite',{
   # Ensure a non-retrievable comid generates an empty point
   testthat::expect_true(base::nrow(test_mix) == base::nrow(test_exst)+2)
   testthat::expect_true(base::is.na(test_mix$value[test_mix$gage_id == non_comid]))
+
 })
 
 testthat::test_that("retr_nldi_feat returns expected result with mocked get_nldi_feature", {
@@ -878,7 +896,8 @@ filz_gpkg <- c(list.files(dir_dataset,pattern=".gpkg",full.names = TRUE),
 list.files(base::gsub(pattern = "-mini",replacement="-mini-two",x=dir_dataset),pattern="gpkg",full.names=TRUE))
 
 rm_gpkg <- file.remove(filz_gpkg)
-
+# Remove the temp dir file
+base::file.remove(path_db_gpkg_temp)
 # TODO unit testing for fs_attrs_miss_wrap()
 # testthat::test_that("fs_attrs_miss_wrap",{
 #   path_attr_config <- file.path(dir_base,"xssa_attr_config_all_vars_avail.yaml")
