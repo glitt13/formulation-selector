@@ -6,19 +6,19 @@ Running the full RaFTS workflow generates the following directory structure. Not
 rafts_base_dir/ # aka ../{dir_base}
 ├── input/ # Standardized input dataused for algorithm training & location data, aka {dir_base} in attr config file
 │   ├── attributes/ # The predictor data using unique location identifiers
-│   │   ├── comid_{comid}_attrs.parquet
-│   │   ├── comid_{comid}_tfrmattr.parquet
+│   │   ├── comid_{comid}_attrs.parquet # All retrieved attributes corresponding to a specific location
+│   │   ├── comid_{comid}_tfrmattr.parquet # In case custom transformations were performed on some corresponding attribute data
 │   │   ├── comid_{hf_uid}_attrs.parquet
 │   │   └── comid_{hf_uid}_tfrmattr.parquet
 │   ├── gpkg/ # All location data mapped to unique identifiers
-│   │   └── all_locs.gpkg
+│   │   └── all_locs.gpkg # A single file of all locations ever retrieved for RaFTS processing
 │   ├── user_data_std/ # Dataset-specific/analysis specific location & attribute data
 │   │   ├── dataset1_standardized_name/
-│   │   │   ├── {ds1_std_name}_loc.gpkg
-│   │   │   ├── {ds1_std_name}_training.parquet
-│   │   │   └── {ds1_std_name}_prediction.parquet
+│   │   │   ├── {ds1_std_name}_loc.gpkg # Location data generated as a subset of input/gpkg/all_locs.gpkg & may include both training and prediction locations
+│   │   │   ├── {ds1_std_name}_training.parquet # The data used for algo training/testing
+│   │   │   └── {ds1_std_name}_prediction.parquet # The predictor data used for predicting response vars
 │   │   ├── dataset2_standardized_name/
-│   │   │   ├── {ds2_std_name}_loc.gpkg
+│   │   │   ├── {ds2_std_name}_loc.gpkg  
 │   │   │   ├── {ds2_std_name}_training.parquet
 │   │   │   └── {ds2_std_name}_prediction.parquet
 ├── output/ # Outputs generated after training ML algorithms
