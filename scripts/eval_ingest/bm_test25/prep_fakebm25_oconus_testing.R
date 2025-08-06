@@ -40,11 +40,12 @@ dir_std_base <- file.path(glue::glue(unlist(dat_rfc_prep$file_io)[['dir_save']])
                           "user_data_std")
 ds <- dat_rfc_prep$formulation_metadata[[1]]$dataset_name
 dir_dataset <- proc.attr.hydfab::std_dir_dataset(dir_std_base,ds,mkdir=TRUE )
-dir_data_in <- glue::glue(unlist(dat_rfc_prep$file_io)[['path_data']])
+path_save_fake_file <- glue::glue(unlist(dat_rfc_prep$file_io)[['path_data']])
+dir_data_in <- dirname(path_save_fake_file)
 if(!dir.exists(dir_data_in)){
   dir.create(dir_data_in,recursive = TRUE)
 }
-path_save_fake_file <- file.path(dir_data_in,"bm25test_fake_data.csv")
+#path_save_fake_file <- file.path(dir_data_in,"bm25test_fake_data.csv")
 
 
 path_oconus_hfab_config <- "~/git/formulation-selector/scripts/eval_ingest/bm_test25/bm_oconus_config.yaml"
