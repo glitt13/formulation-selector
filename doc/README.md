@@ -1,5 +1,6 @@
 ### RaFTS Directory Structure
 2025-08-06
+
 Running the full RaFTS workflow generates the following directory structure. Note that filename structures are not necessarily precise.
 ```
 rafts_base_dir/ # aka ../{dir_base}
