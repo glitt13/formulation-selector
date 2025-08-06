@@ -2244,8 +2244,18 @@ update_gpkg_db <- function(dir_db_gpkg, path_save_gpkg, epsg=4326){
   #' @export
   # Changelog/contributions
   #. 2025-07-25 originally created, GL
-
+  #. 2025-08-06 add crs checker, GL
   sf_ds <- sf::st_read(path_save_gpkg)
+
+  crs_ds <- sf::st_crs(sf_ds)
+  if(base::is.na(crs_ds$epsg)){
+    warning(glue::glue("Dataset CRS from {path_save_gpkg} is unspecified. Assuming it should be {epsg}."))
+    sf_ds <- sf::st_set_crs(sf_ds, value = epsg)
+  } else if(crs_ds$epsg != epsg){
+    warning(glue::glue("Unexpected CRS in the dataset {crs_ds$epsg}. Transforming to {epsg}."))
+    sf_ds <- sf::st_transform(sf_ds, crs = epsg)
+  }
+
   path_gpkg_all <- proc.attr.hydfab::std_path_gpkg_db(dir_db_gpkg)
   if(!base::file.exists(path_gpkg_all)){ # Create the gpkg database
     sf_write <- proc.attr.hydfab::std_write_geom_map_gpkg(sf_ds,path_gpkg_all,epsg=epsg)
