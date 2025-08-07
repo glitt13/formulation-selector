@@ -5,7 +5,7 @@
 # Instructions:
 # Make this script executable using
 # chmod +x xssaus_proc_rafts_all.sh
-# Run by calling in terminal ./xssaus_proc_rafts_all.sh
+# Run by calling in terminal ./xssaus_proc_rafts_all_uncn.sh
 
 #!/bin/bash
 echo "Using system home directory as basis for all paths: $HOME"
