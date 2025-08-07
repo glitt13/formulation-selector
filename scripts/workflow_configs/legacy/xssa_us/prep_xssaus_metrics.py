@@ -38,14 +38,16 @@ if __name__ == "__main__":
 
     # Extract path and format the home_dir in case it was defined in file path
     
-    dir_xssa = col_schema_df['dir_data'].loc[0].format(home_dir = str(Path.home()))
+    dir_xssa_str = col_schema_df['dir_data'].loc[0].format(home_dir = str(Path.home()))
     dir_save = col_schema_df['dir_save'].loc[0].format(home_dir = str(Path.home()))
 
     # BEGIN CUSTOMIZED DATASET MUNGING
 
     # list files from xssa analysis:
-    if 'bolotin' in Path.home():
-        dir_xssa = Path('/Users/laurenbolotin/noaa/regionalization/data/julemai-xSSA/scripts/data/xSSA_analysis')
+    if 'bolotin' in str(Path.home()):
+        dir_xssa_str = Path('/Users/laurenbolotin/noaa/regionalization/data/julemai-xSSA/scripts/data/xSSA_analysis')
+    
+    dir_xssa = Path(dir_xssa_str)
     names_xssa = [x.name for x in dir_xssa.iterdir()]
     def _select_numeric_prefix(strings):
         selected_strings = []
