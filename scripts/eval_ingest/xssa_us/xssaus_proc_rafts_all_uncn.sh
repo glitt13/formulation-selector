@@ -1,7 +1,6 @@
 # RaFTS processing the xssaus dataset, aka the Mai et al 2022 Process
-# Sensitivities, specific to CONUS locations. This comes from the original analysis
-# performed in Spring, 2025 for a presentation to RFCs on the location selection
-# approach.
+# Sensitivities, specific to CONUS locations. This is specific to the uncertainty
+# quantification approach first tested in 2025 Aug.
 
 # Instructions:
 # Make this script executable using
@@ -36,7 +35,7 @@ echo "Attribute transformations completed!"
 
 # Train the algorithms
 echo "Training & testing algorithms..."
-python3 "${DIR_PY}fs_proc_algo_viz.py" "${DIR_CONFIG}xssaus_algo_config.yaml"
+python3 "${DIR_PY}fs_proc_algo_viz.py" "${DIR_CONFIG}xssaus_algo_config_uncn.yaml"
 echo "Algorithm training completed!"
 
 # Print a message to indicate all scripts have finished executing
@@ -45,7 +44,7 @@ echo "Attribute grabbing, transformation, and algorithm training executed succes
 # 4.1 Identify which locations will be used for prediction, and generate the attributes (and metadata file for predictions)
 echo "Retrieve prediction location attribute data and geometry data"
 # CAUTION: The following Rscript has some custom dependencies in identifying which locations need predicting. Refer to script for details.
-Rscript "${DIR_PRED}gen_pred_locs_xssaus_map.R" "${DIR_CONFIG}xssaus_pred_config.yaml"
+Rscript "${DIR_PRED}gen_pred_locs_xssaus_map.R" "${DIR_CONFIG}xssaus_pred_config_uncn.yaml"
 echo "Acquired prediction location attribute data and geometry data"
 
 # 4.2 Perform transformations on prediction locations
@@ -55,11 +54,11 @@ echo "Transformed prediction location attribute data"
 
 # 4.3 Perform the prediction
 echo "Performing process predictions"
-python3 "${DIR_PY}fs_pred_algo.py" "${DIR_CONFIG}xssaus_pred_config.yaml"
+python3 "${DIR_PY}fs_pred_algo.py" "${DIR_CONFIG}xssaus_pred_config_uncn.yaml"
 
 # 4.4 Map the predictions (static map)
 echo "Plotting the process predictions on static map"
-python3 "${DIR_CONFIG}fs_proc_viz_xssaus.py" "${DIR_CONFIG}xssaus_pred_config.yaml"
+python3 "${DIR_CONFIG}fs_proc_viz_xssaus.py" "${DIR_CONFIG}xssaus_pred_config_uncn.yaml"
 echo "Completed prediction mapping"
 
 echo "Finished the xSSA process sensitivity mapping predictions"
