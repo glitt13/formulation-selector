@@ -1805,7 +1805,7 @@ class AlgoTrainEval:
                                      'Uncertainty': {}
                                      }
 
-    def predict_algos(self) -> dict:
+    def predict_algos(self, bounds=(0, 1)) -> dict:
         """ Make predictions with trained algorithms   
 
         :return: Evaluation results, with the following keys:
@@ -1825,7 +1825,10 @@ class AlgoTrainEval:
             y_pred = pipe.predict(self.X_test)
             if 'mapie' in v:
                 mapie_alpha = next((d['alpha'] for d in self.uncertainty.get('mapie', []) if 'alpha' in d), None)
-                y_test_pred, y_test_pis = v['mapie'].predict(self.X_test, alpha=mapie_alpha) 
+                y_test_pred, y_test_pis = v['mapie'].predict(self.X_test, alpha=mapie_alpha)
+                
+                # Clip the prediction intervals to the specified bounds
+                y_test_pis_clipped = np.clip(y_test_pis, bounds[0], bounds[1])
                 
                 # Rename rows
                 row_labels = ['lower_limit', 'upper_limit']
@@ -1834,7 +1837,8 @@ class AlgoTrainEval:
                 col_labels = [f'alpha_{alpha:.2f}' for alpha in mapie_alpha]  
                 
                 # Convert to DataFrame
-                y_pis_list = [pd.DataFrame(y_test_pis[i], index=row_labels, columns=col_labels) for i in range(y_test_pis.shape[0])]
+                # y_pis_list = [pd.DataFrame(y_test_pis[i], index=row_labels, columns=col_labels) for i in range(y_test_pis.shape[0])]
+                y_pis_list = [pd.DataFrame(y_test_pis_clipped[i], index=row_labels, columns=col_labels) for i in range(y_test_pis_clipped.shape[0])]
                 
                 self.preds_dict[k] = {'y_pred': y_pred,
                                       'y_pis': y_pis_list,
