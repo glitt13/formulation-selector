@@ -183,14 +183,14 @@ if __name__ == "__main__":
                 # If using RandomForest, calculate confidence intervals using forestci
                 if algo == 'rf' and forestci:
                     rf_algo = pipe.named_steps['randomforestregressor']  # Use the correct step name
-                    forest_ci = fci.random_forest_error(forest=rf_algo, X_train_shape=X_train_shape, X_test=df_attr_sub.to_numpy())
+                    forest_ci = fci.random_forest_error(forest=rf_algo, X_train_shape=X_train_shape, X_test=df_attr_sub_rmna.to_numpy())
                     df_pred['forestci'] = forest_ci
         
                 # If MAPIE is available, compute prediction intervals
                 mapie_alpha = pred_cfg.pred_cfg_dict.get('mapie_alpha')
                 if 'mapie' in pipeline_data and mapie_alpha:
                     mapie = pipeline_data['mapie']
-                    y_pred_mapie, y_pis = mapie.predict(df_attr_sub, alpha=mapie_alpha)
+                    y_pred_mapie, y_pis = mapie.predict(df_attr_sub_rmna, alpha=mapie_alpha)
         
                     # Rename columns based on self.mapie_alpha values
                     for i, alpha in enumerate(mapie_alpha):
