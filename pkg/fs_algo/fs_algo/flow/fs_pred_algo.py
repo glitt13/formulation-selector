@@ -208,8 +208,24 @@ if __name__ == "__main__":
                 df_pred_mrge = pd.merge(df_pred, map_feat_srce_feat_id, how='right', on='featureID')
                 df_pred_mrge.fillna(value={'resp_var': resp_var,'dataset': ds, 'algo': algo,
                                             'name_algo':Path(path_algo).name},inplace=True)
-                col_order = ['featureID', 'featureSource', 'prediction', 'resp_var', 'dataset', 'algo', 'name_algo']
-                df_pred_mrge = df_pred_mrge[col_order]
+                # col_order = ['featureID', 'featureSource', 'prediction', 'resp_var', 'dataset', 'algo', 'name_algo']
+                # df_pred_mrge = df_pred_mrge[col_order]
+                col_order = ['featureID', 'featureSource', 'prediction']
+                
+                # Find and sort any uncertainty columns that were added to the dataframe
+                uncertainty_cols = sorted([
+                    col for col in df_pred_mrge.columns 
+                    if col.startswith('forest_ci') or col.startswith('mapie_')
+                ])
+                
+                # Define the trailing metadata columns
+                meta_cols = ['resp_var', 'dataset', 'algo', 'name_algo']
+                
+                # Combine all column lists for the final order
+                final_col_order = col_order + uncertainty_cols + meta_cols
+                
+                # Reorder the dataframe
+                df_pred_mrge = df_pred_mrge[final_col_order]                
 
                 # Write prediction results
                 df_pred_mrge.to_parquet(path_pred_out)
