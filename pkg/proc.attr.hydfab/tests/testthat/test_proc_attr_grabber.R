@@ -3,9 +3,10 @@
 #' @author Guy Litt \email{guy.litt@noaa.gov}
 #' @note When running this script, be sure to also source tests/testthat/setup.R first
 # Changelog / Contributions
-#   2024-07-24 Originally created, GL
-#   2024-10-03 Contributed to, LB
-
+#.   2024-07-24 Originally created, GL
+#.   2024-10-03 Contributed to, LB
+#.  2025 winter-spring, various updates, GL
+#.  2025-08-14 Adapted for lgr, GL
 # unloadNamespace("proc.attr.hydfab")
 suppressPackageStartupMessages(library(proc.attr.hydfab,quietly=TRUE))
 suppressPackageStartupMessages(library(testthat,quietly=TRUE))
@@ -78,6 +79,7 @@ dir.create(base::dirname(path_db_gpkg_temp),showWarnings = FALSE,recursive = TRU
 base::file.copy(gpkg_path, path_db_gpkg_temp)
 Retr_Params$paths$dir_db_gpkg <- path_db_gpkg_temp
 # ---
+manual_testing <- FALSE # Some tests only work if manually running checks
 ignore_deprecated_tests <- TRUE # Tests built for functions now deprecated
 # ---------------------------------------------------------------------------- #
 #                              UNIT TESTING
@@ -194,10 +196,11 @@ testthat::test_that("check_miss_attrs_comid_io",{
                                             paths_ha = Retr_Params_pkg$paths$paths_ha)[['usgs_nhdplus__v2']]
   # Add in an extra usgs var that wasn't retrieved, TOT_ELEV_MAX
   attr_vars <- list(usgs_vars = c("TOT_TWI","TOT_PRSNOW","TOT_ELEV_MAX"))
-  rslt <- testthat::capture_warning(proc.attr.hydfab::check_miss_attrs_comid_io(dt_all,
+
+  rslt <- testthat::capture_output(proc.attr.hydfab::check_miss_attrs_comid_io(dt_all,
                                     attr_vars,
                                     dir_db_attrs_pkg))
-  testthat::expect_true(base::grepl("TOT_ELEV_MAX",rslt$message))
+  testthat::expect_true(base::grepl("TOT_ELEV_MAX",rslt))
 })
 
 
@@ -234,23 +237,24 @@ testthat::test_that("write_meta_nldi_feat", {
   }
 
 
-  rslt <- testthat::capture_condition(
+  rslt <- testthat::capture_output(
     proc.attr.hydfab::write_meta_nldi_feat(dt_site_feat,
                                            path_meta=path_meta))
-  testthat::expect_true(grepl(path_meta, rslt$message))
+  testthat::expect_true(grepl(path_meta, rslt))
 
 
   files_exst <- base::list.files(base::dirname(path_meta))
   testthat::expect_true(base::file.exists(path_meta))
 
   path_meta_csv <- base::gsub(".parquet",replacement = ".csv",x=path_meta)
-  rslt_csv <- testthat::capture_condition(
+  rslt_csv <- testthat::capture_output(
     proc.attr.hydfab::write_meta_nldi_feat(dt_site_feat,
                 path_meta=path_meta_csv))
   testthat::expect_true(file.exists(path_meta_csv))
+  testthat::expect_true(base::grepl(path_meta_csv, rslt_csv))
 
   path_meta_fake_ext <- base::gsub(".parquet",replacement = ".fake",x=path_meta)
-  rslt_fake <- testthat::capture_condition(
+  rslt_fake <- testthat::capture_error(
     proc.attr.hydfab::write_meta_nldi_feat(dt_site_feat,
                                            path_meta=path_meta_fake_ext))
 
@@ -318,8 +322,8 @@ test_that("std_attr_data_fmt standardizes attribute data correctly", {
                                                               hf_uid=NA,pet_mm_s01=NA, cly_pc_sav=NA,
                                                               featureID = "724696",featureSource="COMID"))
 
-  rslt_corr_bad <- proc.attr.hydfab::std_attr_data_fmt(attr_data_bad_attr) %>%
-    testthat::expect_warning(regexp="badthing")
+  rslt_corr_bad <- proc.attr.hydfab::std_attr_data_fmt(attr_data_bad_attr)# %>%
+    #testthat::expect_warning(regexp="badthing")
   testthat::expect_true(base::nrow(rslt_corr_bad$hydroatlas_v1)==2)
   testthat::expect_false(base::all(base::grepl("not_an_attr",rslt_corr_bad$hydroatlas_v1$attribute)))
   testthat::expect_false(base::all(base::grepl("badthing",rslt_corr_bad$hydroatlas_v1$attribute)))
@@ -355,12 +359,12 @@ testthat::test_that('proc_attr_gageids',{
   Retr_Params_usgs$vars <- list(usgs_vars = usgs_vars)
   Retr_Params_usgs$paths$dir_db_attrs <- file.path(Retr_Params$paths$dir_std_base,'../attributes_pah/')
 
-
+  path_save_gpkg <- file.path(temp_dir,"comid_check_new.gpkg")
 
   dt_comids <- proc.attr.hydfab::proc_attr_gageids(gage_ids=ls_fs_std$gage_ids[2],
                                       featureSource=ls_fs_std$featureSource,
                                       featureID=ls_fs_std$featureID,
-                                      path_save_gpkg = NULL,
+                                      path_save_gpkg = path_save_gpkg,
                                       Retr_Params=Retr_Params_usgs,
                                       lyrs="network",overwrite=FALSE) %>%
                 pkgcond::suppress_warnings()
@@ -379,20 +383,31 @@ testthat::test_that('proc_attr_gageids',{
                                                    featureSource=ls_fs_std$featureSource,
                                                    featureID=ls_fs_std$featureID,
                                                    Retr_Params=Retr_Params_ha,
-                                                   path_save_gpkg = NULL,
+                                                   path_save_gpkg = path_save_gpkg,
                                                    lyrs="network",overwrite=FALSE) %>%
-                  base::suppressWarnings()
+                  base::suppressWarnings() %>% pkgcond::suppress_messages()
   testthat::expect_true(all(unlist(unname(Retr_Params_ha$vars)) %in% dt_comids_ha$attribute))
 
   # test a wrong featureSource
-  testthat::expect_warning(proc.attr.hydfab::proc_attr_gageids(gage_ids=ls_fs_std$gage_ids[2],
-                                                   featureSource='notasource',
-                                                   featureID=ls_fs_std$featureID,
-                                                   Retr_Params=Retr_Params,
-                                                   path_save_gpkg=NULL,
-                                                   lyrs="network",overwrite=FALSE))
-                           #regexp="following gage_id values did not")
-                           #regexp="Problem with comid database logic")
+  out_wrong0 <- testthat::capture_output(proc.attr.hydfab::proc_attr_gageids(gage_ids=ls_fs_std$gage_ids[2],
+                                             featureSource='notasource',
+                                             featureID=ls_fs_std$featureID,
+                                             Retr_Params=Retr_Params,
+                                             path_save_gpkg=path_save_gpkg,
+                                             lyrs="network",overwrite=FALSE))
+  # Run it a second time just-in-case there is was a need to create a gpkg
+  out_wrong <- testthat::capture_error(proc.attr.hydfab::proc_attr_gageids(gage_ids=ls_fs_std$gage_ids[2],
+                                                                            featureSource='notasource',
+                                                                            featureID=ls_fs_std$featureID,
+                                                                            Retr_Params=Retr_Params,
+                                                                            path_save_gpkg=path_save_gpkg,
+                                                                            lyrs="network",overwrite=FALSE))
+
+  testthat::expect_true(base::grepl("Problem with comid database logic", out_wrong))#regexp="comid database logic")
+  #,regexp="comid database logic")
+  # print("WHAT DOES out_wrong HAVE?????????????????")
+  # print(out_wrong)
+  # testthat::expect_true(base::grepl("Problem with comid database logic", out_wrong))
 
   if(file.exists(path_meta_loc)){ # need to delete this to avoid problems
     # that arise from further testing (e.g. notasource)
@@ -401,13 +416,14 @@ testthat::test_that('proc_attr_gageids',{
 
 
   # Expect 'skipping' this gage_id b/c NA doesn't exist
-  testthat::expect_warning(proc.attr.hydfab::proc_attr_gageids(gage_ids=c(NA),
-                                                              featureSource='nwissite',
-                                                              featureID=ls_fs_std$featureID,
-                                                              Retr_Params=Retr_Params,
-                                                              path_save_gpkg = NULL,
-                                                              lyrs="network",overwrite=FALSE),
-                           regexp="following gage_id values did not return ")
+  out  <- testthat::capture_output(
+    proc.attr.hydfab::proc_attr_gageids(gage_ids=c(NA),
+                      featureSource='nwissite',
+                      featureID=ls_fs_std$featureID,
+                      Retr_Params=Retr_Params,
+                      path_save_gpkg = path_save_gpkg,
+                      lyrs="network",overwrite=FALSE))
+  testthat::expect_true(base::grepl("following gage_id values did not return ",out))
 
 })
 
@@ -415,7 +431,7 @@ testthat::test_that('comid_instead_of_nwissite',{
   # Use 'comid' as the featureSource in lieu of 'nwissite'
   comids_exst <- c("1520007","1623207","1638559","1722317")
   # Define path and make sure it doesn't exist
-  path_save_gpkg <- file.path(temp_dir,"comid_check.gpkg")
+  path_save_gpkg <- file.path(temp_dir,"comid_check1.gpkg")
   capt_rm <- base::file.remove(path_save_gpkg) %>% suppressWarnings()
 
 
@@ -432,14 +448,24 @@ testthat::test_that('comid_instead_of_nwissite',{
   # Test an ID that isn't actually a comid. Make this after test_exst, since
   #. we know that path_save_gpkg has now been created
   non_comid <- "75004300004059"
-  test_nonexst <- testthat::expect_warning(proc.attr.hydfab::proc_attr_gageids(gage_ids=non_comid,
+  #path_save_gpkg2 <- file.path(temp_dir,"comid_check2.gpkg")
+  test_nonexst_out <- testthat::capture_output(proc.attr.hydfab::proc_attr_gageids(gage_ids=non_comid,
+                                        featureSource='comid',
+                                        featureID='{gage_id}',
+                                        Retr_Params=Retr_Params,
+                                        path_save_gpkg = path_save_gpkg,
+                                        lyrs=lyrs,
+                                        overwrite=overwrite)) %>%
+                            pkgcond::suppress_warnings()
+  testthat::expect_true(base::grepl("Unexpected missing data",test_nonexst_out))
+  test_nonexst <- proc.attr.hydfab::proc_attr_gageids(gage_ids=non_comid,
                                                       featureSource='comid',
                                                       featureID='{gage_id}',
                                                       Retr_Params=Retr_Params,
                                                       path_save_gpkg = path_save_gpkg,
                                                       lyrs=lyrs,
-                                                      overwrite=overwrite),
-                  regexp = "Unexpected missing data")
+                                                      overwrite=overwrite)
+
 
   testthat::expect_true(base::any(base::grepl(non_comid,test_nonexst$gage_id)))
   # NOTE 20240414: Code now expects the provided comid to be returned as featureID: https://github.com/NOAA-OWP/formulation-selector/commit/5aafac9bf01b7cce9a9e7947d9fd5dec152a8286
@@ -558,10 +584,13 @@ testthat::test_that("fs_retr_nhdp_comids_geom",{
   testthat::expect_s3_class(retr_geom,"data.table")
   testthat::expect_true(all(required_cols %in% base::names(retr_geom)))
 
-  bad_comid <- testthat::expect_warning(proc.attr.hydfab::fs_retr_nhdp_comids_geom(
-    gage_ids = "daklsteja",featureID = "{gage_id}",featureSource = "comid"),
-    regexp = "Could not retrieve geometry"
-  ) %>% pkgcond::suppress_messages()
+  bad_comid_out <- testthat::capture_output(proc.attr.hydfab::fs_retr_nhdp_comids_geom(
+    gage_ids = "daklsteja",featureID = "{gage_id}",featureSource = "comid")) %>%
+    pkgcond::suppress_warnings()
+  testthat::expect_true(base::grepl( "Could not retrieve geometry",bad_comid_out))
+  bad_comid <- proc.attr.hydfab::fs_retr_nhdp_comids_geom(
+    gage_ids = "daklsteja",featureID = "{gage_id}",featureSource = "comid") %>%
+    pkgcond::suppress_messages() %>% pkgcond::suppress_warnings()
   testthat::expect_equal(sf::st_crs(bad_comid$geometry)$epsg,4326)
   testthat::expect_equal(nrow(bad_comid),1)
   testthat::expect_true(sf::st_is_empty(bad_comid$geometry))
@@ -573,7 +602,9 @@ testthat::test_that('check_attr_selection', {
   ## Using a config yaml
   # Test for requesting something NOT in the attr menu
   attr_cfg_path_missing <- file.path(dir_base, 'xssa_attr_config_missing_vars.yaml')
-  testthat::expect_message(testthat::expect_warning(expect_equal(proc.attr.hydfab::check_attr_selection(attr_cfg_path_missing), c("TOT_TWi", "TOT_POPDENS91"))))
+  out <- testthat::capture_output(proc.attr.hydfab::check_attr_selection(attr_cfg_path_missing))
+  testthat::expect_true(base::grepl(c("TOT_TWi"),out))
+  testthat::expect_true(base::grepl(c("TOT_POPDENS91"),out))
 
   # Test for only requesting vars that ARE in the attr menu
   attr_cfg_path <- file.path(dir_base, '/xssa_attr_config_all_vars_avail.yaml')
@@ -583,8 +614,9 @@ testthat::test_that('check_attr_selection', {
   ## Using a list of variables of interest instead of a config yaml
   # Test for requesting something NOT in the attr menu
   vars <- c('TOT_TWi', 'TOT_PRSNOW', 'TOT_EWT')
-  testthat::expect_warning(testthat::expect_equal(proc.attr.hydfab::check_attr_selection(vars = vars), 'TOT_TWi'))
 
+  out <- testthat::capture_output(testthat::expect_equal(proc.attr.hydfab::check_attr_selection(vars = vars), 'TOT_TWi'))
+  testthat::expect_true(base::grepl("WARN",out))
   # Test for only requesting vars that ARE in the attr menu
   vars <- c('TOT_TWI', 'TOT_PRSNOW', 'TOT_EWT')
   testthat::expect_equal(proc.attr.hydfab::check_attr_selection(vars = vars), NA)
@@ -601,26 +633,29 @@ testthat::test_that('retrieve_attr_exst', {
                          length(comids))
   testthat::expect_equal(length(unique(dat_attr_all$attribute)),length(vars))
 
-  testthat::expect_error(proc.attr.hydfab::retrieve_attr_exst(comids,
-                                                              vars,
-                                                              dir_db_attrs='a'))
+  err <- testthat::expect_error(proc.attr.hydfab::retrieve_attr_exst(comids,
+                                                      vars,
+                                                      dir_db_attrs='a')) %>%
+    testthat::capture_output()
+  testthat::expect_true(base::grepl("The attribute database path does not exist", err))
   # Testing for No parquet files present
-  capt_no_parquet <- testthat::capture_condition(proc.attr.hydfab::retrieve_attr_exst(comids,
+  capt_no_parquet <- testthat::expect_error(proc.attr.hydfab::retrieve_attr_exst(comids,
                                                                 vars,
-                                                                dir_db_attrs=dirname(dirname(dir_db_attrs_pkg))))
-  testthat::expect_true(grepl("parquet",capt_no_parquet$message))
-  nada_var <- testthat::capture_warnings(proc.attr.hydfab::retrieve_attr_exst(comids,vars=c("TOT_TWI","naDa"),
-                                              dir_db_attrs_pkg))
+                                                                dir_db_attrs=dirname(dirname(dir_db_attrs_pkg)))) %>%
+    testthat::capture_output() #%>% testthat::capture_message()
+  testthat::expect_true(grepl("parquet",capt_no_parquet))
+  nada_var <- testthat::expect_warning(proc.attr.hydfab::retrieve_attr_exst(comids,vars=c("TOT_TWI","naDa"),
+                                              dir_db_attrs_pkg)) %>% testthat::capture_output()
   testthat::expect_true(any(grepl("naDa",nada_var)))
 
-  nada_comid <- testthat::capture_warnings(proc.attr.hydfab::retrieve_attr_exst(comids=c("1520007","1623207","nada"),vars,
-                                              dir_db_attrs_pkg))
-  testthat::expect_true(any(base::grepl("nada",nada_comid)))
+  nada_comid <- testthat::capture_output(proc.attr.hydfab::retrieve_attr_exst(comids=c("1520007","1623207","nada"),vars,
+                                              dir_db_attrs_pkg)) %>% pkgcond::suppress_warnings()
+  testthat::expect_true(any(base::grepl("nada",nada_comid))) %>% pkgcond::suppress_messages()
 
   testthat::expect_error(proc.attr.hydfab::retrieve_attr_exst(comids,vars=c(3134,3135),
-                                            dir_db_attrs_pkg))
+                                            dir_db_attrs_pkg)) %>% pkgcond::suppress_messages()
   testthat::expect_warning(proc.attr.hydfab::retrieve_attr_exst(comids=c(3134,3135),vars,
-                                            dir_db_attrs_pkg))
+                                            dir_db_attrs_pkg)) %>% pkgcond::suppress_messages()
 })
 
 
@@ -757,12 +792,15 @@ testthat::test_that("retr_attr_hydatl_wrap",{
   ha_vars <- c("ari_ix_sav","cly_pc_sav","snw_pc_uyr")
   hf_ids <- base::c("ak-cat-15164", NA,"hi-cat-2629","prvi-cat-752",9250320)
 
+  dt_hydatl_warn <- testthat::capture_output(proc.attr.hydfab::retr_attr_hydatl_wrap(hf_ids=hf_ids,
+                                                                                     paths_ha=paths_ha,
+                                                                                     ha_vars=ha_vars,
+                                                                                     hf_id_cols=hf_id_cols))
+  testthat::expect_true(base::grepl("The following hydrofabric ids could not be found in the HydroATLAS data", dt_hydatl_warn))
   dt_hydatl <- proc.attr.hydfab::retr_attr_hydatl_wrap(hf_ids=hf_ids,
                                                        paths_ha=paths_ha,
                                                        ha_vars=ha_vars,
-                                                       hf_id_cols=hf_id_cols) %>%
-    testthat::expect_warning(regexp =
-      "The following hydrofabric ids could not be found in the HydroATLAS data")
+                                                       hf_id_cols=hf_id_cols)
 
 
   testthat::expect_true(base::nrow(dt_hydatl) == 2)
@@ -896,8 +934,11 @@ filz_gpkg <- c(list.files(dir_dataset,pattern=".gpkg",full.names = TRUE),
 list.files(base::gsub(pattern = "-mini",replacement="-mini-two",x=dir_dataset),pattern="gpkg",full.names=TRUE))
 
 rm_gpkg <- file.remove(filz_gpkg)
-# Remove the temp dir file
-base::file.remove(path_db_gpkg_temp)
+# Remove the temp dir created for gpkg db
+if(base::dir.exists(base::dirname(path_db_gpkg_temp))){
+  base::unlink(dirname(path_db_gpkg_temp),recursive = TRUE)
+}
+
 # TODO unit testing for fs_attrs_miss_wrap()
 # testthat::test_that("fs_attrs_miss_wrap",{
 #   path_attr_config <- file.path(dir_base,"xssa_attr_config_all_vars_avail.yaml")

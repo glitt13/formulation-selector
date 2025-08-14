@@ -1,12 +1,16 @@
 # A collection of convenience functions used in some RaFTS scripts that are not
 #. core to RaFTS processing (e.g. not dependent on generating data for further
 #. use in the python fs_algo package)
+
+# Changelog / Contributions
+# 2025-08-14 Added logr, GL
 library(arrow)
 library(dplyr)
 library(nhdplusTools)
 library(glue)
 library(sf)
 library(data.table)
+library(logr)
 
 retrieve_attr_exst <- function(comids, vars, dir_db_attrs, bucket_conn=NA){
   #' @title Grab previously-aggregated attributes from locations of interest
@@ -32,7 +36,8 @@ retrieve_attr_exst <- function(comids, vars, dir_db_attrs, bucket_conn=NA){
     # Let's try unlisting and unnaming just-in-case
     comids <- comids %>% base::unlist() %>% base::unname()
     if(!'character' %in% base::class(comids) ){
-      warning("comids expected to be character class. converting")
+      warn_msg <- "comids expected to be character class. converting"
+      logr::log_print(warn_msg,level="WARN")
       comids <- base::as.character(comids)
     }
   }
@@ -40,16 +45,21 @@ retrieve_attr_exst <- function(comids, vars, dir_db_attrs, bucket_conn=NA){
     # Let's try unlisting and unnaming just-in-case
     vars <- vars %>% base::unlist() %>% base::unname()
     if(!'character' %in% base::class(vars)){
-      stop("vars expected to be character class")
+      stop_msg <- "vars expected to be character class"
+      logr::log_print(stop_msg,level="ERROR")
+      stop()
     }
   }
   if(!base::dir.exists(dir_db_attrs)){
-    stop(glue::glue("The attribute database path does not exist:
-                      {dir_db_attrs}"))
+    stop_msg <- glue::glue("The attribute database path does not exist:
+                      {dir_db_attrs}")
+    logr::log_print(stop_msg,level="ERROR")
+    stop()
   }
   if(!any(base::grepl(".parquet", base::list.files(dir_db_attrs)))){
-    warning(glue::glue("The following path does not contain expected
-                          .parquet files: {dir_db_attrs}"))
+    warn_msg <- glue::glue("The following path does not contain expected
+                          .parquet files: {dir_db_attrs}")
+    logr::log_print(warn_msg,level="WARN")
   }
 
   if(base::is.na(bucket_conn)){
@@ -63,21 +73,26 @@ retrieve_attr_exst <- function(comids, vars, dir_db_attrs, bucket_conn=NA){
                            dplyr::collect(),silent=TRUE)
 
     if('try-error' %in% base::class(dat_all_attrs)){
-      stop(glue::glue("Could not acquire attribute data from {dir_db_attrs}"))
+      stop_msg <- glue::glue("Could not acquire attribute data from {dir_db_attrs}")
+      logr::log_print(stop_msg,level="ERROR")
+      stop()
     }
   } else {# TODO add bucket connection here if it ever becomes a thing
-    stop("Need to accommodate a different type of source here, e.g. s3")
+    stop_msg <- "Need to accommodate a different type of source here, e.g. s3"
+    logr::log_print(stop_msg,level="ERROR")
+    stop()
   }
 
   # Run simple checks on retrieved data
   if (base::any(!comids %in% dat_all_attrs$featureID)){
     missing_comids <- comids[base::which(!comids %in% dat_all_attrs$featureID)]
     if (length(missing_comids) > 0){
-      warning(base::paste0("Datasets missing the following comids: ",
+      warn_msg <- base::paste0("Datasets missing the following comids: ",
                            base::paste(missing_comids,collapse=","),
-                           "\nConsider running proc.attr.hydfab::proc_attr_wrap()"))
+                           "\nConsider running proc.attr.hydfab::proc_attr_wrap()")
+      logr::log_print(warn_msg,level="WARN")
     } else {
-      message("There's a logic issue on missing_comids inside retrieve_attr_exst")
+      logr::log_print("There's a logic issue on missing_comids inside retrieve_attr_exst",level="INFO")
     }
 
 
@@ -86,11 +101,13 @@ retrieve_attr_exst <- function(comids, vars, dir_db_attrs, bucket_conn=NA){
   if (base::any(!vars %in% dat_all_attrs$attribute)){
     missing_vars <- vars[base::which(!vars %in% dat_all_attrs$attribute)]
     if(length(missing_vars) >0 ){
-      warning(base::paste0("Datasets entirely missing the following vars: ",
+      warn_msg <- base::paste0("Datasets entirely missing the following vars: ",
                            base::paste(missing_vars,collapse=","),
-                           "\nConsider running proc.attr.hydfab::proc_attr_wrap()"))
+                           "\nConsider running proc.attr.hydfab::proc_attr_wrap()")
+      logr::log_print(warn_msg,level="WARN")
     } else {
-      message("There's a logic issue on missing_vars inside retrieve_attr_exst")
+      logr::log_print("There's a logic issue on missing_vars inside retrieve_attr_exst",
+                      level="WARN")
     }
 
   }
@@ -101,9 +118,10 @@ retrieve_attr_exst <- function(comids, vars, dir_db_attrs, bucket_conn=NA){
     dplyr::summarise(dplyr::n_distinct(attribute))
   idxs_miss_vars <- base::which(sum_var_df$`n_distinct(attribute)` != length(vars))
   if(base::length(idxs_miss_vars)>0){
-    warning(glue::glue("The following comids are missing desired variables:
+    warn_msg <- glue::glue("The following comids are missing desired variables:
               {paste(sum_var_df$featureID[idxs_miss_vars],collapse='\n')}
-                       \nConsider running proc.attr.hydfab::proc_attr_wrap()"))
+                       \nConsider running proc.attr.hydfab::proc_attr_wrap()")
+    logr::log_print(warn_msg,level="WARN")
   }
 
   return(dat_all_attrs)
@@ -172,24 +190,31 @@ std_write_gpkg_all_nhdp_geom <- function(df_obj,path_save_gpkg_all,layer_save =
   #' layers to the geopackage file.
   #' @seealso \link[proc.attr.hydfab]{dl_nhdplus_geoms_wrap}
   if(!base::grepl(".gpkg",path_save_gpkg_all)){
-    stop("Expect `path_save_gpkg_all` to be a .gpkg filepath")
+    stop_msg <- "Expect `path_save_gpkg_all` to be a .gpkg filepath"
+    logr::log_print(stop_msg,level="ERROR")
+    stop()
   }
   if(base::length(layer_save) !=1){
-    stop("Expecting only one layer name. Refer to `layer_save` in
-         std_write_gpkg_all_nhdp_geom" )
+    stop_msg <- "Expecting only one layer name. Refer to `layer_save` in
+         std_write_gpkg_all_nhdp_geom"
+    logr::log_print(stop_msg,level="ERROR")
+    stop()
   }
   accepted_layers <- c('catchment','flowlines','outlet','input_df')
   if(!any(layer_save %in% accepted_layers)){
     newline_layer_names <- paste0(accepted_layers,collapse="\n")
-    stop(glue::glue("Must provide layer_save as one of the following names:
-                    {newline_layer_names}"))
+    stop_msg <- glue::glue("Must provide layer_save as one of the following names:
+                    {newline_layer_names}")
+    logr::log_print(stop_msg,level="ERROR")
+    stop()
   }
 
   rslt <- try(sf::st_write(df_obj,path_save_gpkg_all,layer=layer_save,
-                           append=FALSE))
+                           append=FALSE,quiet=TRUE))
 
   if('try-error' %in% base::class(rslt)){
-    warning(glue::glue("COULD NOT WRITE {layer_save} to {path_save_gpkg_all}!"))
+    warn_msg <- glue::glue("COULD NOT WRITE {layer_save} to {path_save_gpkg_all}!")
+    logr::log_print(warn_msg,level="WARN")
   }
 }
 
@@ -223,10 +248,11 @@ compile_chunks_ndplus_geoms <- function(dir_save_nhdp,seq_nums=NULL,
   all_files_rds <- all_files_rds_ls %>% base::unlist()
 
   if(base::length(all_files_rds) == 0){
-    warning("No rds files match expected sequence number formats in filenames. Reading all rds files.")
+    warn_msg <- "No rds files match expected sequence number formats in filenames. Reading all rds files."
+    logr::log_print(warn_msg,level="WARN")
     all_files_rds <- list.files(dir_save_nhdp_chunk, pattern = '.rds')
   } else if(base::length(all_files_rds)<length(seq_nums)){
-    warning("Not all expected chunked files present.")
+    logr::log_print("Not all expected chunked files present.",level="WARN")
   }
 
   ls_nhdp_all <- base::lapply(all_files_rds, function(x)
@@ -275,7 +301,7 @@ compile_chunks_ndplus_geoms <- function(dir_save_nhdp,seq_nums=NULL,
     ls_input_df <- lapply(ls_nhdp_all, function(ls) ls[['input_df']])
     input_dt <- data.table::rbindlist(ls_input_df,fill=TRUE, use.names=TRUE,
                                          ignore.attr=TRUE)
-    try(sf::st_write(input_dt,path_save_gpkg_all,layer='input_df',append=FALSE))
+    try(sf::st_write(input_dt,path_save_gpkg_all,layer='input_df',append=FALSE,quiet=TRUE))
   } else {
     input_dt <- data.table()
   }
@@ -373,8 +399,9 @@ dl_nhdplus_geoms_wrap <- function(df,col_id, dir_save_nhdp,filename_str,
         # sf::st_geometry(sub_df) <- col_id
         geom_row <- sub_df[ctr,col_id]
         if(is.null(sf::st_crs(geom_row))){
-          warning("UNKNOWN CRS FOR PROVIDED AOI IN df!!
-                  Strongly recommend ensuring appropriate CRS before passing into dl_nhdplus_geoms_wrap()")
+          warn_msg <- "UNKNOWN CRS FOR PROVIDED AOI IN df!!
+                  Strongly recommend ensuring appropriate CRS before passing into dl_nhdplus_geoms_wrap()"
+          logr::log_print(warn_msg,level="WARN")
         }
         aoi_pt <- geom_row[[col_id]] %>% sf::st_cast("LINESTRING") %>%
           #sf::st_segmentize(dfMaxLength = 100) %>%
@@ -386,7 +413,8 @@ dl_nhdplus_geoms_wrap <- function(df,col_id, dir_save_nhdp,filename_str,
 
 
       if("try-error" %in% class(nhdp_all)){
-        warning(glue::glue("Could not retrieve comid for {id}"))
+        warn_msg <- glue::glue("Could not retrieve comid for {id}")
+        logr::log_print(warn_msg,level="WARN")
       } else {
         ls_nhdp_chunk[[ctr]] <- nhdp_all
       }

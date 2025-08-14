@@ -1,3 +1,8 @@
+#' Collection of functions for processing hydrofabric in RaFTS, with an emphasis
+#' on creating oCONUS RaFTS compatibility
+# Changelog / Contributions
+# 2025 winter-spring  originally created, GL
+# 2025-08-14 Added logr, GL
 library(janitor)
 library(glue)
 library(readr)
@@ -12,7 +17,7 @@ library(data.table)
 library(yaml)
 library(dplyr)
 library(tidyr)
-
+library(logr)
 # Standardize data to featureID & featureSource
 std_feat_id <- function(df, name_featureSource = c("COMID","custom_hfuid")[1],
                         col_featureID = NULL, vals_featureID = NULL){
@@ -28,19 +33,23 @@ std_feat_id <- function(df, name_featureSource = c("COMID","custom_hfuid")[1],
   allowed_names <-base::c("COMID","custom_hfuid")
   if(!name_featureSource %in% allowed_names){
     str_allowed <- base::paste0(allowed_names,collapse='\n')
-    warning(paste0("The name_featureSource {name_featureSource} is not in",
+    warn_msg <- paste0("The name_featureSource {name_featureSource} is not in",
             "the list of expected featureSource names: ", str_allowed,
-             "STRONGLY RECONSIDER THIS CHOICE!!"))
+             "STRONGLY RECONSIDER THIS CHOICE!!")
+    logr::log_print(warn_msg, level="WARN")
   }
   if(base::any(base::grepl("featureID",base::names(df)))){
     # nothing to do here, the featureID column already exists
-    print("TODO Consider if logic should change in std_feat_id around the featureID column assignment")
+    logr::log_print("TODO Consider if logic should change in std_feat_id around the featureID column assignment",
+                    level = "WARN")
   } else if(!base::is.null(col_featureID)){
     df$featureID <- df[[col_featureID]]
   } else if (!base::is.null(vals_featureID)){
     df$featureID <- vals_featureID
   } else {
-    stop("Must provide either col_featureID or vals_featureID")
+    stop_msg <- "Must provide either col_featureID or vals_featureID"
+    logr::log_print(stop_msg,level="ERROR")
+    stop()
   }
   # Add in the featureSource for non-NA featureID columns
   if(!"featureSource" %in% base::names(df) && base::nrow(df)>0){
@@ -64,9 +73,11 @@ parse_hfab_oconus_config <- function(path_oconus_config){
 
   dir_base <- system.file("extdata",package="proc.attr.hydfab") # must define first!
   if(!base::file.exists(path_oconus_config)){
-    stop(glue::glue("The `path_oconus_config` does not exist.
+    stop_msg <- glue::glue("The `path_oconus_config` does not exist.
     Please reconsider how this path is defined in the attribute config file:
-    {path_oconus_config}"))
+    {path_oconus_config}")
+    logr::log_print(stop_msg,level="ERROR")
+    stop()
   }
   cfig <- yaml::read_yaml(path_oconus_config)
   dir_base_hfab <- glue::glue(cfig$dir_base_hfab) # Use glue in case {dir_base} inside cfig$dir_base_hfab  (e.g. unit test)
@@ -79,10 +90,10 @@ parse_hfab_oconus_config <- function(path_oconus_config){
     base::unlist()
 
   if (base::formals(hfsubsetR::get_subset)$hf_version != "2.2"){
-    warning("The hydrofabric has been updated.
+    logr::log_print("The hydrofabric has been updated.
             Check proc.attr.hydfab package file hfab_oconus_map.yaml to see if
             its mappings are still valid for the new hydrofabric version.
-            Modify this if statement once confirmed.")
+            Modify this if statement once confirmed.", level="WARN")
   }
 
   # Read in the 'standard' domain name and crs for oconus hydrofabric
@@ -125,7 +136,9 @@ read_hfab_layers <- function(path_gpkg, layers=NULL){
       hfab_ls[[lyr]] <- proc.attr.hydfab::read_hfab_layer(path_gpkg,layer=lyr)
     }
   } else {
-    stop("# TODO add in the type of hydrofabric file to read based on extension")
+    stop_msg <- "# TODO add in the type of hydrofabric file to read based on extension"
+    logr::log_print(stop_msg,level="ERROR")
+    stop()
   }
  return(hfab_ls)
 }
@@ -140,15 +153,15 @@ read_hfab_layer <- function(path_gpkg, layer){
   #' 'divides','flowpaths','network','nexus'
   #' @export
 
-  hfab <- sf::st_read(path_gpkg,layer = layer) %>% base::suppressWarnings()
+  hfab <- sf::st_read(path_gpkg,layer = layer,quiet=TRUE) %>% base::suppressWarnings()
 
   gpkg_fname <- base::basename(path_gpkg)
   if(base::grepl("ak",gpkg_fname) &&
      'vpu' %in% base::names(hfab)){
     if(!base::all('ak' %in% hfab$vpu)){
-      warning(glue::glue("Expecting the {gpkg_fname} vpu column to be 'ak'.
+      logr::log_print(glue::glue("Expecting the {gpkg_fname} vpu column to be 'ak'.
               This should be fixed with hydrofabric v3.0.
-              EDITING the vpu!! "))
+              EDITING the vpu!! "),level="WARN")
       hfab$vpu <- 'ak'
     }
   }
@@ -173,8 +186,10 @@ map_hfab_oconus_sources_wrap <- function( dt_need_hf, hfab_srce_map,
   if (!base::all(expected_colnames %in% base::names(dt_need_hf))){
     miss_cols <- expected_colnames[base::which(!expected_colnames %in%
                                                  base::names(dt_need_hf))]
-    stop(glue::glue("dt_need_hf missing expected column names:
-                    {paste0(miss_cols, collapse = ',')}"))
+    stop_msg <- glue::glue("dt_need_hf missing expected column names:
+                    {paste0(miss_cols, collapse = ',')}")
+    logr::log_print(stop_msg,level="ERROR")
+    stop()
   }
 
   if(base::nrow(dt_need_hf)>0){
@@ -184,9 +199,9 @@ map_hfab_oconus_sources_wrap <- function( dt_need_hf, hfab_srce_map,
       lon <- dt_need_hf[[col_lon]][i]
       if(base::any(base::is.na(base::c(lat,lon)))){
 
-        warning(glue::glue("Lat/Lon unavailable for
+        logr::log_print(glue::glue("Lat/Lon unavailable for
                            {paste0(names(dt_need_hf),collapse='|')}
-                           {paste0(dt_need_hf[i,],collapse='|')}"))
+                           {paste0(dt_need_hf[i,],collapse='|')}"),level="WARN")
       } else {
         # Figure out which geopackage to use based on lat/lon
         postal_id <- proc.attr.hydfab::retr_state_terr_postal(lat=lat,lon=lon)
@@ -207,10 +222,11 @@ map_hfab_oconus_sources_wrap <- function( dt_need_hf, hfab_srce_map,
   if(base::any(base::is.na(dt_need_hf$path))){
     domns_miss <- dt_need_hf$domain[base::which(is.na(dt_need_hf$path))] %>%
       base::unique()
-    warning("The following domains/postal codes do not have a mapped path",
+    warn_msg <- paste0("The following domains/postal codes do not have a mapped path",
             " to the appropriate hydrofabric gpkg file:\n",
             paste0(domns_miss, collapse ="\n"),
             "\nRefer to proc.attr.hydfab::map_hfab_oconus_sources_wrap")
+    logr::log_print(warn_msg, level = "WARN")
 
   }
 
@@ -273,7 +289,9 @@ custom_hf_id <- function(df, col_vpu = "vpu",col_id = "divide_id"){
 
   cstm_id <- paste0(df[[col_vpu]],"-",df[[col_id]]) %>% unique()
   if(base::any(base::duplicated(cstm_id))){
-    stop("More than one custom id for hydrofabric. This shouldn't happen.")
+    stop_msg <- "More than one custom id for hydrofabric. This shouldn't happen."
+    logr::log_print(stop_msg,level="ERROR")
+    stop()
   }
   return(cstm_id)
 }
@@ -323,19 +341,25 @@ retr_hf_id_xy <- function(df_sf, path_gpkg, geom_col ="geometry"){
   # 2025-06-05 add error handling with hfsubsetR::get_subset, GL
   if(!geom_col %in% base::names(df_sf)){
     msg_miss_col <- glue::glue("The expected geometry column {geom_col} is not present in data.frame")
-    stop(msg_miss_col)
+    logr::log_print(msg_miss_col,level="ERROR")
+    stop()
   } else if(!"sfc_POINT" %in% base::class(df_sf[[geom_col]])){
-    stop("Must convert df_sf geometry column to POINT geometry class")
+    stop_msg <- "Must convert df_sf geometry column to POINT geometry class"
+    logr::log_print(stop_msg,level="ERROR")
+    stop()
   }
 
 
   if(!base::is.null(sf::st_crs(df_sf[[geom_col]])$epsg) &&
      !base::is.na(sf::st_crs(df_sf[[geom_col]])$epsg)){
       if(sf::st_crs(df_sf[[geom_col]])$epsg != 4326){
-        stop("Problem with EPSG not being 4326. Consider transformation here.")
+        stop_msg <- "Problem with EPSG not being 4326. Consider transformation here."
+        logr::log_print(stop_msg,level="ERROR")
+        stop()
       }
   } else {
-    warning("EPSG not specified. Assuming EPSG=4326 for xy-based hf_id query.")
+    logr::log_print("EPSG not specified. Assuming EPSG=4326 for xy-based hf_id query.",
+                    level="WARN")
   }
 
   # Find NA vals in geometry column and remove from consideration for xy query
@@ -393,7 +417,9 @@ retr_hfab_id_coords <- function(path_gpkg, ntwk, epsg_domn,lon,lat,
     pt <-  sf::st_transform(sf::st_sfc(sf::st_point(base::c(lon,lat)),
                                        crs = epsg_coords),epsg_domn)
   } else {
-    stop("PROBLEM: the epsg_domn has not been defined.")
+    stop_msg <- "PROBLEM: the epsg_domn has not been defined."
+    logr::log_print(stop_msg,level="ERROR")
+    stop()
   }
 
   # Extract flowpath_id for intersecting divide
@@ -401,9 +427,9 @@ retr_hfab_id_coords <- function(path_gpkg, ntwk, epsg_domn,lon,lat,
                          wkt_filter = sf::st_as_text(pt))$id
 
   if(base::length(origin)==0){
-    warning(glue::glue("This lon/lat does not exist in the hydrofabric!
+    logr::log_print(glue::glue("This lon/lat does not exist in the hydrofabric!
                        {paste0(lon,',',lat)}
-                       from {path_gpkg}"))
+                       from {path_gpkg}"), level="WARN")
     hf_id <- NA
   } else {
     # Subset network based on the origin id:
@@ -486,11 +512,12 @@ retr_hfab_id_wrap <- function(dt_need_hf, path_oconus_hfab_config,
   # Parse the hydrofabric config file
   if(base::is.null(path_oconus_hfab_config)){
     dir_example <- base::file.path(dir_base,"test_config","oconus_config.yaml")
-    warning(base::paste0("The path_oconus_hfab_config, the config file for mapping file locations of ",
+    warn_msg <- base::paste0("The path_oconus_hfab_config, the config file for mapping file locations of ",
                          "hydrofabric gpkg files for oCONUS was not specified in the attribute config file.",
                          glue::glue("File defined as: \n{path_oconus_hfab_config}"),
                          glue::glue("\nRefer to an example file inside {dir_example}."),
-                         "\n This config file (configured to your paths of interest) must be placed in the same directory as all other RaFTS config files."))
+                         "\n This config file (configured to your paths of interest) must be placed in the same directory as all other RaFTS config files.")
+    logr::log_print(warn_msg, level="WARN")
     dt_have_hf <- proc.attr.hydfab::std_feat_id(df=dt_need_hf,
                                                 name_featureSource ="custom_hfuid",
                                                 col_featureID = col_usgsId)
@@ -508,8 +535,10 @@ retr_hfab_id_wrap <- function(dt_need_hf, path_oconus_hfab_config,
       need_colnames_txt <- need_colnames[base::which(!need_colnames %in%
                                                    base::names(dt_need_hf))] %>%
         base::paste0(collapse = "\n")
-      stop(glue::glue("dt_need_hf does not contain the expected column
+      stop_msg <- (glue::glue("dt_need_hf does not contain the expected column
                       {need_colnames_txt}. Check map_hfab_oconus_sources_wrap()."))
+      logr::log_print(stop_msg,level="ERROR")
+      stop()
     }
 
     # Grouping by paths so we only read in each gpkg once:
@@ -520,8 +549,10 @@ retr_hfab_id_wrap <- function(dt_need_hf, path_oconus_hfab_config,
       ctr <- ctr +1
       path_gpkg <- glue::glue(path_gpkg)
       if(!base::file.exists(path_gpkg)){
-        stop(glue::glue("The desired gpkg does not exist: {path_gpkg}.
-                        Revisit `hfab_srce_map` mappings."))
+        stop_msg <- glue::glue("The desired gpkg does not exist: {path_gpkg}.
+                        Revisit `hfab_srce_map` mappings.")
+        logr::log_print(stop_msg,level="ERROR")
+        stop()
       }
 
       # Read in the geopackage layers to identify location/retrieve hydrofabric ID
@@ -540,7 +571,9 @@ retr_hfab_id_wrap <- function(dt_need_hf, path_oconus_hfab_config,
           if(base::is.na(epsg_domn)){ # Use the manual mapping CRS as plan B
             epsg_domn <- hfab_srce_map$crs_hfab[hfab_srce_map$path==path_gpkg] %>% unique()
             if(base::length(epsg_domn)!=1){
-              stop(glue::glue("Need to define epsg for {path_gpkg}"))
+              stop_msg <- glue::glue("Need to define epsg for {path_gpkg}")
+              logr::log_print(stop_msg,level="ERROR")
+              stop()
             }
           }
 
@@ -559,11 +592,13 @@ retr_hfab_id_wrap <- function(dt_need_hf, path_oconus_hfab_config,
           # Grab the hf_id
           # hf_id <- proc.attr.hydfab::retr_hfab_id_usgs_gage(gage_id=gage_id,
           #                                                   ntwk=ntwk)
-          warning(glue::glue("UNABLE TO DETERMINE HYDROFABRIC LOCATION FOR {sub_dt_need_gpkg$name[[i]]}"))
+          logr::log_print(glue::glue("UNABLE TO DETERMINE HYDROFABRIC LOCATION FOR {sub_dt_need_gpkg$name[[i]]}"),
+                          level="WARN")
           hf_id <- NA
 
         } else {
-          warning(glue::glue("UNABLE TO DETERMINE HYDROFABRIC LOCATION FOR {sub_dt_need_gpkg$name[[i]]}"))
+          logr::log_print(glue::glue("UNABLE TO DETERMINE HYDROFABRIC LOCATION FOR {sub_dt_need_gpkg$name[[i]]}"),
+                          level="WARN")
           hf_id <- NA
         }
         hf_ids[[i]] <- hf_id
@@ -579,13 +614,16 @@ retr_hfab_id_wrap <- function(dt_need_hf, path_oconus_hfab_config,
       # need_hf_missing_path$featureSource <- featureSource
 
       if("comid" %in% base::names(need_hf_missing_path) ){
-        warning("Assuming all missing hydrofabric paths for the non-oconus identifiers correspond to COMIDS")
+        logr::log_print("Assuming all missing hydrofabric paths for the non-oconus identifiers correspond to COMIDS",
+                        level="WARN")
         need_hf_nopath_std <- proc.attr.hydfab::std_feat_id(df=need_hf_missing_path,
                                                             name_featureSource ="COMID",
                                                             col_featureID = "comid")
         # need_hf_nopath_std does not have the 'hf_uid' column that dt_have_hf has
       } else {
-        stop("THERE IS A PROBLEM HERE - WE DON'T HAVE THE CUSTOM HFUID NOR COMID.")
+        stop_msg <- "THERE IS A PROBLEM HERE - WE DON'T HAVE THE CUSTOM HFUID NOR COMID."
+        logr::log_print(stop_msg,level="ERROR")
+        stop()
       }
     }
 
@@ -615,25 +653,29 @@ retr_hfab_id_wrap <- function(dt_need_hf, path_oconus_hfab_config,
         if(base::nrow(dt_have_hf_chck)<= base::nrow(dt_need_hf)){
           dt_have_hf <- dt_have_hf_chck
         } else {
-          stop("UNEXPECTED DIMENSIONS when building dt_have_hf. Fix retr_hfab_id_wrap.")
+          stop_msg <- "UNEXPECTED DIMENSIONS when building dt_have_hf. Fix retr_hfab_id_wrap."
+          logr::log_print(stop_msg,level="ERROR")
+          stop()
           # Might want to see if there is content in need_hf_nopath_std that isn't in dt_have_hf
         }
       }
     } else if (base::exists("need_hf_nopath_std")){ # No OCONUS hf_uids provided
       dt_have_hf <- need_hf_nopath_std # This has already been standardized
     } else if(base::exists("need_hf_nopath_std")){
-      stop("UNEXPECTED DIMENSIONS based on need_hf_nopath_std. Fix retr_hfab_id_wrap.")
+      stop_msg <- "UNEXPECTED DIMENSIONS based on need_hf_nopath_std. Fix retr_hfab_id_wrap."
+      logr::log_print(stop_msg,level="ERROR")
+      stop()
       # Might want to see if there is content in need_hf_nopath_std that isn't in dt_have_hf
     }
 
   } else { # No mapping to oCONUS possible...
     dir_example <- base::file.path(system.file("extdata",package="proc.attr.hydfab"),"test_config","oconus_config.yaml")
-    warning(base::paste0("The path_oconus_hfab_config, the config file for mapping file locations of ",
+    warn_msg <- (base::paste0("The path_oconus_hfab_config, the config file for mapping file locations of ",
                          "hydrofabric gpkg files for oCONUS does not exist.",
                          glue::glue("File defined as: \n{path_oconus_hfab_config}"),
                          glue::glue("\nRefer to an example file inside {dir_example}."),
                          "\n This config file (configured to your paths of interest) must be placed in the same directory as all other RaFTS config files."))
-
+    logr::log_print(warn_msg, level="WARN")
     dt_have_hf <- proc.attr.hydfab::std_feat_id(df=dt_need_hf,
                                                 name_featureSource ="custom_hfuid",
                                                 col_featureID = col_usgsId)
@@ -661,7 +703,9 @@ get_linestring_midpoint <- function(sf_lines) {
 
     # Check if geometry column exists and is valid
     if (!base::inherits(geoms, "sfc")) {
-      stop("Could not extract valid geometry column (sfc).")
+      stop_msg <- "Could not extract valid geometry column (sfc)."
+      logr::log_print(stop_msg,level="ERROR")
+      stop()
     }
 
     # Verify geometry types (st_line_sample works on LINESTRING and MULTILINESTRING)
@@ -669,7 +713,9 @@ get_linestring_midpoint <- function(sf_lines) {
     linestr_types <- base::c("LINESTRING", "MULTILINESTRING")
     valid_types <- base::c(linestr_types, "GEOMETRYCOLLECTION")
     if (!base::any(geom_types %in% valid_types)) {
-      stop("Input sf object must contain LINESTRING or MULTILINESTRING geometries.")
+      stop_msg <- "Input sf object must contain LINESTRING or MULTILINESTRING geometries."
+      logr::log_print(stop_msg,level="ERROR")
+      stop()
     }
 
     # --- End Input Checks ---
@@ -679,7 +725,9 @@ get_linestring_midpoint <- function(sf_lines) {
       ls_midpts <- base::list()
       for(i in 1:base::length(geoms)){
         if (base::length(geoms[i]) > 1){
-          stop("Unexpected format - anticipating just one row in site_feature sf/df")
+          stop_msg <- "Unexpected format - anticipating just one row in site_feature sf/df"
+          logr::log_print(stop_msg,level="ERROR")
+          stop()
         } else { # Pick the midpoint of a linestring
           midpts <- tryCatch({sf::st_line_sample(geoms[[i]],
                                                  sample = 0.5) %>% sf::st_cast("POINT")},
@@ -688,7 +736,7 @@ get_linestring_midpoint <- function(sf_lines) {
         }
       }
     } else {
-      base::message("Assuming linestring to midpoint conversion not needed.")
+      logr::log_print("Assuming linestring to midpoint conversion not needed.",level="INFO")
       ls_midpts <- geoms
     }
   }
@@ -743,7 +791,9 @@ retr_hfuids <- function(loc_ids,
                        identifier=x,comid=NA,name=NA,X=NA,Y=NA,geometry=sf::st_sfc(NA))}))
   } else if(featureSource=='wqp'){ # The water-quality portal query doesn't include all NWIS sites
     if(!base::any(base::grepl("USGS-", loc_ids))){
-      stop("Expecting loc_id format to follow 'USGS_{gage_id}'")
+      stop_msg <- "Expecting loc_id format to follow 'USGS_{gage_id}'"
+      logr::log_print(stop_msg,level="ERROR")
+      stop()
     } else {
       ls_data_retr_usgs <-  base::lapply(loc_ids, function(x)
         tryCatch(dataRetrieval::findNLDI(wqp=x)$origin,error = function(e) {
@@ -757,17 +807,20 @@ retr_hfuids <- function(loc_ids,
         base::data.frame(sourceName="NHDPlus comid",
                          identifier=x,comid=NA,name=NA,X=NA,Y=NA,geometry=sf::st_sfc(NA))}))
   } else {
-    stop("Add another type of featureSource retrieval option here.")
+    stop_msg <- "Add another type of featureSource retrieval option here."
+    logr::log_print(stop_msg,level="ERROR")
+    stop()
   }
 
   dt_retr_usgs <- ls_data_retr_usgs %>%
     data.table::rbindlist(ignore.attr=TRUE,fill = TRUE,use.names = TRUE)
   if(base::all(base::is.na(dt_retr_usgs$X)) && base::length(loc_ids)>3){
-    warning(glue::glue(
+    warn_msg <- (glue::glue(
     "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     All {length(loc_ids)} provided loc_ids returned NA values for locations in retr_hfuids.
     Are the provided loc_ids in the correct format? Is the featureSource
     correct? Inspect proc.attr.hydfab::retr_hfuids."))
+    logr::log_print(warn_msg, level="WARN")
   }
   # ----- CRS check/enforcement
   # This should be EPSG:4326 b/c it's the NLDI
@@ -778,14 +831,19 @@ retr_hfuids <- function(loc_ids,
   if(base::length(crs_from_NLDI)==1){ # This is expected
     dt_retr_usgs <- sf::st_as_sf(dt_retr_usgs, crs=crs_from_NLDI)
     if(!base::grepl("4326", crs_from_NLDI)){
-      stop("The assumption that NLDI retrievals are EPSG:4326 is not true. Must transform.")
+      stop_msg <- "The assumption that NLDI retrievals are EPSG:4326 is not true. Must transform."
+      logr::log_print(stop_msg,level="ERROR")
+      stop()
     }
   } else if (base::length(crs_from_NLDI) > 1 ){
     if(base::all(!base::grepl("4326", crs_from_NLDI))){
-      warning("The assumption that NLDI retrievals are EPSG:4326 is not true. Must transform.")
-      print(crs_from_NLDI)
+      warn_msg <- ("The assumption that NLDI retrievals are EPSG:4326 is not true. Must transform.")
+      print_msg <- base::paste0(warn_msg, "\nProvided CRS: ", crs_from_NLDI, collapse = "\n")
+      logr::log_print(print_msg, level="WARN")
     }
-    stop("Unexpected multiple CRS from NLDI retrievals")
+    stop_msg <- "Unexpected multiple CRS from NLDI retrievals"
+    logr::log_print(stop_msg,level="ERROR")
+    stop()
   } # Otherwise if CRS is empty, continue to ignore
   # ----
   # For each geometry, pick the midpoint if a linestring is provided
@@ -794,7 +852,8 @@ retr_hfuids <- function(loc_ids,
 
   # Generate coordinates from sf geometry and name as latitude and longitude
   if("latitude" %in% names(dt_retr_usgs) && "longitude" %in% names(dt_retr_usgs)){
-    warning("latitude and longitude already exist as column names in dt_retr_usgs. Removing for re-calculation.")
+    logr::log_print("latitude and longitude already exist as column names in dt_retr_usgs. Removing for re-calculation.",
+                    level="WARN")
     dt_retr_usgs <- dt_retr_usgs %>% dplyr::select(-dplyr::all_of(c("latitude","longitude")))
   }
   lat_lon_df <- base::lapply(coords, function(x)

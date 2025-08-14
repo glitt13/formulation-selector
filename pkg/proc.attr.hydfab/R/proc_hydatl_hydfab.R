@@ -7,6 +7,14 @@
 #' intended to run very infrequently - only when HydroATLAS or hydrofabric datasets change
 #' @seealso proc.attr.hydfab/flow/prep_oconus_hydroatlas.R, the script that calls these functions
 
+# Changelog / Contributions
+# 2025 Spring originally created, GL
+# 2025-08-14 Added logr, GL
+
+library(sf)
+library(logr)
+library(ggplot2)
+
 read_hydatl_by_vpu_val <- function(vpu,dir_base_hydatl){
   #' @title Read the HydroATLAS by vpu value
   #' @description Define Paths to HydroATLAS data downloaded from HydroATLAS website
@@ -19,15 +27,19 @@ read_hydatl_by_vpu_val <- function(vpu,dir_base_hydatl){
     # Read in the north america HydroATLAS data
     path_hab_shp <- file.path(dir_base_hydatl,"hybas_na_lev01-12_v1c","hybas_na_lev12_v1c.shp")
   } else {
-    stop("Problem: vpu not identified.")
+    logr::log_print("Problem: vpu not identified.",level="ERROR")
+    stop()
   }
   if(!file.exists(path_hab_shp)){
-    stop(glue::glue("MUST download the HydroATLAS basin dataset for {vpu} from
+    stop_msg <- glue::glue("MUST download the HydroATLAS basin dataset for {vpu} from
     https://www.hydrosheds.org/products/hydrobasins for the Arctic & North America
-    and place inside {dir_base_hydatl}"))
+    and place inside {dir_base_hydatl}")
+    logr::log_print(stop_msg,level="ERROR")
+    stop()
   }
 
-  print(glue::glue("Reading, making valid {path_hab_shp} for {vpu} vpu."))
+  logr::log_(glue::glue("Reading, making valid {path_hab_shp} for {vpu} vpu."),
+             level="INFO")
   hab_shp <- sf::read_sf(path_hab_shp)
   # Make the geometries valid
   hab_shp_val <- sf::st_make_valid(hab_shp)
@@ -93,8 +105,9 @@ read_hfab_lyr_val <- function(path_hfab, lyr = 'divides'){
   #' @title Read the hydrofabric layer, convert to WGS 84, and make valid
   #' @param path_hfab filepath to the hydrofabric geopackage of interest
   #' @param lyr The layer to read from the geopackage, default `'divides'`
-  print(glue::glue("Reading, transforming, & make valid {path_hfab}"))
-  div_hfab <- sf::st_read(path_hfab,layer = lyr) # e.g. EPSG: 3338
+  logr::log_print(glue::glue("Reading, transforming, & make valid {path_hfab}"),
+                  leve="INFO")
+  div_hfab <- sf::st_read(path_hfab,layer = lyr,quiet=TRUE) # e.g. EPSG: 3338
   div_hfab_tfrm <- sf::st_transform(div_hfab, crs = 4326) # convert to 4326
   div_hfab_val <- sf::st_make_valid(div_hfab_tfrm)
   return(div_hfab_val)

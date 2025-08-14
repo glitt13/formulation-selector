@@ -4,8 +4,8 @@
 #' @author Guy Litt \email{guy.litt@noaa.gov}
 #' @note When running this script, be sure to also source tests/testthat/setup.R first
 # Changelog / Contributions
-#   2025-03-24 Originally created, GL
-
+#. 2025-03-24 Originally created, GL
+#. 2025-08-14 adapted for logr, GL
 suppressPackageStartupMessages(library(proc.attr.hydfab,quietly=TRUE))
 suppressPackageStartupMessages(library(testthat,quietly=TRUE))
 suppressPackageStartupMessages(library(mockery,quietly=TRUE))
@@ -77,16 +77,17 @@ testthat::test_that('retrieve_attr_exst', {
                                                               vars,
                                                               dir_db_attrs='a'))
   # Testing for No parquet files present
-  capt_no_parquet <- testthat::capture_condition(proc.attr.hydfab::retrieve_attr_exst(comids,
-                                                                                      vars,
-                                                                                      dir_db_attrs=dirname(dirname(dir_db_attrs_pkg))))
-  testthat::expect_true(grepl("parquet",capt_no_parquet$message))
-  nada_var <- testthat::capture_warnings(proc.attr.hydfab::retrieve_attr_exst(comids,vars=c("TOT_TWI","naDa"),
-                                                                              dir_db_attrs_pkg))
+  capt_no_parquet <- testthat::expect_error(
+    proc.attr.hydfab::retrieve_attr_exst(comids,vars,
+      dir_db_attrs=dirname(dirname(dir_db_attrs_pkg)))) %>% testthat:: capture_output()
+  testthat::expect_true(grepl("parquet",capt_no_parquet))
+  nada_var <- testthat::capture_output(proc.attr.hydfab::retrieve_attr_exst(comids,vars=c("TOT_TWI","naDa"),
+                                                                              dir_db_attrs_pkg)) %>% testthat::expect_warning()
   testthat::expect_true(any(grepl("naDa",nada_var)))
 
-  nada_comid <- testthat::capture_warnings(proc.attr.hydfab::retrieve_attr_exst(comids=c("1520007","1623207","nada"),vars,
-                                                                                dir_db_attrs_pkg))
+  nada_comid <- testthat::capture_output(proc.attr.hydfab::retrieve_attr_exst(
+    comids=c("1520007","1623207","nada"),vars,dir_db_attrs_pkg)) %>%
+    testthat::expect_warning()
   testthat::expect_true(any(base::grepl("nada",nada_comid)))
 
   testthat::expect_error(proc.attr.hydfab::retrieve_attr_exst(comids,vars=c(3134,3135),
@@ -106,12 +107,12 @@ testthat::test_that("dl_nhdplus_geoms_wrap", {
                    idx=c(1,2,3,4))
 
   ################ Test an empty directory first #######################
-  rslt_capt_cond <- testthat::capture_condition(
+  rslt_capt_cond <- testthat::capture_output(
     proc.attr.hydfab:::compile_chunks_ndplus_geoms(dir_save_nhdp,
                                                    seq_nums=NULL,
                                                    filename_str=NULL))
 
-  testthat::expect_true(base::grepl("No rds files",rslt_capt_cond$message))
+  testthat::expect_true(base::grepl("No rds files",rslt_capt_cond))
 
   rslt_compile <- base::suppressWarnings(
     proc.attr.hydfab:::compile_chunks_ndplus_geoms(dir_save_nhdp,

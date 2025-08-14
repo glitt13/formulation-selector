@@ -235,9 +235,9 @@ for(path_hfab in paths_hfab){
   # Create geopackage with different layers, multipolygon and single polygon
   path_save_ntrsct_gpkg <- base::gsub(pattern=".rds",replacement=".gpkg",path_save_ls_ntrsct)
   sf::st_write(st_poly, path_save_ntrsct_gpkg, layer = "polygon_intersects",
-               delete_layer=TRUE)
+               delete_layer=TRUE,quiet=TRUE)
   sf::st_write(st_mlti, path_save_ntrsct_gpkg,layer = "multipolygon_intersects",
-               delete_layer=TRUE)
+               delete_layer=TRUE,quiet=TRUE)
   } # END PROCESSING USING INTERSECTING BASINS APPROACH
 }
 # ---------------------------------------------------------------------------- #
@@ -342,14 +342,14 @@ for(path_hfab in paths_hfab){
 
   } else if(proc_ntrsct){ # INTERSECTING CATCHMENT BOUNDARIES PROCESSING
     # Read in the geopackage intersection data
-    st_poly <- sf::st_read(path_ntrsct_gpkg,layer = "polygon_intersects")
-    st_mlti <- sf::st_read(path_ntrsct_gpkg,layer = "multipolygon_intersects")
+    st_poly <- sf::st_read(path_ntrsct_gpkg,layer = "polygon_intersects",quiet=TRUE)
+    st_mlti <- sf::st_read(path_ntrsct_gpkg,layer = "multipolygon_intersects",quiet=TRUE)
     st_ntrsct <- base::rbind(st_poly,st_mlti)
 
     # Layers in the domain hydrofabric
     hfab_layrs <- sf::st_layers(path_hfab)
     # Get the hydrofabric column names
-    hfab_div <- sf::st_read(path_hfab,layer = "divides")
+    hfab_div <- sf::st_read(path_hfab,layer = "divides",quiet=TRUE)
     names_hfab_div <- names(hfab_div)
 
     ls_wt_mean <- list()
@@ -402,7 +402,7 @@ for(path_hfab in paths_hfab){
     utils::write.csv(dt_wt_mean,file = path_attrs)
 
     # Update hydrofabric geopackage with the downscaled hydroatlas attributes as a new layer
-    sf::st_write(dt_wt_mean,dsn=path_hfab,layer="hydroatlas_attributes",append=FALSE)
+    sf::st_write(dt_wt_mean,dsn=path_hfab,layer="hydroatlas_attributes",append=FALSE,quiet=TRUE)
     base::message(glue::glue("Updated {path_hfab} with hydroatlas attributes"))
 
     ls_all_attrs[[vpu]] <- dt_wt_mean
