@@ -3,6 +3,8 @@
 # Changelog / Contributions
 #.   2024-07-24 Originally created, GL
 #.   2025-03 Expanded and ongoing feature additions/refactoring throughout FY25
+#.   2025-08-14 Added logr, GL
+
 library(glue)
 library(tidync)
 library(dplyr)
@@ -23,6 +25,7 @@ library(jsonlite)
 library(tibble)
 library(stringr)
 library(fs)
+library(logr)
 
 attr_cfig_parse <- function(path_attr_config){
   #' @title Read and parse the attribute config yaml file to create parameter
@@ -45,7 +48,7 @@ attr_cfig_parse <- function(path_attr_config){
   if (base::is.null(home_dir_read)){
     home_dir <- Sys.getenv("HOME")
   } else if (!dir.exists(home_dir_read)){
-    warning(glue::glue("The user-defined home_dir does not exist. Assigning system default."))
+    logr::log_print("The user-defined home_dir does not exist. Assigning system default.", level = "WARN")
     home_dir <- Sys.getenv("HOME")
   } else {
     home_dir <- home_dir_read
@@ -62,8 +65,8 @@ attr_cfig_parse <- function(path_attr_config){
 
   ds_type <- try(base::unlist(raw_config$file_io)[['ds_type']])
   if('try-error' %in% base::class(ds_type) || base::is.null(ds_type)){
-    warning('ds_type undefined in the attribute config file. It is generally
-    expected to be "training" or "prediction"')
+    logr::log_print('ds_type undefined in the attribute config file. It is generally
+    expected to be "training" or "prediction"', level = "WARN")
     ds_type <- '' # !!! Generally expected to be 'training' or 'prediction' !!!
   }
   write_type <- try(base::unlist(raw_config$file_io[['write_type']]))
@@ -121,23 +124,23 @@ attr_cfig_parse <- function(path_attr_config){
     # retrieve the transformation config's attributes of interest
     vars_tfrm <- base::lapply(ls_tfrm_cfig$transform_attrs,
                               function(x) x$vars) %>% base::unlist() %>%
-                                  base::unique()
+      base::unique()
     # Identify which datasets correspond to these variables used in transformation
     vars_tfrm_ls <- map_attrs_to_dataset(vars_tfrm)
 
     # Add the transformation config's attributes to sub_attr_sel & de-dupe
     srces_integrate <- base::names(vars_tfrm_ls)[base::which(base::names(vars_tfrm_ls) %in%
-                      base::names(sub_attr_sel))]
+                                                               base::names(sub_attr_sel))]
     for(srce in srces_integrate){
       orig_vars <- sub_attr_sel[[srce]]
       tfrm_vars <- vars_tfrm_ls[[srce]]
       sub_attr_sel[[srce]] <- base::unique(base::c(sub_attr_sel[[srce]],
-                                           vars_tfrm_ls[[srce]]))
+                                                   vars_tfrm_ls[[srce]]))
     } # Completed addition of attributes used in transformation to full attribute retrievals
   } else {
-    message(glue::glue("Assuming transformations on retrieved catchment",
-    "attributes are not desired.\nIf transformations are desired add ",
-    "'name_tform_config' entry in the attribute config file\n{path_attr_config}"))
+    logr::log_print(glue("Assuming transformations on retrieved catchment",
+                         "attributes are not desired.\nIf transformations are desired add ",
+                         "'name_tform_config' entry in the attribute config file\n{path_attr_config}"), level = "INFO")
   }
 
   # Create the path to the hydrofabric config file (which defines paths to each
@@ -150,8 +153,8 @@ attr_cfig_parse <- function(path_attr_config){
   } else { # The paths to hydrofabric domain gpkg files defined in a separate
     # config file here
     path_oconus_hfab_config <- proc.attr.hydfab::build_cfig_path(
-                  path_known_config = path_attr_config,
-                  path_or_name_cfig = name_oconus_hfab_config)
+      path_known_config = path_attr_config,
+      path_or_name_cfig = name_oconus_hfab_config)
 
   }
 
@@ -176,7 +179,7 @@ attr_cfig_parse <- function(path_attr_config){
     if(base::grepl('dir',dir_name)){
       dir <- Retr_Params$paths[[dir_name]]
       if(!base::dir.exists(dir) && !base::grepl("\\{",dir)){
-        message(glue::glue("Creating {dir}"))
+        logr::log_print(glue("Creating {dir}"), level = "INFO")
         base::dir.create(dir)
       }
     }
@@ -218,8 +221,8 @@ tform_cfig_parse <- function(path_tfrm_config){
     vars <- tfa_sublevl1[[grep("vars", tfa_sub_catg)]]$vars
 
     ls_tfrm[[name_tfa]] <- base::list(tform_types = tform_types,
-                              var_desc = var_desc,
-                              vars = vars)
+                                      var_desc = var_desc,
+                                      vars = vars)
   }
 
   ls_tfrm_cfig <- base::list(file_io = ls_fio,
@@ -236,7 +239,9 @@ build_cfig_path <- function(path_known_config, path_or_name_cfig) {
   #' @seealso `fs_algo.build_cfig_path` The python equivalent of this function
   #' @export
   if (!base::file.exists(path_known_config)) {
-    stop(glue::glue("The provided 'known' configuration file does not exist: \n
+    logr::log_print(glue("The provided 'known' configuration file does not exist: \n
+                    {path_known_config}"), level = "ERROR")
+    stop(glue("The provided 'known' configuration file does not exist: \n
                     {path_known_config}"))
   }
 
@@ -251,12 +256,14 @@ build_cfig_path <- function(path_known_config, path_or_name_cfig) {
     if (!base::file.exists(path_cfig)) {
       path_cfig <- base::file.path(path_or_name_cfig)
       if (!base::file.exists(path_cfig)) {
-        stop(glue::glue("The following configuration file could not be found: \n
+        logr::log_print(glue("The following configuration file could not be found: \n
+        {path_or_name_cfig}"), level = "ERROR")
+        stop(glue("The following configuration file could not be found: \n
         {path_or_name_cfig}"))
       }
     }
   } else {
-    warning("The configuration file may not have specified the path or file name.")
+    logr::log_print("The configuration file may not have specified the path or file name.", level = "WARN")
     path_cfig <- NULL
   }
   return(path_cfig)
@@ -368,6 +375,7 @@ map_attrs_to_dataset <- function(vars){
   # Unit test expected total number of mapped variables based on input
   if(base::length(base::unique(base::unlist(ls_attrs_name))) !=
      base::length(base::unique(vars))){
+    logr::log_print("Total variables in should match total variables matched.", level = "ERROR")
     stop("Total variables in should match total variables matched.")
   }
 
@@ -398,7 +406,7 @@ retrieve_attr_exst <- function(comids, vars, dir_db_attrs, bucket_conn=NA){
     # Let's try unlisting and unnaming just-in-case
     comids <- comids %>% base::unlist() %>% base::unname()
     if(!'character' %in% base::class(comids) ){
-      warning("comids expected to be character class. converting")
+      logr::log_print("comids expected to be character class. converting", level = "WARN")
       comids <- base::as.character(comids)
     }
   }
@@ -406,16 +414,19 @@ retrieve_attr_exst <- function(comids, vars, dir_db_attrs, bucket_conn=NA){
     # Let's try unlisting and unnaming just-in-case
     vars <- vars %>% base::unlist() %>% base::unname()
     if(!'character' %in% base::class(vars)){
+      logr::log_print("vars expected to be character class", level = "ERROR")
       stop("vars expected to be character class")
     }
   }
   if(!base::dir.exists(dir_db_attrs)){
-    stop(glue::glue("The attribute database path does not exist:
+    logr::log_print(glue("The attribute database path does not exist:
+                      {dir_db_attrs}"), level = "ERROR")
+    stop(glue("The attribute database path does not exist:
                       {dir_db_attrs}"))
   }
   if(!any(base::grepl(".parquet", tools::file_ext(base::list.files(dir_db_attrs))))){
-    warning(glue::glue("The following path does not contain expected
-                          .parquet files: {dir_db_attrs}"))
+    logr::log_print(glue("The following path does not contain expected
+                          .parquet files: {dir_db_attrs}"), level = "WARN")
   }
 
   if(base::is.na(bucket_conn)){
@@ -428,9 +439,11 @@ retrieve_attr_exst <- function(comids, vars, dir_db_attrs, bucket_conn=NA){
                            dplyr::collect())
 
     if('try-error' %in% base::class(dat_all_attrs)){
-      stop(glue::glue("Could not acquire attribute data from {dir_db_attrs}"))
+      logr::log_print(glue("Could not acquire attribute data from {dir_db_attrs}"), level = "ERROR")
+      stop(glue("Could not acquire attribute data from {dir_db_attrs}"))
     }
   } else {# TODO add bucket connection here if it ever becomes a thing
+    logr::log_print("Need to accommodate a different type of source here, e.g. s3", level = "ERROR")
     stop("Need to accommodate a different type of source here, e.g. s3")
   }
 
@@ -438,11 +451,11 @@ retrieve_attr_exst <- function(comids, vars, dir_db_attrs, bucket_conn=NA){
   if (base::any(!comids %in% dat_all_attrs$featureID)){
     missing_comids <- comids[base::which(!comids %in% dat_all_attrs$featureID)]
     if (length(missing_comids) > 0){
-      warning(base::paste0("Datasets missing the following comids: ",
-                           base::paste(missing_comids,collapse=","),
-                           "\nConsider running proc.attr.hydfab::proc_attr_wrap()"))
+      logr::log_print(base::paste0("Datasets missing the following comids: ",
+                                   base::paste(missing_comids,collapse=","),
+                                   "\nConsider running proc.attr.hydfab::proc_attr_wrap()"), level = "WARN")
     } else {
-      message("There's a logic issue on missing_comids inside retrieve_attr_exst")
+      logr::log_print("There's a logic issue on missing_comids inside retrieve_attr_exst", level = "INFO")
     }
 
 
@@ -451,11 +464,11 @@ retrieve_attr_exst <- function(comids, vars, dir_db_attrs, bucket_conn=NA){
   if (base::any(!vars %in% dat_all_attrs$attribute)){
     missing_vars <- vars[base::which(!vars %in% dat_all_attrs$attribute)]
     if(length(missing_vars) >0 ){
-      warning(base::paste0("Datasets entirely missing the following vars: ",
-                           base::paste(missing_vars,collapse=","),
-                           "\nConsider running proc.attr.hydfab::proc_attr_wrap()"))
+      logr::log_print(base::paste0("Datasets entirely missing the following vars: ",
+                                   base::paste(missing_vars,collapse=","),
+                                   "\nConsider running proc.attr.hydfab::proc_attr_wrap()"), level = "WARN")
     } else {
-      message("There's a logic issue on missing_vars inside retrieve_attr_exst")
+      logr::log_print("There's a logic issue on missing_vars inside retrieve_attr_exst", level = "INFO")
     }
 
   }
@@ -466,9 +479,9 @@ retrieve_attr_exst <- function(comids, vars, dir_db_attrs, bucket_conn=NA){
     dplyr::summarise(dplyr::n_distinct(attribute))
   idxs_miss_vars <- base::which(sum_var_df$`n_distinct(attribute)` != length(vars))
   if(base::length(idxs_miss_vars)>0){
-    warning(glue::glue("The following comids are missing desired variables:
+    logr::log_print(glue("The following comids are missing desired variables:
               {paste(sum_var_df$featureID[idxs_miss_vars],collapse='\n')}
-                       \nConsider running proc.attr.hydfab::proc_attr_wrap()"))
+                       \nConsider running proc.attr.hydfab::proc_attr_wrap()"), level = "WARN")
   }
 
   return(dat_all_attrs)
@@ -511,19 +524,21 @@ retr_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
     ctr <- ctr + 1
 
     if(base::grepl("s3:/", path_ha)){
-      base::message(base::paste0("Retrieving HydroATLAS attributes from the",
-      " following s3 bucket connection:\n",
-      glue::glue("{path_ha}")))
+      logr::log_print(base::paste0("Retrieving HydroATLAS attributes from the",
+                                   " following s3 bucket connection:\n",
+                                   glue("{path_ha}")), level = "INFO")
       # TODO add in s3 capability here:
       # TODO Refer to retr_attr_hydatl and how it uses path_s3
       # TODO establish default save HydroATLAS variable parquet location/naming
-      # warning(base::paste0("!!!!!!!!!!!!!!!!!!!!!! #TODO !!!!!!!!!!!!!!!!!!!!!!!!!\n",
-      #                   glue::glue("s3 connection for HydroATLAS attributes file needs to be made:
-      #                              {path_ha}.")))
+      # logr::log_print(base::paste0("!!!!!!!!!!!!!!!!!!!!!! #TODO !!!!!!!!!!!!!!!!!!!!!!!!!\n",
+      #                   glue("s3 connection for HydroATLAS attributes file needs to be made:
+      #                              {path_ha}.")), level = "WARN")
       #
     } else if(!base::file.exists(path_ha)){
+      logr::log_print(base::paste0("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
+                                   glue("The HydroATLAS attributes file does not exist: {path_ha}.")), level = "ERROR")
       stop(base::paste0("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",
-              glue::glue("The HydroATLAS attributes file does not exist: {path_ha}.")))
+                        glue("The HydroATLAS attributes file does not exist: {path_ha}.")))
     }
     # TODO how do we split the hf_ids into COMIDs and non-COMIDs??
     #.  - attempt retr_attr_hydatl() for each path_ha,generate NA empties, then merge back into the appropriate order?
@@ -550,8 +565,8 @@ retr_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
       # The case used for the CONUS hydrofabric ids, which are actually COMIDs
       # DO NOT need to create a custom hydrofabric uid
       dat_ha <- proc.attr.hydfab::retr_attr_hydatl(hf_id=hf_ids,
-                                  path_ha=path_ha,ha_vars=ha_vars,
-                                  hf_id_col=hf_id_col)
+                                                   path_ha=path_ha,ha_vars=ha_vars,
+                                                   hf_id_col=hf_id_col)
 
       # Standardize to the featureID/featureSource format
       dat_ha <- proc.attr.hydfab::std_feat_id(df=dat_ha,
@@ -559,6 +574,7 @@ retr_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
                                               col_featureID = "hf_id")
     } else if(hf_id_col == "id"){
       # TODO add in the standardization hf_uid approach here
+      logr::log_print("TODO: Add standardization for hf_uid", level = "ERROR")
       stop("TODO: Add standardization for hf_uid")
       # TODO should we allow 'hf_id' for col_id
 
@@ -571,7 +587,9 @@ retr_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
                                               col_featureID = "hf_id")
 
     } else if (base::is.na(hf_id_col)){
-      stop(glue::glue("None of the expected column names present:
+      logr::log_print(glue("None of the expected column names present:
+        {paste0(hf_id_cols,collapse=', ')}"), level = "ERROR")
+      stop(glue("None of the expected column names present:
         {paste0(hf_id_cols,collapse=', ')}"))
     }
     # RENAME id column to hf_uid standard:
@@ -604,10 +622,10 @@ retr_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
     have_ids_char <- dt_hydatl[['hf_uid']] %>% base::as.character()
     reqd_ids_char <- base::as.character(hf_ids)
     missing_ids <- reqd_ids_char[which(!reqd_ids_char %in% have_ids_char)]
-    msg_missing_ids <- glue::glue(
+    msg_missing_ids <- glue(
       "The following hydrofabric ids could not be found in the HydroATLAS data:",
-       "\n{paste0(missing_ids,collapse='\n')}")
-    warning(msg_missing_ids)
+      "\n{paste0(missing_ids,collapse='\n')}")
+    logr::log_print(msg_missing_ids, level = "WARN")
     # NOTE: missing ids will get written to attributes/missing_data/missing_attrs_locs.csv
     #. using proc.attr.hydfab::check_miss_attrs_comid_io called at the end of
     #. proc.attr.hydfab::proc_attr_mlti_wrap.
@@ -639,13 +657,15 @@ retr_attr_hydatl <- function(hf_ids, path_ha, ha_vars,hf_id_col=c("hf_uid","hf_i
   if(base::grepl("s3",path_ha)){ # Run a check that the bucket connection works
     bucket <- try(arrow::s3_bucket(path_ha),silent=TRUE)
     if('try-error' %in% base::class(bucket)){
-      stop(glue::glue("Could not connect to an s3 bucket path for HydroATLAS
+      logr::log_print(glue("Could not connect to an s3 bucket path for HydroATLAS
+                      data retrieval. Reconsider the path_ha of {path_ha}"), level = "ERROR")
+      stop(glue("Could not connect to an s3 bucket path for HydroATLAS
                       data retrieval. Reconsider the path_ha of {path_ha}"))
     }
   } else if(!base::file.exists(path_ha)){
-    warning(glue::glue(
-       "Local filepath does not exist for HydroATLAS parquet file:\n{path_ha}
-       \nForcefully assigning lynker-spatial s3 path:\n{s3_ha}"))
+    logr::log_print(glue(
+      "Local filepath does not exist for HydroATLAS parquet file:\n{path_ha}
+       \nForcefully assigning lynker-spatial s3 path:\n{s3_ha}"), level = "WARN")
     path_ha <- s3_ha
   } # presumed to be local path location
 
@@ -661,9 +681,9 @@ retr_attr_hydatl <- function(hf_ids, path_ha, ha_vars,hf_id_col=c("hf_uid","hf_i
   }
   # Retrieve the hydroatlas variables of interest for all comids
   ha <- arrow::open_dataset(path_ha) %>%
-      dplyr::filter(!!dplyr::sym(hf_id_col) %in% hf_ids) %>%
-      dplyr::select(hf_id_col, dplyr::all_of(ha_vars)) %>%
-      dplyr::collect()
+    dplyr::filter(!!dplyr::sym(hf_id_col) %in% hf_ids) %>%
+    dplyr::select(hf_id_col, dplyr::all_of(ha_vars)) %>%
+    dplyr::collect()
 
   # Fill in the full tibble based on the provided hf_ids
   missing_ids <- base::which(!hf_ids %in% ha[[hf_id_col]])
@@ -691,7 +711,9 @@ std_dir_dataset <- function(dir_std_base, ds,mkdir=FALSE){
     if(mkdir){
       base::dir.create(dir_dataset, recursive=TRUE)
     } else {
-      stop(glue::glue("The dataset directory {mssng_ds} does not exist.
+      logr::log_print(glue("The dataset directory {mssng_ds} does not exist.
+      Double check config file defining dir_std_base and dataset names"), level = "ERROR")
+      stop(glue("The dataset directory {mssng_ds} does not exist.
       Double check config file defining dir_std_base and dataset names"))
     }
   }
@@ -766,7 +788,7 @@ read_fs_retr_gpkg <- function(path_save_gpkg, verbose = FALSE){
   #' @export
   if(!base::file.exists(path_save_gpkg)){
     if(verbose){
-      warning(glue::glue("The gpkg doesn't exist: {path_save_gpkg}"))
+      logr::log_print(glue("The gpkg doesn't exist: {path_save_gpkg}"), level = "WARN")
     }
     sf_comid_in <- NULL
   } else {
@@ -825,12 +847,12 @@ fs_retr_nhdp_comids_geom_wrap <- function(path_save_gpkg,
 
       # Grab the needed gage_ids:
       sf_comid_need <- proc.attr.hydfab::fs_retr_nhdp_comids_geom(
-                                               gage_ids=need_gids,
-                                               featureSource=featureSource,
-                                               featureID=featureID)
+        gage_ids=need_gids,
+        featureSource=featureSource,
+        featureID=featureID)
 
       sf_cmbo <- data.table::rbindlist(base::list(sf_comid_need,
-                                        sf_comid_in),use.names=TRUE,fill=TRUE)
+                                                  sf_comid_in),use.names=TRUE,fill=TRUE)
       # Count total NA, pick least-NA rows when duplicates exist & write to file
       sf_cmbo_no_dupe <- proc.attr.hydfab::std_write_geom_map_gpkg(sf_cmbo,
                                                                    path_save_gpkg,
@@ -844,14 +866,14 @@ fs_retr_nhdp_comids_geom_wrap <- function(path_save_gpkg,
     }
   } else { # An entirely new geopackage
     sf_comid <- proc.attr.hydfab::fs_retr_nhdp_comids_geom(gage_ids = gage_ids,
-                                                featureSource=featureSource,
-                                                featureID=featureID) %>%
-                sf::st_as_sf(crs=epsg)
+                                                           featureSource=featureSource,
+                                                           featureID=featureID) %>%
+      sf::st_as_sf(crs=epsg)
     # Write to file, DO NOT use df b/c it may not have 1:1 match with gage_ids
     # as expected in proc_attr_gageids
     sf_comid_no_dupes <- proc.attr.hydfab::std_write_geom_map_gpkg(sf_comid,
-                                                          path_save_gpkg,
-                                                          epsg=epsg)
+                                                                   path_save_gpkg,
+                                                                   epsg=epsg)
   }
   return(sf_comid)
 }
@@ -914,6 +936,8 @@ fs_retr_nhdp_comids_geom <- function(gage_ids,featureSource='nwissite',
   for (i in 1:length(gage_ids)){ #
     gage_id <- gage_ids[[i]]
     if(!base::exists("gage_id")){
+      logr::log_print("MUST use 'gage_id' as the object name!!! \n
+      Expected when defining nldi_feat$featureID", level = "ERROR")
       stop("MUST use 'gage_id' as the object name!!! \n
       Expected when defining nldi_feat$featureID")
     } else if (base::is.na(gage_id)){
@@ -929,19 +953,22 @@ fs_retr_nhdp_comids_geom <- function(gage_ids,featureSource='nwissite',
 
       site_feature <- try(nhdplusTools::get_nldi_feature(nldi_feature = nldi_feat))
       if('try-error' %in% base::class(site_feature)){
-        stop(glue::glue("The following nldi features didn't work. You may need to
+        logr::log_print(glue("The following nldi features didn't work. You may need to
+                   revisit the configuration yaml file that processes this dataset in
+                  fs_prep: \n {featureSource}, and featureID={featureID}"), level = "ERROR")
+        stop(glue("The following nldi features didn't work. You may need to
                    revisit the configuration yaml file that processes this dataset in
                   fs_prep: \n {featureSource}, and featureID={featureID}"))
         # TODO consider adding hydrofabric integration here (e.g. oCONUS??)
       } else if (base::is.null(site_feature)){
         if(nldi_feat$featureSource=="nwissite"){
           # Try manual api retrieval specific for nwissite (USGS-{gage_id})
-          message(glue::glue("Attempting manual connection to api for {nldi_feat$featureID}"))
+          logr::log_print(glue("Attempting manual connection to api for {nldi_feat$featureID}"), level = "INFO")
           url_build <- base::paste0("https://api.water.usgs.gov/nldi/linked-data/nwissite/",
                                     nldi_feat$featureID,"?f=json")
           json_file <- try(jsonlite::read_json(url_build))
           if("try-error" %in% json_file){ # e.g. USGS-08059400 BVWT2 1292054 Sister Grove Creek near Blue Ridge TX
-            warning(glue::glue("Could not retrieve {nldi_feat$featureID} via NLDI"))
+            logr::log_print(glue("Could not retrieve {nldi_feat$featureID} via NLDI"), level = "WARN")
             site_feature <- tibble::tibble(identifier=nldi_feat$featureID,comid=NA,
                                            geometry = sf::st_sfc(sf::st_point(),crs=epsg))
           } else {
@@ -953,32 +980,33 @@ fs_retr_nhdp_comids_geom <- function(gage_ids,featureSource='nwissite',
             )
           }
 
-      } else {
-        # Try again with discover_nhdplus_id
-        warning(glue::glue("^^ Could not retrieve geometry for {nldi_feat$featureID}."))
-        comid <- try(nhdplusTools::discover_nhdplus_id(point=site_feature$geometry))
-        if("try-error" %in% base::class(comid)){ # Assign NA values for everything
-          site_feature <- tibble::tibble(identifier=nldi_feat$featureID,comid=NA,
-                                   geometry=sf::st_sfc(sf::st_point(),crs=epsg))
-          warning(glue::glue("try-error comid - Consider adding hydrofabric integration  (e.g. oCONUS??) for \n",
-                           "{gage_id}"))
-        } else { # Assign NA values for geometry
-          site_feature <- tibble::tibble(identifier=nldi_feat$featureID,comid=comid,
-                                   geometry = sf::st_sfc(sf::st_point(),crs=epsg))
-          warning(glue::glue("else comid - Consider adding hydrofabric integration  (e.g. oCONUS??) for \n",
-                           "{gage_id}"))
+        } else {
+          # Try again with discover_nhdplus_id
+          logr::log_print(glue("^^ Could not retrieve geometry for {nldi_feat$featureID}."), level = "WARN")
+          comid <- try(nhdplusTools::discover_nhdplus_id(point=site_feature$geometry))
+          if("try-error" %in% base::class(comid)){ # Assign NA values for everything
+            site_feature <- tibble::tibble(identifier=nldi_feat$featureID,comid=NA,
+                                           geometry=sf::st_sfc(sf::st_point(),crs=epsg))
+            logr::log_print(glue("try-error comid - Consider adding hydrofabric integration  (e.g. oCONUS??) for \n",
+                                 "{gage_id}"), level = "WARN")
+          } else { # Assign NA values for geometry
+            site_feature <- tibble::tibble(identifier=nldi_feat$featureID,comid=comid,
+                                           geometry = sf::st_sfc(sf::st_point(),crs=epsg))
+            logr::log_print(glue("else comid - Consider adding hydrofabric integration  (e.g. oCONUS??) for \n",
+                                 "{gage_id}"), level = "WARN")
+          }
         }
-      }
       }
       if("sfc_LINESTRING" %in% base::class(site_feature$geometry)){
         # We want a singular point for the comid, so pick the middle point
         if (base::length(site_feature$geometry) > 1){
+          logr::log_print("Unexpected format - anticipating just one row in site_feature sf/df", level = "ERROR")
           stop("Unexpected format - anticipating just one row in site_feature sf/df")
         } else { # Pick the midpoint of a linestring
           # TODO test out proc.attr.hydfab:::get_linestring_midpoint(site_feature$geometry) here
           site_feature$geometry <- sf::st_line_sample(site_feature$geometry[[1]],
-                                                           sample = 0.5) %>%
-                                            sf::st_cast("POINT")
+                                                      sample = 0.5) %>%
+            sf::st_cast("POINT")
         }
       }
 
@@ -1076,7 +1104,8 @@ proc_attr_exst_wrap <- function(path_attrs,vars_ls,bucket_conn=NA){
       # This is a directory, so list all parquet files inside it
       files_attrs <-  base::list.files(path_attrs, pattern = "parquet")
       if(length(files_attrs)==0){
-        stop(glue::glue("No parquet files found inside {path_attrs}"))
+        logr::log_print(glue("No parquet files found inside {path_attrs}"), level = "ERROR")
+        stop(glue("No parquet files found inside {path_attrs}"))
       }
       # Read in all parquet files inside the directory
       paths_file_attrs <- base::file.path(path_attrs, files_attrs)
@@ -1086,8 +1115,8 @@ proc_attr_exst_wrap <- function(path_attrs,vars_ls,bucket_conn=NA){
       dt_all <- arrow::open_dataset(path_attrs) %>%
         data.table::as.data.table() %>%
         base::suppressWarnings()
-        # suppress the warning:
-        # 'R metadata may have unsafe or invalid elements Type: "externalptr" '
+      # suppress the warning:
+      # 'R metadata may have unsafe or invalid elements Type: "externalptr" '
     }
 
     need_vars_ls <- list()
@@ -1140,7 +1169,7 @@ std_attr_data_fmt <- function(attr_data){
   for(dat_srce in base::names(attr_data)){
     sub_dt_dat <- attr_data[[dat_srce]] %>% data.table::as.data.table()
     if(base::nrow(sub_dt_dat)==0){
-      warning(glue::glue("Unexpected missing data with {dat_srce}"))
+      logr::log_print(glue("Unexpected missing data with {dat_srce}"), level = "WARN")
       next()
     } else {
       # Even though COMID always expected, use featureSource and featureID for
@@ -1170,10 +1199,10 @@ std_attr_data_fmt <- function(attr_data){
 
       # Convert from wide to long format, convert factors to char
       attr_data_ls[[dat_srce]] <- data.table::melt(sub_dt_dat,
-           id.vars = c('featureID','featureSource','data_source','dl_timestamp'),
-           variable.name = 'attribute') %>% dplyr::arrange(featureID) %>%
-           dplyr::mutate(dplyr::across(dplyr::where(is.factor), as.character)) %>%
-          pkgcond::suppress_warnings(pattern = "are not all of the same type")
+                                                   id.vars = c('featureID','featureSource','data_source','dl_timestamp'),
+                                                   variable.name = 'attribute') %>% dplyr::arrange(featureID) %>%
+        dplyr::mutate(dplyr::across(dplyr::where(is.factor), as.character)) %>%
+        pkgcond::suppress_warnings(pattern = "are not all of the same type")
 
       # ------------------ Remove any entry that is not an official attribute
       # Run check that wide-to-long transform didn't accidentally create attributes not in the menu
@@ -1186,11 +1215,12 @@ std_attr_data_fmt <- function(attr_data){
       if(base::any(!attr_data_ls[[dat_srce]]$attribute %in% all_attrs)){
         problem_attrs <- attr_data_ls[[dat_srce]]$attribute[which(!attr_data_ls[[dat_srce]]$attribute %in% all_attrs)] %>%
           base::unique()
-        warning("The following entries are not attributes per the attribute menu and shall be removed\n",
-            "from the attributes dataset that will get written to file:\n",
-            base::paste0(problem_attrs, collapse = "\n"),
-            "\nConsider placing these the cols_no_go object inside proc.attr.hydfab::std_attr_data_fmt\n",
-            "Refer to proc.attr.hydfab::read_fs_attr_menu_config for the allowable attributes defined in package config file.")
+        str_problem <- glue::glue("The following entries are not attributes per the attribute menu and shall be removed\n",
+                                  "from the attributes dataset that will get written to file:\n",
+                                  base::paste0(problem_attrs, collapse = "\n"),
+                                  "\nConsider placing these the cols_no_go object inside proc.attr.hydfab::std_attr_data_fmt\n",
+                                  "Refer to proc.attr.hydfab::read_fs_attr_menu_config for the allowable attributes defined in package config file.")
+        logr::log_print(str_problem, level = "WARN")
 
         idxs_rm <- base::lapply(problem_attrs, function(x)
           base::which(attr_data_ls[[dat_srce]]$attribute == x)) %>%
@@ -1227,15 +1257,15 @@ retr_attr_new <- function(locids,need_vars,paths_ha){
   # In the case of reading a custom file(dataset path) rather than netcdf,
   #.  the list ordering in need_vars takes a different form
   var_types_file <- base::lapply(need_vars, function(x) base::names(x)) %>%
-              base::unname() %>% base::unlist() %>% base::unique()
+    base::unname() %>% base::unlist() %>% base::unique()
 
   if(('ha_vars' %in% base::names(need_vars)) || ('ha_vars' %in% var_types_file)  &&
-      (base::all(!base::is.na(need_vars$ha_vars))) ){
+     (base::all(!base::is.na(need_vars$ha_vars))) ){
     # Hydroatlas variable query; list name formatted as {dataset_name}__v{ver_num}
     dt_hydatl <- proc.attr.hydfab::retr_attr_hydatl_wrap(
-        hf_ids = locids,
-        paths_ha=paths_ha,
-        ha_vars=need_vars$ha_vars)
+      hf_ids = locids,
+      paths_ha=paths_ha,
+      ha_vars=need_vars$ha_vars)
     # NOTE proc.attr.hydfab::std_feat_id is called inside retr_attr_hydatl_wrap
     #. And does not need to be called here
     attr_data[['hydroatlas__v1']] <- dt_hydatl
@@ -1246,7 +1276,7 @@ retr_attr_new <- function(locids,need_vars,paths_ha){
       (base::all(!base::is.na(need_vars$usgs_vars))) ){
     # USGS nhdplusv2 query; list name formatted as {dataset_name}__v{ver_number}
     df_nhd <- proc.attr.hydfab::proc_attr_usgs_nhd(comid=locids,
-                              usgs_vars=need_vars$usgs_vars)
+                                                   usgs_vars=need_vars$usgs_vars)
     # Standardize into featureSource and featureID columns
     if( ("COMID" %in% base::names(df_nhd)) && (base::nrow(df_nhd)>0)  ){
       df_nhd_std <- proc.attr.hydfab::std_feat_id(df=df_nhd,col_featureID="COMID")
@@ -1263,8 +1293,9 @@ retr_attr_new <- function(locids,need_vars,paths_ha){
   if (!base::all(base::unlist( # A qa/qc check
     base::lapply(attr_data, function(x)
       base::any(base::grepl("featureID", base::colnames(x)))
-      ) ) ) && base::any(base::unlist( base::lapply(attr_data,
-                            function(x) base::nrow(x)>0))) ){
+    ) ) ) && base::any(base::unlist( base::lapply(attr_data,
+                                                  function(x) base::nrow(x)>0))) ){
+    logr::log_print("Expecting 'featureID' as a column name identifier in every dataset", level = "ERROR")
     stop("Expecting 'featureID' as a column name identifier in every dataset")
   } else {
     # Convert from wide to long format
@@ -1311,23 +1342,23 @@ io_attr_dat <- function(dt_new_dat,path_attrs,
   if ('try-error' %in% base::class(dt_exist)){
     dt_cmbo <- dt_new_dat
   } else if(base::nrow(dt_exist)>0 && base::nrow(dt_new_dat)>0){
-      if(!base::class(dt_exist$value) %in% base::class(dt_new_dat$value)){
-        if(base::any(base::is.na(base::as.numeric(dt_new_dat$value))) ||
-           base::any(base::is.na(base::as.numeric(dt_exist$value)))){
-          # Some character classes may have snuck in - force character class for all values
-          dt_exist$value <- base::as.character(dt_exist$value)
-          dt_new_dat$value <- base::as.character(dt_new_dat$value)
-        } else { # we can handle numeric values (preferable)
-          dt_exist$value <- base::as.numeric(dt_exist$value)
-          dt_new_dat$value <- base::as.numeric(dt_new_dat$value)
-        }
+    if(!base::class(dt_exist$value) %in% base::class(dt_new_dat$value)){
+      if(base::any(base::is.na(base::as.numeric(dt_new_dat$value))) ||
+         base::any(base::is.na(base::as.numeric(dt_exist$value)))){
+        # Some character classes may have snuck in - force character class for all values
+        dt_exist$value <- base::as.character(dt_exist$value)
+        dt_new_dat$value <- base::as.character(dt_new_dat$value)
+      } else { # we can handle numeric values (preferable)
+        dt_exist$value <- base::as.numeric(dt_exist$value)
+        dt_new_dat$value <- base::as.numeric(dt_new_dat$value)
       }
-      # Merge & duplicate check based on a subset of columns
-      dt_cmbo <- data.table::merge.data.table(dt_exist,dt_new_dat,
-                                              all=TRUE,no.dups=TRUE,) %>%
-                  dplyr::group_by(dplyr::across(dplyr::all_of(distinct_cols))) %>%
-                  dplyr::arrange(dl_timestamp) %>%
-                  dplyr::slice(1) %>% dplyr::ungroup()
+    }
+    # Merge & duplicate check based on a subset of columns
+    dt_cmbo <- data.table::merge.data.table(dt_exist,dt_new_dat,
+                                            all=TRUE,no.dups=TRUE,) %>%
+      dplyr::group_by(dplyr::across(dplyr::all_of(distinct_cols))) %>%
+      dplyr::arrange(dl_timestamp) %>%
+      dplyr::slice(1) %>% dplyr::ungroup()
   } else { # If dt_new_dat is empty, then nothing changes
     dt_cmbo <- dt_exist
     logl_write_parq <- FALSE
@@ -1339,7 +1370,8 @@ io_attr_dat <- function(dt_new_dat,path_attrs,
 
   # Run a data quality check - a single comid file should only contain one comid
   if (base::length(base::unique(dt_cmbo$featureID))>1){
-    stop(glue::glue("PROBLEM: more than one comid destined for {path_attrs}"))
+    logr::log_print(glue("PROBLEM: more than one comid destined for {path_attrs}"), level = "ERROR")
+    stop(glue("PROBLEM: more than one comid destined for {path_attrs}"))
   }
 
   if(logl_write_parq){ # Write update to file
@@ -1374,7 +1406,7 @@ chck_need_vars_fmt <- function(need_vars){
   if(!base::all(base::names(need_vars) %in% df_map_vars$rafts_name)){
     # Try re-formatting the need_vars
     need_vars <- base::lapply(names(need_vars), function(n) need_vars[[n]]) %>%
-    #need_vars <- base::lapply(need_vars, function(x) x$need_vars) %>%
+      #need_vars <- base::lapply(need_vars, function(x) x$need_vars) %>%
       base::unique() %>% base::unlist(recursive=FALSE)
 
     if(base::all(base::is.null(need_vars))){
@@ -1388,7 +1420,7 @@ chck_need_vars_fmt <- function(need_vars){
       need_vars <- ls_need_vars
     } else if (base::any(base::duplicated(names(need_vars)))){
       # Combine into singular names
-      message("Variable types duplicated. Aggregating all needed variables into a combined list form.")
+      logr::log_print("Variable types duplicated. Aggregating all needed variables into a combined list form.", level = "INFO")
       uniq_types <- base::names(need_vars) %>% base::unique()
       need_vars_redo <- list()
       for(uniq_type in uniq_types){
@@ -1406,7 +1438,7 @@ chck_need_vars_fmt <- function(need_vars){
     #     base::unlist() %>% base::unique()
     #   # Simplify problem by combining all needed variables across all locations
     #   # and grabbing them, regardless of whether some locations already have them
-    #   message("Aggregating all needed variables into a combined list form.")
+    #   logr::log_print("Aggregating all needed variables into a combined list form.", level = "INFO")
     #   redone_var_list <- list()
     #   for(typ in uniq_types){
     #     grp_all_vars_by_typ <- list()
@@ -1422,6 +1454,11 @@ chck_need_vars_fmt <- function(need_vars){
     # }
 
     if(!base::all(base::names(need_vars) %in% df_map_vars$rafts_name)){
+      logr::log_print("Unexpected format of need_vars. Should be a list e.g.\n
+      base::list(ha_vars = c('pet_mm_s01','cly_pc_sav'),
+                 usgs_vars = c('TOT_TWI')). \n
+      Refer to the proc.attr.hydfab/inst/extdata/attr_source_types.yml
+      for acceptable need_vars in the 'name' category.", level = "ERROR")
       stop("Unexpected format of need_vars. Should be a list e.g.\n
       base::list(ha_vars = c('pet_mm_s01','cly_pc_sav'),
                  usgs_vars = c('TOT_TWI')). \n
@@ -1558,7 +1595,7 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
       path_new_comid <- proc.attr.hydfab::std_path_attrs(comid=new_comid,
                                                          dir_db_attrs=Retr_Params$paths$dir_db_attrs)
       # if(base::file.exists(path_new_comid)){
-      #   warning(glue::glue("Problem with logic\n{path_new_comid} should not exist"))
+      #   logr::log_print(glue("Problem with logic\n{path_new_comid} should not exist"), level = "WARN")
       # }
       # ------------------- Write data to file -------------------
       dat_cmbo_comid <- proc.attr.hydfab::io_attr_dat(dt_new_dat=sub_dt_new_loc,
@@ -1575,6 +1612,7 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
       proc.attr.hydfab:::chck_need_vars_fmt()# Run check on format
 
     if(base::is.null(still_need_vars)){
+      logr::log_print("Still don't have logic figured out correctly for defining variables.", level = "ERROR")
       stop("Still don't have logic figured out correctly for defining variables.")
     }
     # retrieve the needed attributes:
@@ -1601,7 +1639,7 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
   # -------------------------------------------------------------------------- #
   # Compile all requested data of interest (e.g. to use for training/testing)
   # Merge the existing data with new data
-  ls_attrs <- purrr::flatten(ls_attr_data)
+  ls_attrs <- purrr::list_flatten(ls_attr_data)
   dt_all <- data.table::rbindlist(ls_attrs,use.names=TRUE,fill=TRUE) %>%
     dplyr::mutate(dplyr::across(dplyr::where(is.factor), as.character))
 
@@ -1661,7 +1699,7 @@ check_miss_attrs_comid_io <- function(dt_all, attr_vars, dir_db_attrs){
     df_miss_attrs$data_source_type <- NA
     idxs_in <- list()
     for(srce in base::names(attr_vars)){
-      print(srce)
+      logr::log_print(srce, level = "INFO")
       idxs_in[[srce]] <- base::which(df_miss_attrs$attribute %in% attr_vars[[srce]])
       if(base::length(idxs_in)>0){
         df_miss_attrs$data_source_type[idxs_in[[srce]]] <- srce
@@ -1676,7 +1714,7 @@ check_miss_attrs_comid_io <- function(dt_all, attr_vars, dir_db_attrs){
                                collapse="|"))
       warn_msg <- paste0(warn_msg,'\n',row_msg,'\n')
     }
-    warning(warn_msg)
+    logr::log_print(warn_msg, level = "WARN")
     # First check to see if missing dataset exists, if so - update
     if(base::file.exists(path_miss_attrs)){
       exst_data <- utils::read.csv(path_miss_attrs,stringsAsFactors = FALSE)
@@ -1736,7 +1774,7 @@ retr_comids <- function(gage_ids,featureSource,featureID,dir_db_attrs,
   # ---------------- COMID & COORDINATE RETRIEVAL ---------------- #
   # Populate the comids & coordinates for each gage_id
   if(base::is.null(path_save_gpkg)){
-    warning("Strongly recommended to provide a path_save_gpkg to proc.attr.hydfab::retr_comids!!")
+    logr::log_print("Strongly recommended to provide a path_save_gpkg to proc.attr.hydfab::retr_comids!!", level = "WARN")
     sf_comid <- data.table::data.table()
   } else {
     sf_comid <- proc.attr.hydfab::fs_retr_nhdp_comids_geom_wrap(
@@ -1749,7 +1787,9 @@ retr_comids <- function(gage_ids,featureSource,featureID,dir_db_attrs,
   path_meta_loc <- proc.attr.hydfab:::std_path_map_loc_ids(dir_db_attrs)
   if(base::file.exists(path_meta_loc)){
     if(!base::grepl('csv',path_meta_loc)){
-      stop(glue::glue("Expecting the file path to metadata to be a csv:
+      logr::log_print(glue("Expecting the file path to metadata to be a csv:
+                      \n{path_meta_loc}"), level = "ERROR")
+      stop(glue("Expecting the file path to metadata to be a csv:
                       \n{path_meta_loc}"))
     }
     df_comid_featid <- utils::read.csv(path_meta_loc,colClasses = 'character')
@@ -1761,6 +1801,8 @@ retr_comids <- function(gage_ids,featureSource,featureID,dir_db_attrs,
   for (i in 1:length(gage_ids)){ #
     gage_id <- gage_ids[[i]]
     if(!base::exists("gage_id")){
+      logr::log_print("MUST use 'gage_id' as the object name!!! \n
+        Expected when defining nldi_feat$featureID", level = "ERROR")
       stop("MUST use 'gage_id' as the object name!!! \n
         Expected when defining nldi_feat$featureID")
     }
@@ -1778,14 +1820,18 @@ retr_comids <- function(gage_ids,featureSource,featureID,dir_db_attrs,
       comid <- df_comid_featid$comid[df_comid_featid$featureID == nldi_feat$featureID]
 
       if(base::length(comid)>1){
-        stop(glue::glue("Problem with comid database logic. Look at how many
+        logr::log_print(glue("Problem with comid database logic. Look at how many
+        entries exist for comid {comid} in the comid_featID_map.csv"), level = "ERROR")
+        stop(glue("Problem with comid database logic. Look at how many
         entries exist for comid {comid} in the comid_featID_map.csv"))
       }
     } else if (base::any(sf_comid$gage_id == gage_id)){
       # Then check the geopackage database
       comid <- sf_comid$comid[sf_comid$gage_id == gage_id]
       if(base::length(comid)!=1){
-        stop(glue::glue("Problem with geopackage logic. Look at how many
+        logr::log_print(glue("Problem with geopackage logic. Look at how many
+        entries exist for comid {comid} in {path_save_gpkg}"), level = "ERROR")
+        stop(glue("Problem with geopackage logic. Look at how many
         entries exist for comid {comid} in {path_save_gpkg}"))
       }
     } else if (base::is.na(gage_id) || base::is.null(gage_id)) {
@@ -1798,16 +1844,19 @@ retr_comids <- function(gage_ids,featureSource,featureID,dir_db_attrs,
         site_feature <- try(nhdplusTools::get_nldi_feature(nldi_feature = nldi_feat))
 
         if('try-error' %in% base::class(site_feature)){
-          stop(glue::glue("The following nldi features didn't work. You may need to
+          logr::log_print(glue("The following nldi features didn't work. You may need to
+                 revisit the configuration yaml file that processes this dataset in
+                fs_prep: \n {featureSource}, and featureID={featureID}"), level = "ERROR")
+          stop(glue("The following nldi features didn't work. You may need to
                  revisit the configuration yaml file that processes this dataset in
                 fs_prep: \n {featureSource}, and featureID={featureID}"))
         } else if (!is.null(site_feature)){
           if(!base::is.na(site_feature['comid']$comid)){
             comid <- site_feature['comid']$comid
           } else {
-            message(glue::glue("Could not retrieve comid for {nldi_feat$featureID}."))
+            logr::log_print(glue("Could not retrieve comid for {nldi_feat$featureID}."), level = "INFO")
             comid <- nhdplusTools::discover_nhdplus_id(point=site_feature$geometry)
-            message(glue::glue("Geospatial search found a comid value of: {comid}"))
+            logr::log_print(glue("Geospatial search found a comid value of: {comid}"), level = "INFO")
           }
         }
       }
@@ -1893,15 +1942,19 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
   #.  2025-06-10 patch - only identify duplicated featureIDs when they are not NA, GL
   #.  2025-08-05 move gen_ds_gpkg from grab_attrs_datasets_fs_wrap into here, GL
   # Path checker/maker of anything that's a directory not formatted for later glue::glue() calls
-
-  if(!base::is.null(path_save_gpkg)){ # Add path save gpkg to parameter object
+  if(base::is.null(path_save_gpkg)){
+      logr::log_print("Must define the directory where a dataset's gpkg will be
+                      saved. This is not the same as the path to *input/gpkg/all_locs.gpkg",
+                      level="WARN")
+  } else { # Add path save gpkg to parameter object
     Retr_Params$paths$path_save_gpkg <- path_save_gpkg
-  } # Now we're ready for creating non-existent directories!
+  }
+  # Now we're ready for creating non-existent directories!
   for(dir_name in base::names(Retr_Params$paths)){
     if(base::grepl('dir',dir_name)){
       dir <- Retr_Params$paths[[dir_name]]
       if(!base::dir.exists(dir) && !base::grepl("\\{",dir)){
-        message(glue::glue("Creating {dir}"))
+        logr::log_print(glue("Creating {dir}"), level = "INFO")
         base::dir.create(dir,recursive = TRUE,showWarnings = FALSE)
       }
     }
@@ -1924,10 +1977,10 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
   # }
   # ---------------------- CONUS COMID compatibility ------------------------- #
   ls_retr_comid <- proc.attr.hydfab::retr_comids(gage_ids=gage_ids,
-                          featureSource=featureSource,
-                          featureID=featureID,
-                          path_save_gpkg=path_save_gpkg,
-                          dir_db_attrs=Retr_Params$paths$dir_db_attrs)
+                                                 featureSource=featureSource,
+                                                 featureID=featureID,
+                                                 path_save_gpkg=path_save_gpkg,
+                                                 dir_db_attrs=Retr_Params$paths$dir_db_attrs)
   base::names(ls_retr_comid$ls_comid) <- gage_ids
   just_comids <- ls_retr_comid$ls_comid %>% base::unname() %>% base::unlist()
 
@@ -1941,12 +1994,12 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
     # Convert into the nwissite form as defined by 'featureID'
     loc_ids <- base::lapply(gage_ids_for_hf,
                             function(gage_id) base::as.character(glue::glue(featureID))) %>%
-                                base::unlist()
+      base::unlist()
     # TODO change this after oconus path refactor??
     if(!base::is.null(Retr_Params$paths$path_oconus_hfab_config)){
       dt_hfuid <- proc.attr.hydfab::retr_hfuids(loc_ids=loc_ids,
-              path_oconus_hfab_config=Retr_Params$paths$path_oconus_hfab_config, # e.g. "~/git/formulation-selector/scripts/eval_ingest/bm_test25/bm_oconus_config.yaml"
-              featureSource = featureSource)
+                                                path_oconus_hfab_config=Retr_Params$paths$path_oconus_hfab_config, # e.g. "~/git/formulation-selector/scripts/eval_ingest/bm_test25/bm_oconus_config.yaml"
+                                                featureSource = featureSource)
 
       if(base::nrow(dt_hfuid) == base::length(gage_ids_for_hf)){
         # Integrate loc id back into the order of ls_retr_comid$ls_comid
@@ -1956,10 +2009,11 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
         ls_retr_comid$sf_comid[idxs_na_id,"comid"] <- dt_hfuid$featureID
         ls_retr_comid$sf_comid[idxs_na_id,"featureSource"] <- dt_hfuid$featureSource
       } else {
+        logr::log_print("Problem with indexing assumption", level = "ERROR")
         stop("Problem with indexing assumption")
       }
     } else {
-      warning("oCONUS hydrofabric paths not specified. Will not consider oCONUS.")
+      logr::log_print("oCONUS hydrofabric paths not specified. Will not consider oCONUS.", level = "WARN")
     }
   }
 
@@ -1970,7 +2024,7 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
   idxs_still_na_id <- base::which(base::is.na(just_comids))
   if(base::length(idxs_still_na_id)>0 && !base::is.null(Retr_Params$paths$path_hf)){
     # One more NA check here in cases where the lat/lon may be found, e.g. gage_id = "08170950"
-    base::message("Some identifiers not found. Checking conus NLDI for coordinates.")
+    logr::log_print("Some identifiers not found. Checking conus NLDI for coordinates.", level = "INFO")
     gage_ids_for_lat_lon_srch <- gage_ids[idxs_still_na_id]
     # Generate a data.frame that contains XY coordinates column
     dt_nldi_feat <- proc.attr.hydfab::retr_nldi_feat(gage_ids=gage_ids_for_lat_lon_srch,
@@ -1987,8 +2041,8 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
 
   # ---------- RETRIEVE DESIRED ATTRIBUTE DATA FOR EACH LOCATION ------------- #
   dt_site_feat_retr <- proc.attr.hydfab::proc_attr_mlti_wrap(
-                    comids=just_comids,Retr_Params=Retr_Params,
-                    lyrs=lyrs,overwrite=overwrite)
+    comids=just_comids,Retr_Params=Retr_Params,
+    lyrs=lyrs,overwrite=overwrite)
 
   # Add the original gage_id back into dataset **and ensure character class!!**
   df_map_comid_gageid <- base::data.frame(featureID=as.character(just_comids),
@@ -1996,18 +2050,18 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
   dt_site_feat_retr$featureID <- as.character(dt_site_feat_retr$featureID)
   non_dupe_dt_site_feat_retr <- dt_site_feat_retr %>% dplyr::distinct()
   if(base::any(base::duplicated(df_map_comid_gageid$featureID))){
-      df_dupe <- df_map_comid_gageid %>% dplyr::group_by(featureID) %>%
-        dplyr::filter(dplyr::n() > 1) %>% dplyr::select(gage_id)
-      idxs_duped_not_na <- base::which(!base::is.na(df_dupe$featureID))
-      if(base::length(idxs_duped_not_na)>0){
-        gage_ids_dupe <- df_dupe$gage_id[idxs_duped_not_na]
-        warning(glue::glue("Some gageids map to the same comid:\n
-                     {paste0(gage_ids_dupe,collapse = ',')}"))
-        idxs_dupe <- which(df_map_comid_gageid$gage_id %in% gage_ids_dupe)
-        df_map_comids_duped <- df_map_comid_gageid[idxs_dupe,]
-        # TODO save this subset df_map_comids_duped to file???
-        df_map_comid_gageid <- df_map_comid_gageid[-idxs_dupe,]
-      }
+    df_dupe <- df_map_comid_gageid %>% dplyr::group_by(featureID) %>%
+      dplyr::filter(dplyr::n() > 1) %>% dplyr::select(gage_id)
+    idxs_duped_not_na <- base::which(!base::is.na(df_dupe$featureID))
+    if(base::length(idxs_duped_not_na)>0){
+      gage_ids_dupe <- df_dupe$gage_id[idxs_duped_not_na]
+      logr::log_print(glue("Some gageids map to the same comid:\n
+                     {paste0(gage_ids_dupe,collapse = ',')}"), level = "WARN")
+      idxs_dupe <- which(df_map_comid_gageid$gage_id %in% gage_ids_dupe)
+      df_map_comids_duped <- df_map_comid_gageid[idxs_dupe,]
+      # TODO save this subset df_map_comids_duped to file???
+      df_map_comid_gageid <- df_map_comid_gageid[-idxs_dupe,]
+    }
   }
 
   dt_site_feat <- data.table::merge.data.table(non_dupe_dt_site_feat_retr,
@@ -2022,12 +2076,12 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
       base::is.na(dt_site_feat$featureID))]
     # Check for missing gage_ids
     gage_ids_missing <- base::names(ls_retr_comid$ls_comid)[base::which(
-        !base::names(ls_retr_comid$ls_comid) %in% dt_site_feat$gage_id)]
+      !base::names(ls_retr_comid$ls_comid) %in% dt_site_feat$gage_id)]
 
     gage_ids_missing <- base::c(missing_the_comid,gage_ids_missing) %>%
-                        base::unique()
-    warning(glue::glue("The following gage_id values did not return a comid:\n
-                       {paste0(gage_ids_missing,collapse=',')}"))
+      base::unique()
+    logr::log_print(glue("The following gage_id values did not return a comid:\n
+                       {paste0(gage_ids_missing,collapse=',')}"), level = "WARN")
   }
 
   return(dt_site_feat)
@@ -2102,7 +2156,7 @@ read_loc_data <- function(loc_id_filepath, loc_id, fmt = 'csv'){
         dplyr::rename('gage_id' = loc_id)
     }
   } else {
-    base::message(glue::glue("No location dataset defined. Reconsider designation for \n {loc_id_filepath}."))
+    logr::log_print(glue("No location dataset defined. Reconsider designation for \n {loc_id_filepath}."), level = "INFO")
     dat_loc <- NULL
   }
   return(dat_loc)
@@ -2127,12 +2181,14 @@ std_path_dataset <- function(dir_dataset, ds_filenames = ''){
   if (base::any(base::grepl("nc",tools::file_ext(fns)))){ # Read in a netcdf file
     fn_nc <- fns[base::grep("nc",tools::file_ext(fns))]
     if(length(fn_nc)!=1){
-      stop(glue::glue("Expected that only one netcdf file exists in dir:\n{dir_ds}"))
+      logr::log_print(glue("Expected that only one netcdf file exists in dir:\n{dir_ds}"), level = "ERROR")
+      stop(glue("Expected that only one netcdf file exists in dir:\n{dir_ds}"))
     }
     path_dataset_in <- file.path(dir_dataset,fn_nc)
   } else {
-    print(paste0("The following contents inside \n",dir_ds,
-                 "\n do not match expected format:\n", paste0(fns, collapse = ", ")))
+    logr::log_print(paste0("The following contents inside \n",dir_ds,
+                           "\n do not match expected format:\n", paste0(fns, collapse = ", ")), level = "INFO")
+    logr::log_print("Create a different file format reader here that generates everything in the return list.", level = "ERROR")
     stop("Create a different file format reader here that generates everything in the return list.")
     # TODO make this more adaptable so that it doesn't depend on running python fs_prep beforehand
     # Idea: e.g. read in user-defined gage_id data as a .csv
@@ -2203,20 +2259,22 @@ gen_ds_gpkg <- function(dir_db_gpkg, path_save_gpkg, gage_ids,epsg=4326){
   # Read the entire gpkg and dataset-specific gpkg
   if(base::file.exists(path_gpkg_all)){
     new_loc_db <- FALSE # The database has already been created
-    sf_all <- sf::st_read(path_gpkg_all)
+    sf_all <- sf::st_read(path_gpkg_all,quiet=TRUE)
 
     # Subset sf_all by gage_id
     sf_ds <- sf_all[base::which(sf_all[['gage_id']] %in% gage_ids),]
 
     if(base::file.exists(path_save_gpkg)){
       # Read the existing dataset geopackage
-      sf_comid <- sf::st_read(path_save_gpkg)
+      sf_comid <- sf::st_read(path_save_gpkg,quiet=TRUE)
       if (!base::identical(base::sort(base::names(sf_comid)),
                            base::sort(base::names(sf_ds)))) {
+        logr::log_print("Column names do not match between gpkg databases.", level = "ERROR")
         stop("Column names do not match between gpkg databases.")
       }
       # Combine with data of interest of interest from existing package
       if (sf::st_crs(sf_all) != sf::st_crs(sf_ds)) {
+        logr::log_print("CRS mismatch between gpkg databases", level = "ERROR")
         stop("CRS mismatch between gpkg databases")
       }
       sf_cmbo <- base::rbind(sf_comid,sf_ds)
@@ -2245,14 +2303,14 @@ update_gpkg_db <- function(dir_db_gpkg, path_save_gpkg, epsg=4326){
   # Changelog/contributions
   #. 2025-07-25 originally created, GL
   #. 2025-08-06 add crs checker, GL
-  sf_ds <- sf::st_read(path_save_gpkg)
+  sf_ds <- sf::st_read(path_save_gpkg,quiet=TRUE)
 
   crs_ds <- sf::st_crs(sf_ds)
   if(base::is.na(crs_ds$epsg)){
-    warning(glue::glue("Dataset CRS from {path_save_gpkg} is unspecified. Assuming it should be {epsg}."))
+    logr::log_print(glue("Dataset CRS from {path_save_gpkg} is unspecified. Assuming it should be {epsg}."), level = "WARN")
     sf_ds <- sf::st_set_crs(sf_ds, value = epsg)
   } else if(crs_ds$epsg != epsg){
-    warning(glue::glue("Unexpected CRS in the dataset {crs_ds$epsg}. Transforming to {epsg}."))
+    logr::log_print(glue("Unexpected CRS in the dataset {crs_ds$epsg}. Transforming to {epsg}."), level = "WARN")
     sf_ds <- sf::st_transform(sf_ds, crs = epsg)
   }
 
@@ -2260,13 +2318,15 @@ update_gpkg_db <- function(dir_db_gpkg, path_save_gpkg, epsg=4326){
   if(!base::file.exists(path_gpkg_all)){ # Create the gpkg database
     sf_write <- proc.attr.hydfab::std_write_geom_map_gpkg(sf_ds,path_gpkg_all,epsg=epsg)
   } else { # Update the gpkg database with the new dataset data
-    sf_all <- sf::st_read(path_gpkg_all)
+    sf_all <- sf::st_read(path_gpkg_all,quiet=TRUE)
     if (!base::identical(base::sort(base::names(sf_all)),
                          base::sort(base::names(sf_ds)))) {
+      logr::log_print("Column names do not match between gpkg databases.", level = "ERROR")
       stop("Column names do not match between gpkg databases.")
     }
     # Combine with data of interest of interest from existing package
     if (sf::st_crs(sf_all) != sf::st_crs(sf_ds)) {
+      logr::log_print("CRS mismatch between gpkg databases", level = "ERROR")
       stop("CRS mismatch between gpkg databases")
     }
     sf_cmbo <-  base::rbind(sf_all, sf_ds)
@@ -2321,6 +2381,10 @@ grab_attrs_datasets_fs_wrap <- function(Retr_Params,lyrs="network",overwrite=FAL
   if(base::any(!datasets %in% all_ds)){ # Run check that dataset exists
     bad_ds <- paste0(datasets[which(!datasets %in% all_ds)], collapse = ", ")
     good_ds <- paste0(all_ds, collapse = ", ")
+    logr::log_print(base::paste0("The following datasets do not exist in the directory\n",
+                                 Retr_Params$paths$dir_std_base, "/: \n ",bad_ds,"\n",
+                                 "\n These options exist in that directory:\n",good_ds,
+                                 "\n\n Reconsider the dataset and/or directory choice."), level = "ERROR")
     stop(base::paste0("The following datasets do not exist in the directory\n",
                       Retr_Params$paths$dir_std_base, "/: \n ",bad_ds,"\n",
                       "\n These options exist in that directory:\n",good_ds,
@@ -2329,7 +2393,7 @@ grab_attrs_datasets_fs_wrap <- function(Retr_Params,lyrs="network",overwrite=FAL
   ls_path_save_gpkg <- base::list()
   ls_sitefeat_all <- base::list()
   for(ds in datasets){ # Looping by dataset
-    message(glue::glue("--- PROCESSING {ds} DATASET ---"))
+    logr::log_print(glue("--- PROCESSING {ds} DATASET ---"), level = "INFO")
 
     dir_dataset <- proc.attr.hydfab::std_dir_dataset(Retr_Params$paths$dir_std_base,ds)
 
@@ -2352,12 +2416,12 @@ grab_attrs_datasets_fs_wrap <- function(Retr_Params,lyrs="network",overwrite=FAL
 
     # ---------------------- Grab all needed attributes ---------------------- #
     dt_site_feat <- proc.attr.hydfab::proc_attr_gageids(gage_ids,
-                                                 featureSource,
-                                                 featureID,
-                                                 Retr_Params,
-                                                 path_save_gpkg=path_save_gpkg,
-                                                 lyrs=lyrs,
-                                                 overwrite=overwrite)
+                                                        featureSource,
+                                                        featureID,
+                                                        Retr_Params,
+                                                        path_save_gpkg=path_save_gpkg,
+                                                        lyrs=lyrs,
+                                                        overwrite=overwrite)
     dt_site_feat$dataset_name <- ds
     ls_sitefeat_all[[ds]] <- dt_site_feat
     ls_path_save_gpkg[[ds]] <- path_save_gpkg
@@ -2378,22 +2442,22 @@ grab_attrs_datasets_fs_wrap <- function(Retr_Params,lyrs="network",overwrite=FAL
       # ls_fs_std <- proc.attr.hydfab::proc_attr_read_gage_ids_fs(dir_dataset)
       # path_save_gpkg <- proc.attr.hydfab:::std_path_retr_gpkg(fs_path)
       if(base::is.null(path_save_gpkg_cstm)){
-        warning("STRONGLY RECOMMENDED that user provide path_save_gpkg_cstm to
-                proc.attr.hydfab::grab_attrs_datasets_fs_wrap.")
+        logr::log_print("STRONGLY RECOMMENDED that user provide path_save_gpkg_cstm to
+                proc.attr.hydfab::grab_attrs_datasets_fs_wrap.", level = "WARN")
       } else {
         path_save_gpkg <- path_save_gpkg_cstm
       }
 
       dt_site_feat <- proc.attr.hydfab::proc_attr_gageids(gage_ids=as.array(dat_loc[['gage_id']]),
-                                                           featureSource=Retr_Params$loc_id_read$featureSource_loc,
-                                                           featureID=Retr_Params$loc_id_read$featureID_loc,
-                                                           Retr_Params = Retr_Params,
-                                                           path_save_gpkg=path_save_gpkg,
-                                                           lyrs=lyrs,
-                                                           overwrite=overwrite)
+                                                          featureSource=Retr_Params$loc_id_read$featureSource_loc,
+                                                          featureID=Retr_Params$loc_id_read$featureID_loc,
+                                                          Retr_Params = Retr_Params,
+                                                          path_save_gpkg=path_save_gpkg,
+                                                          lyrs=lyrs,
+                                                          overwrite=overwrite)
       dt_site_feat$dataset_name <- Retr_Params$loc_id_read$loc_id_filepath
     } else {
-      warning("TODO: add check that user didn't provide parameter expecting to read data")
+      logr::log_print("TODO: add check that user didn't provide parameter expecting to read data", level = "WARN")
       # TODO add check that user didn't provide parameter expecting to read data
     }
     # Combine lists
@@ -2414,18 +2478,21 @@ grab_attrs_datasets_fs_wrap <- function(Retr_Params,lyrs="network",overwrite=FAL
     bool_path_meta <- (base::is.null(path_meta)) || (base::grepl("\\{", path_meta))
     if(is.na(bool_path_meta)){ # some glue objects not defined
       objs_glue <- base::list(ds_type=ds_type,write_type=write_type,
-                        dir_std_base=dir_std_base,path_meta=path_meta,
-                        ds=ds)
+                              dir_std_base=dir_std_base,path_meta=path_meta,
+                              ds=ds)
       # Which objects that could be defined in glue are not?
       ids_need_defined <- names(objs_glue)[unlist(lapply(names(objs_glue),
-                             function(x) is.null(objs_glue[[x]])))]
+                                                         function(x) is.null(objs_glue[[x]])))]
 
-      stop(glue::glue("path_meta not fully defined. Be sure that Retr_Params contains
+      logr::log_print(glue("path_meta not fully defined. Be sure that Retr_Params contains
+           appropriate objects, e.g. {paste0(ids_need_defined,collapse=', ')}
+           for Retr_Params$paths$path_meta:\n{Retr_Params$paths$path_meta}"), level = "ERROR")
+      stop(glue("path_meta not fully defined. Be sure that Retr_Params contains
            appropriate objects, e.g. {paste0(ids_need_defined,collapse=', ')}
            for Retr_Params$paths$path_meta:\n{Retr_Params$paths$path_meta}"))
     }
     proc.attr.hydfab::write_meta_nldi_feat(dt_site_feat = ls_sitefeat_all[[ds]],
-                         path_meta = path_meta)
+                                           path_meta = path_meta)
   }
 
 
@@ -2442,9 +2509,9 @@ grab_attrs_datasets_fs_wrap <- function(Retr_Params,lyrs="network",overwrite=FAL
 write_meta_nldi_feat <- function(dt_site_feat, path_meta){
   #' @title Write metadata from NLDI retrieval
   #' @description
-    #' Standard approach for saving metadata for each location corresponding to
-    #' a dataset. The metadata file contains the featureID/featureSource,
-    #' data_source, dl_timestamp, gage_id, attribute and its value
+  #' Standard approach for saving metadata for each location corresponding to
+  #' a dataset. The metadata file contains the featureID/featureSource,
+  #' data_source, dl_timestamp, gage_id, attribute and its value
   #' @seealso \link[proc.attr.hydfab]{proc_attr_gageids}
   #' @param dt_site_feat data.table or data.frame of NLDI site features
   #' retrieved using nhdplusTools::get_nldi_feature() and organized
@@ -2453,29 +2520,32 @@ write_meta_nldi_feat <- function(dt_site_feat, path_meta){
   #' @export
 
   if(base::grepl("\\{",path_meta)){
+    logr::log_print("path_meta passed into write_meta_nldi_feat still has glue formatted
+         string containing '{}'. Make sure the object inside the curly brackets
+         is defined before calling write_meta_nldi_feat().", level = "ERROR")
     stop("path_meta passed into write_meta_nldi_feat still has glue formatted
          string containing '{}'. Make sure the object inside the curly brackets
          is defined before calling write_meta_nldi_feat().")
   }
 
   if(!base::dir.exists(base::dirname(path_meta))){
-    warning(glue::glue(
-      "The dataset directory is expected to exist: {base::dirname(path_meta)}. Creating it."))
+    logr::log_print(glue(
+      "The dataset directory is expected to exist: {base::dirname(path_meta)}. Creating it."), level = "WARN")
     base::dir.create(base::dirname(path_meta),recursive = TRUE)
   }
 
   # Check to see if any sfc_POINT objects exist & remove in order to write table
   dtype_sfc_bool <- base::lapply(base::colnames(dt_site_feat),
-                   function(x) base::any(base::grepl("sfc",
-                                                     class(dt_site_feat[[x]]))))
+                                 function(x) base::any(base::grepl("sfc",
+                                                                   class(dt_site_feat[[x]]))))
   geom_cols <- base::colnames(dt_site_feat)[base::unlist(dtype_sfc_bool)]
 
   if (base::length(geom_cols)>0){ # Remove the sfc-formatted coordinates
     xy_df <- sf::st_coordinates(dt_site_feat[[geom_cols]])
     dt_site_feat <- dt_site_feat %>% dplyr::select(-dplyr::all_of(geom_cols))
     if(!base::any(base::grepl("X|lat|latitude",base::colnames(dt_site_feat)))){
-      warning("Losing coordinates in the dataset. Consider adding them back in
-              by modifying proc.attr.hydfab::write_meta_nldi_feat.")
+      logr::log_print("Losing coordinates in the dataset. Consider adding them back in
+              by modifying proc.attr.hydfab::write_meta_nldi_feat.", level = "WARN")
     }
   }
 
@@ -2487,9 +2557,10 @@ write_meta_nldi_feat <- function(dt_site_feat, path_meta){
                      file=path_meta,
                      row.names = FALSE)
   } else {
+    logr::log_print("File extension is not in expected format of csv or parquet", level = "ERROR")
     stop("File extension is not in expected format of csv or parquet")
   }
-  base::message(glue::glue("Wrote nldi location metadata to {path_meta}"))
+  logr::log_print(glue("Wrote nldi location metadata to {path_meta}"), level = "INFO")
 }
 
 wrap_check_vars <- function(vars_ls){
@@ -2511,20 +2582,29 @@ wrap_check_vars <- function(vars_ls){
   # Now check what var categories provided by user in the the Retr_Params$vars
   names_var_catg <- base::names(vars_ls)
   if(base::any(base::is.null(names_var_catg))){
-    stop(glue::glue("Retr_Params$vars should be a sublist with sublist names ",
-                    "corresponding to\n standardized names in the proc.attr.hydfab package.",
-                    " These names include:\n{paste0(var_catgs,collapse='\n')}"))
+    logr::log_print(glue("Retr_Params$vars should be a sublist with sublist names ",
+                         "corresponding to\n standardized names in the proc.attr.hydfab package.",
+                         " These names include:\n{paste0(var_catgs,collapse='\n')}"), level = "ERROR")
+    stop(glue("Retr_Params$vars should be a sublist with sublist names ",
+              "corresponding to\n standardized names in the proc.attr.hydfab package.",
+              " These names include:\n{paste0(var_catgs,collapse='\n')}"))
   }
 
   # Run test that the variable name is inside
   test_bool_var_catg <- base::lapply(names_var_catg,
                                      function(x) x %in% var_catgs) %>% unlist()
   if(base::any(!test_bool_var_catg)){
-    stop(glue::glue("Retr_Params$vars contains the following unrecognized ",
-                    "variable category name(s): ",
-                    "{paste0(names_var_catg[!test_bool_var_catg],collapse='\n')}",
-                    "\nAcceptable names include:\n",
-                    "{paste0(var_catgs,collapse='\n')}"
+    logr::log_print(glue("Retr_Params$vars contains the following unrecognized ",
+                         "variable category name(s): ",
+                         "{paste0(names_var_catg[!test_bool_var_catg],collapse='\n')}",
+                         "\nAcceptable names include:\n",
+                         "{paste0(var_catgs,collapse='\n')}"
+    ), level = "ERROR")
+    stop(glue("Retr_Params$vars contains the following unrecognized ",
+              "variable category name(s): ",
+              "{paste0(names_var_catg[!test_bool_var_catg],collapse='\n')}",
+              "\nAcceptable names include:\n",
+              "{paste0(var_catgs,collapse='\n')}"
     ))
   }
 
@@ -2569,10 +2649,10 @@ check_attr_selection <- function(attr_cfg_path = NULL, vars = NULL, verbose = TR
       vars <- attr_cfg_sel[[dataset_index]] %>% unlist() %>% unname()
       if (!is.null(vars)){
         vars <- paste0(vars, collapse = ', ')
-        msg <- glue::glue('Checking the ', dataset,
-                          ' dataset for the following requested attributes: \n',
-                          vars)
-        message(msg)
+        msg <- glue('Checking the ', dataset,
+                    ' dataset for the following requested attributes: \n',
+                    vars)
+        logr::log_print(msg, level = "INFO")
       }
 
     }
@@ -2584,6 +2664,7 @@ check_attr_selection <- function(attr_cfg_path = NULL, vars = NULL, verbose = TR
     # vars <- c("TOT_twi","TOT_PRSNOW","TOT_POPDENS90","TOT_EWT","TOT_RECHG","TOT_BFI")
     vars_sel <- vars
   } else {
+    logr::log_print("Must provide attr_cfg_path or vars as arguments to check_attr_selection", level = "ERROR")
     stop("Must provide attr_cfg_path or vars as arguments to check_attr_selection")
   }
 
@@ -2591,9 +2672,9 @@ check_attr_selection <- function(attr_cfg_path = NULL, vars = NULL, verbose = TR
   vars_menu <- NA
   # Compile the attribute menu into one list of variables
   create_menu_list <- function(dataset_index){
-      dataset_vars <- attr_menu[[dataset_index]] %>% base::unlist() %>% base::names()
-      vars_menu <<- c(vars_menu, dataset_vars)
-    }
+    dataset_vars <- attr_menu[[dataset_index]] %>% base::unlist() %>% base::names()
+    vars_menu <<- c(vars_menu, dataset_vars)
+  }
   lapply(dataset_indices, create_menu_list)
 
 
@@ -2604,9 +2685,9 @@ check_attr_selection <- function(attr_cfg_path = NULL, vars = NULL, verbose = TR
   # Only print a warning if the user requested unavailable attrs:
   if (base::length(missing_vars) > 0){
     # Tell the user they asked for something that's not available
-    warn_msg <- glue::glue('The following attributes, as specified, were not found in the attribute menu:\n',
-                 missing_vars_list, '\nPlease check spelling, capitalization, etc. and revise the *_attr_config.yaml', sep = ',')
-    warning(warn_msg)
+    warn_msg <- glue('The following attributes, as specified, were not found in the attribute menu:\n',
+                     missing_vars_list, '\nPlease check spelling, capitalization, etc. and revise the *_attr_config.yaml', sep = ',')
+    logr::log_print(warn_msg, level = "WARN")
   }else{
     missing_vars <- NA
   }
@@ -2637,6 +2718,7 @@ std_path_miss_tfrm_io <- function(path_missing_attrs,  read=TRUE, df_miss=NULL){
   } else if (!base::is.null(df_miss)) {
     utils::write.csv(x=df_miss,file = path_missing_attrs,row.names = FALSE)
   } else {
+    logr::log_print("Inappropriate application of the standardized file i/o for missing comids", level = "ERROR")
     stop("Inappropriate application of the standardized file i/o for missing comids")
   }
 }
@@ -2676,6 +2758,7 @@ fs_attrs_miss_mlti_wrap <- function(path_attr_config){
     col_locid <- "featureID"
     df_miss <- df_miss %>% dplyr::rename(featureID = "comid")
   } else {
+    logr::log_print("Unexpected format for missing transformation data", level = "ERROR")
     stop("Unexpected format for missing transformation data")
   }
 
@@ -2686,7 +2769,7 @@ fs_attrs_miss_mlti_wrap <- function(path_attr_config){
   }
   df_miss$uniq_cmbo <- proc.attr.hydfab:::uniq_id_loc_attr(df_miss[[col_locid]],df_miss$attribute)
   if(base::nrow(df_miss)>0){
-    message("Beginning search for missing comid-attribute pairings.")
+    logr::log_print("Beginning search for missing comid-attribute pairings.", level = "INFO")
     # The unique comid-attr combo:
     df_miss$uniq_cmbo <- proc.attr.hydfab:::uniq_id_loc_attr(df_miss[[col_locid]],
                                                              df_miss$attribute)
@@ -2738,12 +2821,12 @@ fs_attrs_miss_mlti_wrap <- function(path_attr_config){
         attrs_have <- attrs[idxs_this_dl_ds]
 
         if(base::length(idxs_this_dl_ds)>0){
-          print(glue::glue("Found attributes from {dl_ds} dataset"))
+          logr::log_print(glue("Found attributes from {dl_ds} dataset"), level = "INFO")
           df_miss$dl_dataset[base::which(df_miss$attribute %in% attrs_have)] <-
             unlist(df_attr_src_types[[dl_ds]])[["name"]]
           vars_ls[[base::unlist(df_attr_src_types[[dl_ds]])[["name"]]]] <- attrs_have
         } else {
-          print(glue::glue("No attributes correspond to {dl_ds} dataset"))
+          logr::log_print(glue("No attributes correspond to {dl_ds} dataset"), level = "INFO")
         }
       }
 
@@ -2751,35 +2834,37 @@ fs_attrs_miss_mlti_wrap <- function(path_attr_config){
       if(base::any(base::is.na(df_miss$dl_dataset))){
         unk_attrs <- df_miss$attribute[which(is.na(df_miss$dl_dataset))]
         str_unk_attrs <- paste0(unk_attrs, collapse = ", ")
-        warning(glue::glue("Could not identify datasets for the following attributes:
-                       \n{str_unk_attrs}"))
+        logr::log_print(glue("Could not identify datasets for the following attributes:
+                       \n{str_unk_attrs}"), level = "WARN")
       }
       ############# Retrieve missing attributes #################
       # Perform retrieval using these variables that should be available
       Retr_Params$vars <- vars_ls
 
       # Acquire the needed variables
-      message(glue::glue(
+      logr::log_print(glue(
         "Retrieving {length(unlist(vars_ls))} attributes for {length(comids)} total comids.
-        This may take a while."))
+        This may take a while."), level = "INFO")
       dt_all <- try(proc.attr.hydfab::proc_attr_mlti_wrap(comids=comids,
-                                            Retr_Params=Retr_Params,
-                                            lyrs="network",overwrite=FALSE))
+                                                          Retr_Params=Retr_Params,
+                                                          lyrs="network",overwrite=FALSE))
       if("try-error" %in% base::class(dt_all) || base::nrow(dt_all) == 0){
         comids_str <- base::paste0(comids,collapse='\n')
-        warning(glue::glue("Could not retrieve attribute data for the following comids:
-                {comids_str}"))
+        logr::log_print(glue("Could not retrieve attribute data for the following comids:
+                {comids_str}"), level = "WARN")
         next()
       }
 
       # The unique-id key for identifying unique location-attribute combinations
       ls_have_uniq_cmbo[[row]] <- proc.attr.hydfab:::uniq_id_loc_attr(dt_all$featureID,
-                                                   dt_all$attribute)
+                                                                      dt_all$attribute)
 
 
       if(base::any(base::is.na(dt_all$value))){
         idxs_na <- which(is.na(dt_all$value))
         comids_problem <- paste0(dt_all$featureID[idxs_na],collapse=', ')
+        logr::log_print(base::paste0("PROBLEM: The following comids hold NA values:
+                          \n{comids_problem}"), level = "ERROR")
         stop(base::paste0("PROBLEM: The following comids hold NA values:
                           \n{comids_problem}"))
       }
@@ -2791,18 +2876,14 @@ fs_attrs_miss_mlti_wrap <- function(path_attr_config){
       dplyr::filter(!uniq_cmbo %in% have_uniq_cmbo)
 
     if (base::nrow(df_still_missing)== 0){
-      message("Successfully found all missing attributes!")
+      logr::log_print("Successfully found all missing attributes!", level = "INFO")
     } else {
-      message("Some missing comid-attribute pairings still remain")
+      logr::log_print("Some missing comid-attribute pairings still remain", level = "INFO")
     }
     # Now update the transformation's missing comid-attribute pairing file
     proc.attr.hydfab::std_path_miss_tfrm_io(path_missing_attrs,
-                                       df_miss=df_still_missing,read=FALSE)
+                                            df_miss=df_still_missing,read=FALSE)
   } else {
-    message("No missing comid-attribute pairings.")
+    logr::log_print("No missing comid-attribute pairings.", level = "INFO")
   }
 }
-
-
-
-

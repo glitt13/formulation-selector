@@ -2,8 +2,8 @@
 #' @author Guy Litt \email{guy.litt@noaa.gov}
 #' @note When running this script, be sure to also source tests/testthat/setup.R first
 # Changelog / Contributions
-#   2025-02-12 Originally created, GL
-
+#.  2025-02-12 Originally created, GL
+#.  2025-08-14 Adapted for logr, GL
 
 suppressPackageStartupMessages(library(proc.attr.hydfab,quietly=TRUE))
 suppressPackageStartupMessages(library(testthat,quietly=TRUE))
@@ -186,9 +186,8 @@ testthat::test_that("read_hfab_layer",{
   sf::st_write(mock_data_ak, temp_gpkg_ak, layer = "divides",
                driver = "GPKG", quiet = TRUE,append=FALSE) %>% suppress_messages()
 
-  testthat::expect_warning( proc.attr.hydfab::read_hfab_layer(temp_gpkg_ak, "divides"))
-
-
+  out <- testthat::capture_output( proc.attr.hydfab::read_hfab_layer(temp_gpkg_ak, "divides"))
+  testthat::expect_true(base::grepl("EDITING the vpu!!",out)) # Note GL: This should be fixed with hydrofabric v3.0
 })
 #
 # test_that("retr_hf_id_xy returns correct hf_id values with mocked get_subset", {
@@ -241,38 +240,40 @@ testthat::test_that("read_hfab_layer",{
 
 testthat::test_that("retr_hf_id_xy errors on missing geometry column", {
   df_missing_geom <- data.frame(id = 1)
-  testthat::expect_error(
-    retr_hf_id_xy(df_missing_geom, "path.gpkg", geom_col = "geometry"),
-    "The expected geometry column geometry is not present"
-  )
+  err <- testthat::capture_error(
+    retr_hf_id_xy(df_missing_geom, "path.gpkg", geom_col = "geometry")) %>%
+    testthat::capture_output() %>% pkgcond::suppress_messages()
+    testthat::expect_true(
+      base::grepl("The expected geometry column geometry is not present", err))
+
 })
 
 testthat::test_that("retr_hf_id_xy errors if geometry is not POINT", {
   line <- sf::st_sfc(sf::st_linestring(matrix(c(0,0, 1,1), ncol=2, byrow=TRUE)), crs=4326)
   df <- data.frame(id = 1)
   df_sf <- sf::st_sf(df, geometry = line)
-  testthat::expect_error(
-    proc.attr.hydfab::retr_hf_id_xy(df_sf, "path.gpkg"),
-    "Must convert df_sf geometry column to POINT"
-  )
+  err <- testthat::capture_error(
+    proc.attr.hydfab::retr_hf_id_xy(df_sf, "path.gpkg")
+  ) %>% testthat::capture_output()
+  testthat::expect_true(
+    base::grepl( "Must convert df_sf geometry column to POINT", err))
 })
 
 testthat::test_that("retr_hf_id_xy warns if CRS is missing", {
   pt <- st_sfc(st_point(c(-98.2, 30.0)))
   df <- st_sf(id = 1, geometry = pt)
-  testthat::expect_warning(
-      proc.attr.hydfab::retr_hf_id_xy(df, "path.gpkg"),
-    "EPSG not specified. Assuming EPSG=4326"
-  )
+  err <- testthat::capture_error(
+      proc.attr.hydfab::retr_hf_id_xy(df, "path.gpkg")) %>%
+    testthat::capture_output() %>% pkgcond::suppress_messages()
+  testthat::expect_true(base::grepl("EPSG not specified. Assuming EPSG=4326",err))
 })
 
 testthat::test_that("retr_hf_id_xy errors if CRS is not 4326", {
   pt <- sf::st_sfc(sf::st_point(c(-98.2, 30.0))) %>% sf::st_set_crs(3857)
   df <- st_sf(id = 1, geometry = pt)
-  testthat::expect_error(
-    proc.attr.hydfab::retr_hf_id_xy(df, "path.gpkg"),
-    "Problem with EPSG not being 4326"
-  )
+  err <- testthat::expect_error(
+    proc.attr.hydfab::retr_hf_id_xy(df, "path.gpkg")) %>% testthat::capture_output()
+  testthat::expect_true(base::grepl("Problem with EPSG not being 4326", err))
 })
 
 
@@ -361,11 +362,17 @@ dt_hfuid <- data.table::data.table(identifier=c("15056210","50147800","16704000"
 ##############
 testthat::test_that("retr_hfuid",{
   loc_ids_for_ak_hi_prvi <- base::c("15056210","50147800","16704000")
+  rslt_msg <-testthat::capture_output(
+    proc.attr.hydfab::retr_hfuids(loc_ids=loc_ids_for_ak_hi_prvi,
+                                  path_oconus_hfab_config = path_oconus_yaml,
+                                  featureSource = 'nwissite')) %>%
+    testthat::expect_warning()
 
+    testthat::expect_true(base::grepl("lon/lat does not exist", rslt_msg))
   rslt <- proc.attr.hydfab::retr_hfuids(loc_ids=loc_ids_for_ak_hi_prvi,
                                         path_oconus_hfab_config = path_oconus_yaml,
                                         featureSource = 'nwissite'
-  ) %>% testthat::expect_warning(regexp="lon/lat does not exist")
+  ) %>% pkgcond::suppress_warnings()
   testthat::expect_true(all(lapply(loc_ids_for_ak_hi_prvi, function(x)
     any(base::grepl(x, rslt$identifier))))) %>% base::suppressWarnings()
   testthat::expect_true(any(base::grepl("custom_hfuid", rslt$featureSource)))
@@ -377,11 +384,15 @@ testthat::test_that("retr_hfuid",{
   testthat::expect_identical(dt_hfuid$crs_hfab, rslt$crs_hfab)
 
   # ----- test for comid from a CONUS location (TX)
+  rslt_out <- testthat::capture_output(proc.attr.hydfab::retr_hfuids(loc_ids= c(1520007),
+                                path_oconus_hfab_config = path_oconus_yaml,
+                                featureSource = 'comid'))
+  testthat::expect_true(base::grepl(" following domains/postal codes",rslt_out))
   rslt_comid <- proc.attr.hydfab::retr_hfuids(loc_ids= c(1520007),
                                               path_oconus_hfab_config = path_oconus_yaml,
                                               featureSource = 'comid') %>%
+    pkgcond::suppress_messages()
 
-                testthat::expect_warning(regexp=" following domains/postal codes")
   testthat::expect_equal(rslt_comid$featureSource, "COMID")
   testthat::expect_equal(rslt_comid$featureID,"1520007")
   testthat::expect_true(base::is.na(rslt_comid$path))
@@ -521,11 +532,12 @@ test_that("retr_hfuids works with featureSource = 'location' (assuming string lo
 
 test_that("retr_hfuids stops with unknown featureSource", {
   stub(retr_hfuids, "proc.attr.hydfab::retr_hfab_id_wrap", proc.attr.hydfab$retr_hfab_id_wrap)
-  expect_error(
+  err <- testthat::expect_error(
     retr_hfuids(loc_ids = c("1"),
                 path_oconus_hfab_config = dummy_config_path,
-                featureSource = "invalid_source"),
-    "Add another type of featureSource retrieval option here."
+                featureSource = "invalid_source")) %>% testthat::capture_output()
+  testthat::expect_true(
+    base::grepl("Add another type of featureSource retrieval option here.", err)
   )
 })
 testthat::test_that("Coordinate extraction with all NA geometries returns NA coordinates", {
