@@ -2774,8 +2774,6 @@ fs_attrs_miss_mlti_wrap <- function(path_attr_config){
     df_miss$uniq_cmbo <- proc.attr.hydfab:::uniq_id_loc_attr(df_miss[[col_locid]],
                                                              df_miss$attribute)
 
-
-
     # Group by 'featureID' and aggregate the sets of 'attribute' values
     grouped <- df_miss %>%
       dplyr::group_by(featureID) %>%
@@ -2805,6 +2803,9 @@ fs_attrs_miss_mlti_wrap <- function(path_attr_config){
     filter_df <- df_miss
     ls_have_uniq_cmbo <- base::list()
     for(row in 1:base::nrow(shared_values)){
+      logr::log_print(
+        glue::glue("Beginning search {row} of {base::nrow(shared_values)}"),
+        level = "INFO")
       sub_grp <- shared_values[row,]
       comids <- sub_grp[[col_locid]][[1]][[1]]
       attrs <- base::strsplit(sub_grp['attribute'][[1]],',')[[1]]

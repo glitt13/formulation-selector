@@ -19,6 +19,8 @@ library(proc.attr.hydfab)
 library(dplyr)
 library(future)
 library(future.apply)
+library(logr)
+library(glue)
 cmd_args <- commandArgs("trailingOnly" = TRUE)
 
 if(base::length(cmd_args)!=1){
@@ -28,7 +30,21 @@ if(base::length(cmd_args)!=1){
 # Read in config file, e.g.  "~/git/formulation-selector/scripts/workflow_configs/SI/SI_attr_config.yaml"
 path_attr_config <- cmd_args[1] # "~/git/formulation-selector/scripts/workflow_configs/legacy/xssa/xssa_attr_config.yaml"
 
+#-----------------------------------------------------
+Retr_Params <- proc.attr.hydfab::attr_cfig_parse(path_attr_config)
+dir_log <- proc.attr.hydfab::std_dir_logs(Retr_Params$paths$dir_db_attrs)
+path_log <- proc.attr.hydfab::std_path_log(dir_log,path_attr_config)
+logr::log_open(path_log)#file_name=base::basename(path_log),logdir=base::dirname(path_log))
+logr::log_print(glue::glue("Running fs_attrs_miss.R {path_attr_config} at {Sys.time()}"))
+if(base::length(cmd_args)!=1){
+  logr::log_print("Unexpected to have more than one argument in
+                  Rscript fs_attrs_miss.R /path/to/attribute_config.yaml.",
+                  level="WARN")
+}
+logr::log_print("Querying datasets for missing comid-attribute pairings using fs_attrs_miss.R",level="INFO")
+#-----------------------------------------------------
+
 # Run the wrapper function to read in missing comid-attribute pairings and search
 #  for those data in existing databases.
 proc.attr.hydfab::fs_attrs_miss_mlti_wrap(path_attr_config)
-
+logr::log_close()
