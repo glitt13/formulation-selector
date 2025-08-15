@@ -127,6 +127,36 @@ retrieve_attr_exst <- function(comids, vars, dir_db_attrs, bucket_conn=NA){
   return(dat_all_attrs)
 }
 
+std_dir_logs <- function(dir_db_attrs){
+  #' @title Define the standard directory used for storing log files
+  #' @param dir_db_attrs The path where attribute data are stored
+  #' @export
+  base_dir <- dir_db_attrs %>% base::dirname() %>% base::dirname()
+  dir_log <- file.path(base_dir,"logs")
+  if(!base::dir.exists(dir_log)){
+    base::dir.create(dir_log,recursive=TRUE)
+  }
+  return(dir_log)
+}
+
+std_path_log <- function(dir_log, path_attr_config,script=''){
+  #' @title Define the path for storing log file specific to an atttribute config
+  #' @param dir_log The RaFTS project's standard log directory
+  #' @param path_attr_config Filepath to the attribute config file
+  #' @param script The string of the script name to add to the log's filename. Default ''.
+  #' @export
+  ds_dir <- base::basename(base::dirname(path_attr_config))
+  config_fn <- base::basename(tools::file_path_sans_ext(path_attr_config))
+  if(script!=''){
+    script = base::paste0("_",script)
+  }
+  log_path <- file.path(dir_log,ds_dir, paste0(config_fn,script,".log"))
+  if(!base::dir.exists(base::dirname(log_path))){
+    base::dir.create(base::dirname(log_path),recursive=TRUE)
+  }
+  return(log_path)
+}
+
 std_dir_gpkg_chunk_nhdp_geom <- function(dir_save_nhdp){
   #' @title Generate the chunk subdirectory for temporarily storing results
   #' @description Recursively creates the chunk directory if it doesn't exist

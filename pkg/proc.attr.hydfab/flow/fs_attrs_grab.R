@@ -24,6 +24,7 @@ library(proc.attr.hydfab)
 library(glue)
 library(future)
 library(future.apply)
+library(logr)
 
 # Changelog/contributions
 #. 2024 originally created, GL
@@ -40,21 +41,31 @@ if(base::length(cmd_args)!=1){
 
 # Read in config file, e.g.  "~/git/formulation-selector/scripts/eval_ingest/xssa_us/xssaus_attr_config.yaml"
 path_attr_config <- cmd_args[1] # "~/git/formulation-selector/scripts/eval_ingest/xssa/xssa_attr_config.yaml"
-
-
 Retr_Params <- proc.attr.hydfab::attr_cfig_parse(path_attr_config)
-
 #-----------------------------------------------------
-message(glue::glue("Attribute dataset sources include the following:\n
-  {paste0(names(Retr_Params$vars),collapse='\n')}"))
+dir_log <- proc.attr.hydfab::std_dir_logs(Retr_Params$paths$dir_db_attrs)
+path_log <- proc.attr.hydfab::std_path_log(dir_log,path_attr_config,script="fs_attrs_grab")
+logr::log_open(path_log)#file_name=base::basename(path_log),logdir=base::dirname(path_log))
+logr::log_print(glue::glue("Running fs_attrs_grab.R {path_attr_config} at {Sys.time()}"))
+if(base::length(cmd_args)!=1){
+  logr::log_print("Unexpected to have more than one argument in
+                  Rscript fs_attrs_grab.R /path/to/attribute_config.yaml.",
+                  level="WARN")
+}
+#-----------------------------------------------------
+logr::log_print(glue::glue("proc.attr.hydfab package version {packageVersion('proc.attr.hydfab')}"),
+                level="INFO")
 
-message(glue::glue("Attribute variables to be acquired include :
-  \n{paste0(unlist(unname(Retr_Params$vars)),collapse='\n')}"))
+logr::log_print(glue::glue("Attribute dataset sources include the following:\n
+  {paste0(names(Retr_Params$vars),collapse='\n')}"),level="INFO")
+
+logr::log_print(glue::glue("Attribute variables to be acquired include :
+  \n{paste0(unlist(unname(Retr_Params$vars)),collapse='\n')}"),level="print")
 
 
 # PROCESS ATTRIBUTES
 dt_comids <- proc.attr.hydfab:::grab_attrs_datasets_fs_wrap(Retr_Params,overwrite = FALSE)
-
+logr::log_close()
 # --------------------------- Compile attributes --------------------------- #
 # Demonstration of how to retrieve attributes/comids that exist inside dir_db_attrs:
 demo_example <- FALSE
@@ -70,3 +81,4 @@ if (demo_example){
   base::rm(dat_all_attrs)
 
 }
+
