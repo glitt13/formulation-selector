@@ -2708,15 +2708,22 @@ std_path_miss_tfrm <- function(dir_db_attrs){
 
 std_path_miss_tfrm_io <- function(path_missing_attrs,  read=TRUE, df_miss=NULL){
   #' @title Read or write the standardized missing comid file for transformation
+  #' @details De-dupes data based on the uniq_cmbo column, a combo of loc ID and
+  #' attribute, made by \link[proc.attr.hydfab]{uniq_id_loc_attr}
   #' @param path_missing_attrs The full path to file created by \link[proc.attr.hydfab]{std_path_miss_tfrm}
   #' @param df_miss The dataframe if interested in writing. Default NULL for reading.
   #' @param read Boolean. Should the missing data be read? Default TRUE
   #' @export
+  # Changelog
+  # 2025-08-18 add de-dupe to file read/write, GL
   if(read){
-    df_miss <- utils::read.csv(path_missing_attrs,header=TRUE, check.names=TRUE)
+    df_miss <- utils::read.csv(path_missing_attrs,header=TRUE, check.names=TRUE,
+                               colClasses = "character")
+    df_miss <-  df_miss[-base::which(base::duplicated(df_miss$uniq_cmbo)),]
     return(df_miss)
   } else if (!base::is.null(df_miss)) {
-    utils::write.csv(x=df_miss,file = path_missing_attrs,row.names = FALSE)
+    df_miss_no_dupe <- df_miss[-base::which(base::duplicated(df_miss$uniq_cmbo)),]
+    utils::write.csv(x=df_miss_no_dupe,file = path_missing_attrs,row.names = FALSE)
   } else {
     logr::log_print("Inappropriate application of the standardized file i/o for missing comids", level = "ERROR")
     stop("Inappropriate application of the standardized file i/o for missing comids")
