@@ -24,7 +24,7 @@ library(tidyr)
 library(yaml)
 library(future)
 library(future.apply)
-
+library(logr)
 
 main <- function(){
   args <- commandArgs(trailingOnly = TRUE)
@@ -43,8 +43,9 @@ main <- function(){
     stop(glue::glue("The provided path_cfig_pred does not exist: {path_cfig_pred}"))
   }
   cfig_pred <- yaml::read_yaml(path_cfig_pred)
-  ds_type <- base::unlist(cfig_pred)[['ds_type']]
-  write_type <- base::unlist(cfig_pred[['write_type']])
+  print(names(cfig_pred))
+  ds_type <- base::unlist(cfig_pred)[['ds_type']] # Used to generate path_meta
+  write_type <- base::unlist(cfig_pred[['write_type']]) # Used to generate path_meta
    # READ IN ATTRIBUTE CONFIG FILE
 
   name_attr_config <- cfig_pred[['name_attr_config']]
@@ -52,12 +53,26 @@ main <- function(){
 
   # ------------------------ ATTRIBUTE CONFIGURATION --------------------------- #
   Retr_Params <- proc.attr.hydfab::attr_cfig_parse(path_attr_config)
+  dir_log <- proc.attr.hydfab::std_dir_logs(Retr_Params$paths$dir_db_attrs)
+  path_log <- proc.attr.hydfab::std_path_log(dir_log,path_attr_config,script = "gen_pred_locs_rfcs_bm25test")
+  logr::log_open(path_log)#file_name=base::basename(path_log),logdir=base::dirname(path_log))
+  logr::log_print(glue::glue("Running fs_attrs_miss.R {path_attr_config} at {Sys.time()}"))
+  if(base::length(args)!=2){
+    logr::log_print("Expected to have two arguments in
+                  Rscript gen_pred_locs_rfcs_bm25test.R
+                  {home_dir}/git/formulation-selector/scripts/workflow_configs/legacy/bm_test25/bm25_pred_config.yaml
+                  {home_dir}/git/formulation-selector/scripts/prediction/rfc_locs/nws_nwm_crosswalk.txt",
+                    level="ERROR")
+  }
+  logr::log_print("Retrieving comid-attribute pairings for RFC locations using gen_pred_locs_rfcs_bm25test.R",level="INFO")
+  #-----------------------------------------------------
+
   message(glue::glue("Parsed the attribute config file {path_attr_config}"))
 
   datasets <- Retr_Params$datasets
   dir_std_base <- Retr_Params$paths$dir_std_base
-  # ds <- datasets[1]
-  for(ds in datasets){
+
+  for(ds in datasets){ # {ds} used to generate path_meta
     message(glue::glue("Processing dataset {ds}"))
     # Populate path_meta using the pre-defined ds, dir_std_base, ds_type, write_type
     path_meta <- glue::glue(Retr_Params$paths$path_meta) # The filepath of the file that generates the list of comids used for prediction
