@@ -27,6 +27,8 @@ from fs_prep import data
 from itertools import compress
 import pynhd as nhd
 import logging
+import __future__
+pd.set_option('future.no_silent_downcasting', True)
 
 def std_dir_logs(dir_input:str | os.PathLike) -> Path:
     """The standard RaFTS directory for logs
@@ -117,38 +119,42 @@ def _conv_ls_dicts_df_long(config: dict):
 
 def _proc_check_input_config(
     config: dict, 
-    std_keys=['file_io','col_schema','formulation_metadata','references'],
-    req_col_schema=['gage_id', 'metric_cols'],
-    req_form_meta=[
+    std_keys:list[str]=['file_io','col_schema','formulation_metadata','references'],
+    req_col_schema:list[str]=['gage_id', 'metric_cols'],
+    req_form_meta:list[str]=[
         'dataset_name','formulation_base','target_var','start_date', 
         'end_date','cal_status'
         ],
-    req_file_io=['dir_save', 'save_type','save_loc']
-    ):
-    
-    """
-    Check input config file to ensure it contains the minimum expected 
+    req_file_io:list[str]=['dir_save', 'save_type','save_loc']
+    )-> None:
+    """    Check input config file to ensure it contains the minimum expected 
     |    categories
 
-    :raises ValueError: _description_
-    :raises ValueError: _description_
-    :raises ValueError: _description_
-    :raises ValueError: _description_
-
-    :seealso: :func: `read_schm_ls_of_dict`
-    :TODO: add further checks after testing more datasets
-
+    :param config: A dataset's configuration file for fs_prep
+    :type config: dict
+    :param std_keys: Expected keys in the config file dict, defaults to ['file_io','col_schema','formulation_metadata','references']
+    :type std_keys: list[str], optional
+    :param req_col_schema: The required keys inside col_schema, defaults to ['gage_id', 'metric_cols']
+    :type req_col_schema: list[str], optional
+    :param req_form_meta: Required keys inside formulation_metadata, defaults to [ 'dataset_name','formulation_base','target_var','start_date', 'end_date','cal_status' ]
+    :type req_form_meta: list[str], optional
+    :param req_file_io: Required keys inside file_io, defaults to ['dir_save', 'save_type','save_loc']
+    :type req_file_io: list[str], optional
+    :seealso: :func:`read_schm_ls_of_dict`
     """
-    # Expected standard keys:
-    chck_dict = {key: config[key] for key in std_keys}
-    if len(chck_dict) != len(std_keys):
-        logging.error("The provided keys in the input config file"
-                        " should include the following:"
-                        f" {', '.join(std_keys)}")
-        raise ValueError("The provided keys in the input config file"
-                        " should include the following:"
-                        f" {', '.join(std_keys)}")
+    # Changelog/contributions
+    # 2024 Summer, originally created, GL
+    # 2025-08-19, add logging, make checks more explicit, GL
+    #:TODO: add further checks after testing more datasets
     
+    # Expected standard keys:
+
+    if any(key not in std_keys for key in config.keys()):
+        logging.error(f"Provided keys in the input config file: {config.keys()} \
+                         do not match the standard keys: {std_keys}")
+        raise ValueError(f"Provided keys in the input config file: {config.keys()} \
+                         do not match the standard keys: {std_keys}")
+
     # required keys defined inside col_schema
     keys_col_schema = _proc_flatten_ls_of_dict_keys(config, 'col_schema')
     if not all([x in keys_col_schema for x in req_col_schema]):
@@ -604,5 +610,8 @@ def check_fix_nwissite_gageids(df:pd.DataFrame, gage_id_col:str,
             df=cmbo_df.copy()                
             if len(ls_still_bad)>0:
                 logging.warning("Some gage_id values still not recognized by USGS nwissite dataset.")
+        elif len(ls_still_bad) > 0:
+            logging.warning("Some gage_id values still not recognized by USGS nwissite dataset.")
+            logging.info(f"Consider checking the following gage_ids: {', '.join(ls_still_bad)}")
         df[gage_id_col] = df[gage_id_col].astype(str)
     return df
