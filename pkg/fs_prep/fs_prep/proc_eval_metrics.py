@@ -91,6 +91,21 @@ def _read_std_config():
         std_config = yaml.safe_load(f)
     return std_config
 
+def _read_std_config_uncn():
+    """Read the standardized categorical mappings with uncertainty bounds.
+
+    This function now points to 'fs_categories_uncn.yaml'.
+
+    :return: YAML configuration file mappings as a dictionary.
+    :rtype: dict
+    """
+    # This line assumes you have a package named 'data' containing the file
+    catg_file = impresources.files(data) / 'fs_categories_uncn.yaml'
+    
+    with catg_file.open("rt") as f:
+        std_config = yaml.safe_load(f)
+    return std_config
+
 def _conv_ls_dicts_df_long(config: dict):
     """transpose the yaml schema's converted dataframe into a long format
 
@@ -116,6 +131,52 @@ def _conv_ls_dicts_df_long(config: dict):
     dft = dft.rename(columns={'index':'var'})
     return dft
 
+def _conv_ls_dicts_df_long_uncn(config: dict):
+    """Convert the YAML configuration into a long-format pandas DataFrame.
+
+    This function has been updated to parse the nested dictionary structure
+    from the 'fs_categories_uncn.yaml' file, extracting the category, 
+    response variable, description, and its min/max limits into a tidy DataFrame.
+
+    :param config: Dictionary loaded from the YAML configuration file.
+    :type config: dict
+    :seealso: :func:`_read_std_config()`
+    :return: A long-format DataFrame with the configuration schema.
+    :rtype: pd.DataFrame
+    """
+    data_list = []
+    for category, items in config.items():
+        if category == 'target_var_mappings':
+            for item in items:
+                for var, description in item.items():
+                    data_list.append({
+                        'var': var,
+                        'description': description,
+                        'category': category,
+                        'min_lim': None,
+                        'max_lim': None
+                    })
+        else:
+            for item in items:
+                var = item['resp_var']
+                description = item['description']
+                min_lim = item['Q_lims']['min_lim']
+                max_lim = item['Q_lims']['max_lim']
+                data_list.append({
+                    'var': var,
+                    'description': description,
+                    'category': category,
+                    'min_lim': min_lim,
+                    'max_lim': max_lim
+                })
+
+    df = pd.DataFrame(data_list)
+    return df
+
+# Example usage
+config_data = _read_std_config_uncn()
+df = _conv_ls_dicts_df_long(config_data)
+print(df)
 
 def _proc_check_input_config(
     config: dict, 
