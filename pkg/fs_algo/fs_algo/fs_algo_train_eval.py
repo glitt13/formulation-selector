@@ -1378,6 +1378,7 @@ class AlgoTrainEval:
                  test_ids = None,test_id_col:str = 'comid',
                  verbose: bool = False,
                  confidence_levels: list[int] = [95],
+                 uncn_bound: bool = False, min_lim: float = None, max_lim: float = None
                  ):
         """The algorithm training and evaluation class.
 
@@ -1417,6 +1418,12 @@ class AlgoTrainEval:
         :type confidence_levels: int, optional
         :param mapie_alpha: alpha for MAPIE, defaults to 0.05.
         :type mapie_alpha: float, optional
+        :param uncn_bound: Flag to apply min/max bounds to predictions, defaults to False.
+        :type uncn_bound: bool, optional
+        :param min_lim: The minimum bound for the metric, defaults to None.
+        :type min_lim: float, optional
+        :param max_lim: The maximum bound for the metric, defaults to None.
+        :type max_lim: float, optional
         """
         # class args
         self.df = df # NOTE: df MUST NEVER CHANGE!! df represents the original data, and is used as an index reference in the algo-train script (e.g. fs_proc_algo_viz.py)
@@ -1432,6 +1439,9 @@ class AlgoTrainEval:
         self.dataset_id = dataset_id
         self.verbose = verbose
         self.confidence_levels = confidence_levels
+        self.uncn_bound = uncn_bound
+        self.min_lim = min_lim
+        self.max_lim = max_lim
 
         # train/test split
         self.X_train = pd.DataFrame()
@@ -1805,7 +1815,7 @@ class AlgoTrainEval:
                                      'Uncertainty': {}
                                      }
 
-    def predict_algos(self, bounds=(0, 1)) -> dict:
+    def predict_algos(self) -> dict:
         """ Make predictions with trained algorithms   
 
         :return: Evaluation results, with the following keys:
@@ -1814,6 +1824,16 @@ class AlgoTrainEval:
             - `metric`: The formulation evaluation metric or hydrologic signature represented by `y_pred`
         :rtype: dict
         """
+          
+        # Determine the clipping bounds based on the instance configuration
+        if self.uncn_bound:
+            # Replace None with -inf/+inf for clipping if one bound is not defined
+            clip_min = self.min_lim if self.min_lim is not None else -np.inf
+            clip_max = self.max_lim if self.max_lim is not None else np.inf
+            bounds = (clip_min, clip_max)
+        else:
+            # If bounds are not applied, use (-inf, +inf) to effectively not clip.
+            bounds = (-np.inf, np.inf)
           
         for k, v in self.algs_dict.items():
             algo = v['algo']
@@ -1837,7 +1857,6 @@ class AlgoTrainEval:
                 col_labels = [f'alpha_{alpha:.2f}' for alpha in mapie_alpha]  
                 
                 # Convert to DataFrame
-                # y_pis_list = [pd.DataFrame(y_test_pis[i], index=row_labels, columns=col_labels) for i in range(y_test_pis.shape[0])]
                 y_pis_list = [pd.DataFrame(y_test_pis_clipped[i], index=row_labels, columns=col_labels) for i in range(y_test_pis_clipped.shape[0])]
                 
                 self.preds_dict[k] = {'y_pred': y_pred,
