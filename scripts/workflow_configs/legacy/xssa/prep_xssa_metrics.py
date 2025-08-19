@@ -13,14 +13,15 @@ import argparse
 import pandas as pd
 from pathlib import Path
 import yaml
-from fs_prep.proc_eval_metrics import read_schm_ls_of_dict, proc_col_schema
+import fs_prep.proc_eval_metrics as pem
+import logging
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process the YAML config file.')
     parser.add_argument('path_config', type=str, help='Path to the YAML configuration file')
     args = parser.parse_args()
     # The path to the configuration
-    path_config = args.path_config # '~/git/formulation-selector/scripts/workflow_configs/legacy/xssa/xssa_prep_config.yaml' 
+    path_config = Path(args.path_config).expanduser() # path_config = Path('~/git/formulation-selector/scripts/workflow_configs/legacy/xssa/xssa_prep_config.yaml').expanduser() 
 
     if not Path(path_config).exists():
         raise ValueError("The provided path to the configuration file does not exist: {path_config}")
@@ -29,34 +30,42 @@ if __name__ == "__main__":
     with open(path_config, 'r') as file:
         config = yaml.safe_load(file)
 
+    # Logger setup - first define required paths/name in the config
+    home_dir = Path("~/").expanduser()
+    dir_save = [x for x in config['file_io'] if 'dir_save' in x.keys()][0]['dir_save'].format(home_dir = home_dir)
+
+    # Gnerate path to the log file & initialize logging
+    path_log = pem.std_path_log(dir_input=dir_save, path_config=path_config,
+                            script='prep_xssa_metrics')
+    logging.basicConfig(level=logging.INFO, filename=path_log, format='%(asctime)s - %(levelname)s - %(message)s')
+
     # ----- File IO
-    print("Converting schema to DataFrame")
+    logging.info("Converting schema to DataFrame")
     # Read in the config file & convert to pd.DataFrame
-    col_schema_df = read_schm_ls_of_dict(schema_path = path_config)
+    col_schema_df = pem.read_schm_ls_of_dict(schema_path = path_config)
 
     # Extract path and format the home_dir in case it was defined in file path
     path_camels = col_schema_df['path_camels'].loc[0].format(home_dir = str(Path.home()))
     path_data = col_schema_df['path_data'].loc[0].format(home_dir = str(Path.home()))
     dir_save = col_schema_df['dir_save'].loc[0].format(home_dir = str(Path.home()))
-
+    
     # BEGIN CUSTOMIZED DATASET MUNGING
     # ---- Read in Julie Mai's 2022 Nat Comm xSSA results
-    print("Custom code: Reading/formatting non-standardized input datasets")
-    df_all_data = pd.read_csv(path_data,sep = '; ',dtype={col_schema_df['gage_id'].loc[0] :str})
+    logging.info("Custom code: Reading/formatting non-standardized input datasets")
+    df_all_data = pd.read_csv(path_data,sep = '; ',dtype={col_schema_df['gage_id'].loc[0] :str},engine="python")
 
     # Ensure appropriate str formats & remove extraneous spaces that exist in this particular dataset
     df_all_data.columns = df_all_data.columns.str.replace(' ','')
     df_all_data[col_schema_df['gage_id'].loc[0]] = df_all_data[col_schema_df['gage_id'].loc[0]].str.replace(' ','')
 
     # Read in CAMELS data (simply to retrieve the gauge_ids)
-    df_camlh = pd.read_csv(path_camels,sep=';',dtype={'gauge_id' :str})
+    df_camlh = pd.read_csv(path_camels,sep=';',dtype={'gauge_id' :str},engine="python")
     
     # Subset the xssa dataset to CAMELS basins
-    print(f"Subsetting the dataset {col_schema_df['dataset_name']} to CAMELS basins")
+    logging.info(f"Subsetting the dataset {col_schema_df['dataset_name']} to CAMELS basins")
     df_camls_merge = df_camlh.merge(df_all_data, left_on= 'gauge_id', right_on = col_schema_df['gage_id'].loc[0], how='inner')
     df = df_camls_merge.drop(columns = df_camlh.columns)
     # END CUSTOMIZED DATASET MUNGING
 
     # ------ Extract metric data and write to file
-    
-    ds = proc_col_schema(df, col_schema_df, dir_save)
+    ds = pem.proc_col_schema(df, col_schema_df, dir_save)
