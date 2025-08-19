@@ -24,6 +24,7 @@ same_test_ids: True # Optional. Default True. Should all datasets being compared
 metrics: # OPTIONAL. The metrics of interest for processing. If not provided, all metrics in the input dataset will be processed. Must be a sublist structure.
 uncertainty: # OPTIONAL. Defines methods to quantify uncertainty in model training and predictions.
   confidence_levels: [90,95,99] # OPTIONAL list object, e.g. [90,95]. REQUIRED if a value is assigned to n_algos. Confidence levels between 50 and 100 for bootstrap ci calculation in an array format.
+  uncn_bound: True  # Optional. Default False. Should the minimum and maximum bounds be applied when calculating the uncertainty? 
   forestci:  # OPTIONAL. Used only with Random Forest (rf). Applies forestci to estimate confidence intervals for the model training based on the variance of predictions from trees in the random forest model. For more details, see: https://github.com/scikit-learn-contrib/forest-confidence-interval
     - fci_flag: True # Boolean. Forestci model to calculate confidence interval for rf model.
   bagging:  # OPTIONAL. Enables bootstrap aggregating (bagging) to calculate confidence intervals during the model training by training multiple models on resampled data. More broadly applicable than forestci, as it works with the algorithm types other than rf as well.
