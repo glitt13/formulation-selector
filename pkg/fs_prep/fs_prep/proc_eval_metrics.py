@@ -12,6 +12,7 @@ Helper functions for processing evaluation metrics datasets
 #     2024-07-02 Originally created, GL
 #     2024-07-09 added different file format/dir path options; add file format checkers, GL
 #     2024-08-13 update docstrings, GL
+#     2025-08-18 add logging, GL
 
 import pandas as pd
 from pathlib import Path
@@ -25,7 +26,51 @@ from importlib import resources as impresources
 from fs_prep import data
 from itertools import compress
 import pynhd as nhd
+import logging
 
+def std_dir_logs(dir_input:str | os.PathLike) -> Path:
+    """The standard RaFTS directory for logs
+
+    :param dir_input: The path to the RaFTS directory 'input'
+    :type dir_input: str | os.PathLike
+    :return: The standard directory for logs
+    :rtype: Path
+    :seealso: :mod:`proc.attr.hydfab`:func:`std_dir_log`
+    """
+    if 'home_dir' in str(dir_input):
+        warnings.warn("The home_dir placeholder in dir_input assumed to be Path.home()")
+
+        dir_input = dir_input.format(home_dir = str(Path.home()))
+    log_dir = Path(dir_input).parent / Path('logs') 
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return log_dir
+
+def std_path_log(dir_input: str | os.PathLike, path_config: str | os.PathLike,
+                    script:str = '')-> Path:
+    """Standard the path to log files for the script
+
+    :param dir_input: The RaFTS directory path to 'input' folder
+    :type dir_input: str | os.PathLike
+    :param path_config: Path of the config file which needs logging
+    :type path_config: str | os.PathLike
+    :param script: The script running the config file, defaults to ''
+    :type script: str, optional
+    :return: The path to the log file
+    :rtype: Path
+    :seealso: :mod:`proc.attr.hydfab`:func:`std_path_log`
+    """
+    if 'home_dir' in str(dir_input):
+        dir_input = dir_input.format(home_dir = str(Path.home()))
+
+    ds_dir = Path(path_config).parent.stem
+    log_dir = std_dir_logs(dir_input)
+    log_ds_dir = log_dir / ds_dir
+    log_ds_dir.mkdir(parents=True, exist_ok=True)
+    if not script == '':
+         script = '_' + script
+    filename = str(Path(path_config).stem) + script + '.log'
+    path_log = Path(log_ds_dir /  Path(filename))
+    return path_log
 
 def _proc_flatten_ls_of_dict_keys(config: dict, key: str) -> list:
     keys_cs = list()
@@ -97,6 +142,9 @@ def _proc_check_input_config(
     # Expected standard keys:
     chck_dict = {key: config[key] for key in std_keys}
     if len(chck_dict) != len(std_keys):
+        logging.error("The provided keys in the input config file"
+                        " should include the following:"
+                        f" {', '.join(std_keys)}")
         raise ValueError("The provided keys in the input config file"
                         " should include the following:"
                         f" {', '.join(std_keys)}")
@@ -104,6 +152,9 @@ def _proc_check_input_config(
     # required keys defined inside col_schema
     keys_col_schema = _proc_flatten_ls_of_dict_keys(config, 'col_schema')
     if not all([x in keys_col_schema for x in req_col_schema]):
+        logging.error("The input config file expects the following"
+                        " defined under 'col_schema':"
+                        f" {', '.join(req_col_schema)}")
         raise ValueError("The input config file expects the following"
                         " defined under 'col_schema':"
                         f" {', '.join(req_col_schema)}")
@@ -111,6 +162,9 @@ def _proc_check_input_config(
     # required keys defined in formulation_metadata
     keys_form_meta = _proc_flatten_ls_of_dict_keys(config, 'formulation_metadata')
     if not all([x in keys_form_meta for x in req_form_meta]):
+        logging.error("The input config file expects the following"
+                        " defined under 'formulation_metadata':"
+                        f" {', '.join(req_form_meta)}")
         raise ValueError("The input config file expects the following"
                         " defined under 'formulation_metadata':"
                         f" {', '.join(req_form_meta)}")
@@ -118,6 +172,8 @@ def _proc_check_input_config(
     # required keys defined in file_io
     keys_file_io = _proc_flatten_ls_of_dict_keys(config, 'file_io')
     if not all([x in keys_file_io for x in req_file_io]):
+        logging.error(f"The input config file expects the following"
+                        f" defined under 'formulation_metadata': {', '.join(req_file_io)}")
         raise ValueError(f"The input config file expects the following"
                         f" defined under 'formulation_metadata': {', '.join(req_file_io)}")
 
@@ -204,6 +260,7 @@ def _proc_check_std_fs_ids(vars: list, category=['metric','target_var'][0]):
         vars = [vars]
         
     if isinstance(category,list) and len(category)>1:
+        logging.error(f'Expect {category} to be a single value, not list')
         raise ValueError(f'Expect {category} to be a single value, not list')
 
     # Read in the standardized names
@@ -218,13 +275,18 @@ def _proc_check_std_fs_ids(vars: list, category=['metric','target_var'][0]):
     if not all(bool_chck):
         bad_vars = list(compress(vars,[not x for x in bool_chck]))
         allowable_vars = ",".join(sub_std_config['var'])
+        logging.error(f'The following {category} mappings defined in the'
+                            ' dataset schema do not correspond to the'
+                            f' standardized {category} names:'
+                            f' {", ".join(bad_vars)} \n Allowable'
+                            f' variables include: {allowable_vars}')
         raise ValueError(f'The following {category} mappings defined in the'
                             ' dataset schema do not correspond to the'
                             f' standardized {category} names:'
                             f' {", ".join(bad_vars)} \n Allowable'
                             f' variables include: {allowable_vars}')
     else:
-        print(f'The {category} mappings from the dataset schema match'
+        logging.info(f'The {category} mappings from the dataset schema match'
                 ' expected format.')
 
 
@@ -265,7 +327,7 @@ def _proc_check_input_df(df: pd.DataFrame,
             col for col in metric_columns if col not in df.columns
             ]
 
-        warnings.warn('\nThe following metric columns are not in your input'
+        logging.warning('\nThe following metric columns are not in your input'
                       f' dataframe, df:\n    {", ".join(missing_columns)}\n'
                       ' \nRevise the config file or ensure'
                        ' the input data is in appropriate format\n'
@@ -275,12 +337,12 @@ def _proc_check_input_df(df: pd.DataFrame,
         # Change the name to gage_id   
         df.rename(columns = {gage_id : 'gage_id'},inplace=True)
         if not any(df.columns.str.contains('gage_id')):
-            warnings.warn(f'Expecting one df column to be named: {gage_id}'
+            logging.warning(f'Expecting one df column to be named: {gage_id}'
                           ' - per the config file. Inspect config file'
                           ' and/or dataframe col names')
         # Set gage_id as the index
         if any(df['gage_id'].duplicated()):
-            warnings.warn('Expect only one gage_id for each row in the data.'
+            logging.warning('Expect only one gage_id for each row in the data.'
                           ' Convert df to wide format when passing to'
                           ' proc_col_schema(). This could create problems'
                            ' if writing standardized data in hierarchical format.')
@@ -332,9 +394,9 @@ def proc_col_schema(df: pd.DataFrame,
     """
     # Changelog/contributions
     #  2024-07-02, originally created, GL
+    #  2025-08-19, add logging & to_netcdf mode ='w' to overwrite, GL
 
-
-    print(f"Standardizing datasets and writing to {dir_save}")
+    logging.info(f"Standardizing datasets and writing to {dir_save}")
     # Based on the standardized column schema naming conventions
     dataset_name =  col_schema_df.loc[0, 'dataset_name']
     formulation_id =  col_schema_df.loc[0, 'formulation_id']
@@ -372,7 +434,7 @@ def proc_col_schema(df: pd.DataFrame,
                                                         save_type
                                                         )
     elif save_loc == 'aws':
-        print("TODO ensure connect credentials here")
+        logging.info("TODO ensure connect credentials here")
         # TODO define _save_dir_base here in case .csv are desired in cloud
 
     # Run format checker/df renamer on input data based on config file's entries:
@@ -394,12 +456,12 @@ def proc_col_schema(df: pd.DataFrame,
                           f" in the input dataset has nwissite gage ID values"
                           f"missing leading zeros. Auto-corrected gage ids may not"
                           f" have caught all issues. Consider inspecting input data.")
-            warnings.warn(warn_str_diff
+            logging.warning(warn_str_diff
                          )
             
             df = df_new.copy()
     elif col_schema_df['featureSource'].values[0] == 'nwissite':
-        print(f"The input dataset uses nwissite gage ids. Consider setting\
+        logging.info(f"The input dataset uses nwissite gage ids. Consider setting\
               \ncheck_nwis=True to run a check on whether the "
               f"{col_schema_df['gage_id'].values[0]} column "
               f"\nin the dataset contains appropriately formatted gage ids, \
@@ -415,6 +477,9 @@ def proc_col_schema(df: pd.DataFrame,
     # Save the standardized dataset
     if save_type == 'csv' or save_type == 'parquet':
         if len(_other_save_dirs) == 0:
+            logging.error(
+                'Expected _save_dir_struct to generate values in _other_save_dirs'
+                )
             raise ValueError(
                 'Expected _save_dir_struct to generate values in _other_save_dirs'
                 )
@@ -442,18 +507,21 @@ def proc_col_schema(df: pd.DataFrame,
             col_schema_df.to_parquet(
                 Path(str(save_path_meta).replace('.csv','.parquet'))
                 )
-        print(f"Saved files within a sub-directory structure inside {dir_save}")
+        logging.info(f"Saved files within a sub-directory structure inside {dir_save}")
     elif save_type == 'netcdf':
         save_path_nc = Path(_save_dir_base/Path(f'{uniq_filename}.nc'))
-        ds.to_netcdf(save_path_nc)
-        print(f"Saved netcdf file as {save_path_nc}")
+        if Path(save_path_nc).exists():
+            logging.warning(f"NetCDF file {save_path_nc} already exists and will be overwritten.")
+            Path(save_path_nc).unlink() # Delete the pre-existing file
+        ds.to_netcdf(save_path_nc,mode='w',format='NETCDF4') # mode='w' overwrites
+        logging.info(f"Saved netcdf file as {save_path_nc}")
     elif save_type == 'zarr':
         save_path_zarr = Path(_save_dir_base/Path(f'{uniq_filename}_zarr'))
         if os.path.exists(save_path_zarr):
             shutil.rmtree(save_path_zarr) # Delete any pre-existing zarr data with the same name
                                             # (BChoat-THIS MAY BE RISKY)
         ds.to_zarr(save_path_zarr)   # Re-write to directory
-        print(f"Saved zarr files inside {save_path_zarr}")
+        logging.info(f"Saved zarr files inside {save_path_zarr}")
     return ds # Returning not intended use case, but it's an option
 
 
@@ -483,8 +551,8 @@ def check_fix_nwissite_gageids(df:pd.DataFrame, gage_id_col:str,
 
     ls_still_bad = list()
     if featureSource == 'nwissite':
-        print(f"Checking {df.shape[0]} total USGS gage station IDs for appropriate nwissite format.")
-        print(f"This may take {round(df.shape[0]/60/3.2,2)} minutes for the first check")
+        logging.info(f"Checking {df.shape[0]} total USGS gage station IDs for appropriate nwissite format.")
+        logging.info(f"This may take {round(df.shape[0]/60/3.2,2)} minutes for the first check")
         nldi = nhd.NLDI()
         ls_bad_ids = list()
         for ix, row  in df.iterrows():
@@ -499,8 +567,8 @@ def check_fix_nwissite_gageids(df:pd.DataFrame, gage_id_col:str,
                 ls_bad_ids.append(gid)                                                     
         ls_prezero = ['0'+str(x) for x in ls_bad_ids]
 
-        print(f"Checking whether prepending '0' fixes {len(ls_prezero)} total gage_ids that were not recognized during the first check")
-        print(f"This may take {round(len(ls_prezero)/60/3.2,2)} minutes for the second check.")
+        logging.info(f"Checking whether prepending '0' fixes {len(ls_prezero)} total gage_ids that were not recognized during the first check")
+        logging.info(f"This may take {round(len(ls_prezero)/60/3.2,2)} minutes for the second check.")
         for prezero in ls_prezero:
             try:
                 nldi.navigate_byid(fsource=featureSource,fid= featureID.format(gage_id=prezero),
@@ -514,7 +582,7 @@ def check_fix_nwissite_gageids(df:pd.DataFrame, gage_id_col:str,
 
         
         if len(ls_bad_ids) > 0:
-            print('Some improvements to nwissite IDs found')
+            logging.info('Some improvements to nwissite IDs found')
             conv_df = pd.DataFrame({'wrong_id': ls_bad_ids,
                                     'good_id' : ls_prezero})
             cmbo_df = df.merge(conv_df, left_on = gage_id_col, right_on ='wrong_id', how='left') 
@@ -527,14 +595,14 @@ def check_fix_nwissite_gageids(df:pd.DataFrame, gage_id_col:str,
             cmbo_df.drop(columns = ['wrong_id','good_id'], inplace = True)
 
             if replace_orig_gage_id_col:
-                print(f"Replacing original data from the '{gage_id_col}' column with corrected values.")
+                logging.info(f"Replacing original data from the '{gage_id_col}' column with corrected values.")
                 cmbo_df[gage_id_col] = cmbo_df['fix']
                 cmbo_df.drop(columns = ['fix'],inplace=True )
             else:
-                print(f"Corrected values provided in the 'fix' column of the returned DataFrame.")
+                logging.info(f"Corrected values provided in the 'fix' column of the returned DataFrame.")
 
             df=cmbo_df.copy()                
             if len(ls_still_bad)>0:
-                warnings.warn("Some gage_id values still not recognized by USGS nwissite dataset.")
+                logging.warning("Some gage_id values still not recognized by USGS nwissite dataset.")
         df[gage_id_col] = df[gage_id_col].astype(str)
     return df
