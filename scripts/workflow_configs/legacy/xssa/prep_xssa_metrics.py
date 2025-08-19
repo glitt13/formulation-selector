@@ -69,3 +69,4 @@ if __name__ == "__main__":
 
     # ------ Extract metric data and write to file
     ds = pem.proc_col_schema(df, col_schema_df, dir_save)
+    logging.shutdown() # Remember to add this at the end of each script so that log files are separated by the script run

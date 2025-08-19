@@ -34,13 +34,25 @@ import os
 import re
 from operator import is_not
 from functools import partial
+import fs_prep.proc_eval_metrics as pem
+import logging
+from logging.handlers import MemoryHandler
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = 'process the algorithm config file')
     parser.add_argument('path_tfrm_cfig', type=str, help='Path to the YAML configuration file specific for algorithm training')
     args = parser.parse_args()
+    path_tfrm_cfig = Path(args.path_tfrm_cfig).expanduser()#path_tfrm_cfig = Path(f'~/git/formulation-selector/scripts/workflow_configs/legacy/xssa/xssa_attrs_tform.yaml').expanduser() 
 
-    path_tfrm_cfig = Path(args.path_tfrm_cfig).expanduser()#path_tfrm_cfig = Path(f'~/git/formulation-selector/scripts/workflow_configs/legacy/xssa/xssa_attrs_tform.yaml') 
+    # --- 
+    memory_handler = MemoryHandler(capacity=100)
+    # Get the root logger and add the memory handler to it
+    # The root logger is the ancestor of all other loggers
+    root_logger = logging.getLogger()
+    root_logger.addHandler(memory_handler)
+    root_logger.setLevel(logging.INFO)  # Set the level to capture INFO messages
+    logging.info(f"Running fs_tfrm_attrs.py with {path_tfrm_cfig.parent / path_tfrm_cfig.name} config file")
+    # ---
 
     with open(path_tfrm_cfig, 'r') as file:
         tfrm_cfg = yaml.safe_load(file)
@@ -66,6 +78,25 @@ if __name__ == "__main__":
     datasets = attr_cfig.attrs_cfg_dict.get('datasets')
     home_dir = attr_cfig.attrs_cfg_dict.get('home_dir',Path.home())
 
+    # ---- Generate path to the log file & initialize logging
+    path_log = pem.std_path_log(dir_input=dir_base, path_config=path_tfrm_cfig,
+                            script='fs_tfrm_attrs')
+    logging.basicConfig(level=logging.INFO, filename=path_log, 
+                        format='%(asctime)s - %(levelname)s - %(message)s',
+                        filemode='w',
+                        force=True)
+
+    # We need to find the new FileHandler that basicConfig created and set it
+    # as the target for our MemoryHandler - aka we can now put previous logs
+    # into the log file now that it has been created
+    for handler in root_logger.handlers:
+        if isinstance(handler, logging.FileHandler):
+            memory_handler.setTarget(handler)
+            memory_handler.flush()
+            break  
+    logging.info(f"Writing logs to {path_log}")
+    root_logger.removeHandler(memory_handler) # Remove the pre-file logger
+    # ----
     # Define path to store missing comid-attribute pairings:
     path_need_attrs = fta.std_path_miss_tfrm(dir_db_attrs)
 
@@ -102,7 +133,7 @@ if __name__ == "__main__":
         try:
             ls_comids_attrs = fta._get_comids_std_attrs(path_attr_config)
         except:
-            print(f"No basin comids acquired from standardized metadata.")
+            logging.warning(f"No basin comids acquired from standardized metadata.")
 
     # Compile unique comid values
     comids = list(filter(partial(is_not, None), set(ls_comid + ls_comids_attrs)))
@@ -150,7 +181,7 @@ if __name__ == "__main__":
     df_missing.to_csv(path_need_attrs, mode = 'a',
                                 header= not path_need_attrs.exists(),
                                 index=False)
-    print(f"Wrote needed comid-attributes to \n{path_need_attrs}")
+    logging.info(f"Wrote needed comid-attributes to \n{path_need_attrs}")
 
     #%% Run R script to search for needed data. 
     # The R script reads in the path_need_attrs csv and searches for these data
@@ -160,13 +191,14 @@ if __name__ == "__main__":
         if path_fs_attrs_miss:
             args = [str(path_attr_config)]
             try:
-                print(f"Attempting to retrieve missing attributes using {Path(path_fs_attrs_miss).name}")
+                logging.info(f"Attempting to retrieve missing attributes using {Path(path_fs_attrs_miss).name}")
                 result = subprocess.run(['Rscript', path_fs_attrs_miss] + args, capture_output=True, text=True)
-                print(result.stdout) # Print the output from the Rscript
-                print(result.stderr)  # If there's any error output
+                logging.info(result.stdout) # Print the output from the Rscript
+                logging.error(result.stderr)  # If there's any error output
             except:
-                print(f"Could not run the Rscript {path_fs_attrs_miss}." +
+                logging.warning(f"Could not run the Rscript {path_fs_attrs_miss}." +
                         "\nEnsure proc.attr.hydfab R package installed and appropriate path to fs_attrs_miss.R")
 ###############################################################################
     #%% Run the standard processing of attribute transformation:
     fta.tfrm_attr_comids_wrap(comids=comids, path_tfrm_cfig=path_tfrm_cfig)
+    logging.shutdown() # Remember to add this at the end of each script so that log files are separated by the script run
