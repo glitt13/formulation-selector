@@ -284,13 +284,12 @@ class AttrConfigAndVars:
             logging.warning("No attributes discerned from 'attr_select'. Assuming all attributes desired.")
         
         home_dir = _define_home_dir(self.attr_config)
-
-        dir_base = list([x for x in self.attr_config['file_io'] if 'dir_base' in x][0].values())[0].format(home_dir=home_dir)
+        dir_base = list([x for x in self.attr_config['file_io'] if 'dir_base' in x][0].values())[0].format(home_dir=home_dir_posix)
         # Location of attributes (predictor data):
-        dir_db_attrs = list([x for x in self.attr_config['file_io'] if 'dir_db_attrs' in x][0].values())[0].format(dir_base = dir_base, home_dir=home_dir)
+        dir_db_attrs = list([x for x in self.attr_config['file_io'] if 'dir_db_attrs' in x][0].values())[0].format(dir_base = dir_base, home_dir=home_dir_posix)
 
         # parent location of response variable data:
-        dir_std_base =  list([x for x in self.attr_config['file_io'] if 'dir_std_base' in x][0].values())[0].format(dir_base = dir_base, home_dir=home_dir)
+        dir_std_base =  list([x for x in self.attr_config['file_io'] if 'dir_std_base' in x][0].values())[0].format(dir_base = dir_base, home_dir=home_dir_posix)
 
         # The datasets of interest
         datasets = list([x for x in self.attr_config['formulation_metadata'] if 'datasets' in x][0].values())[0]
