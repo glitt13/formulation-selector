@@ -19,7 +19,7 @@ from pathlib import Path
 import joblib
 import itertools
 import yaml
-import warnings
+import logging
 import matplotlib.pyplot as plt
 import matplotlib
 from matplotlib.figure import Figure
@@ -41,6 +41,9 @@ import scipy.stats as st
 import pyarrow as pa
 import pyarrow.dataset as ds
 import ast
+
+# Set up basic logging configuration
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 # %% ALGO CONFIG FILE PARSER
 class AlgoConfigParser:
@@ -115,6 +118,7 @@ class AlgoConfigParser:
         #  2025-07-29 - Converted fs_proc_algo_viz.py config file read section to function, Justin Clark
         """
         if not Path(self.path_algo_config).exists():
+            logging.error("Ensure that algo config file is defined")
             raise ValueError(f"Ensure that algo config file is defined" )
         
         with open(self.path_algo_config, 'r') as file:
@@ -123,6 +127,7 @@ class AlgoConfigParser:
         # Algorithm selection and parameters
         algo_config = algo_cfg.get('algorithms')
         if algo_config is None:
+            logging.error("Missing required 'algorithms' section in YAML config.")
             raise KeyError("Missing required 'algorithms' section in YAML config.")
 
         # Ensure the string literal is converted to a tuple for `hidden_layer_sizes`
@@ -149,25 +154,35 @@ class AlgoConfigParser:
         algo_cfg_dict['path_attr_config'] = build_cfig_path(self.path_algo_config, algo_cfg_dict['name_attr_config'])
 
         if not algo_cfg_dict['path_attr_config'].exists():
+            logging.error(f"Ensure that 'name_attr_config' as defined inside {self.path_algo_config.name} \
+                              \n is also in the same directory as the algo config file {self.path_algo_config.parent}")
             raise ValueError(f"Ensure that 'name_attr_config' as defined inside {self.path_algo_config.name} \
                               \n is also in the same directory as the algo config file {self.path_algo_config.parent}" )
 
         # Type checks for common required parameters
         if not isinstance(algo_cfg_dict['test_size'], (float, int)):
+            logging.error(f"'test_size' must be a float. Got: {type(algo_cfg_dict['test_size'])}")
             raise TypeError(f"'test_size' must be a float. Got: {type(algo_cfg_dict['test_size'])}")
         if not (0 < algo_cfg_dict['test_size'] < 1):
+            logging.error(f"'test_size' must be between 0 and 1. Got: {algo_cfg_dict['test_size']}")
             raise ValueError(f"'test_size' must be between 0 and 1. Got: {algo_cfg_dict['test_size']}")
         if not isinstance(algo_cfg_dict['seed'], int):
+            logging.error(f"'seed' must be an integer. Got: {type(algo_cfg_dict['seed'])}")
             raise TypeError(f"'seed' must be an integer. Got: {type(algo_cfg_dict['seed'])}")
         if not isinstance(algo_cfg_dict['read_type'], str):
+            logging.error(f"'read_type' must be a string. Got: {type(algo_cfg_dict['read_type'])}")
             raise TypeError(f"'read_type' must be a string. Got: {type(algo_cfg_dict['read_type'])}")
         if algo_cfg_dict['read_type'] not in ['all', 'filename']:
+            logging.error(f"'read_type' must be either 'all' or 'filename'. Got: {algo_cfg_dict['read_type']}")
             raise ValueError(f"'read_type' must be either 'all' or 'filename'. Got: {algo_cfg_dict['read_type']}")
         if not isinstance(algo_cfg_dict['make_plots'], bool):
+            logging.error(f"'make_plots' must be a boolean. Got: {type(algo_cfg_dict['make_plots'])}")
             raise TypeError(f"'make_plots' must be a boolean. Got: {type(algo_cfg_dict['make_plots'])}")
         if not isinstance(algo_cfg_dict['same_test_ids'], bool):
+            logging.error(f"'same_test_ids' must be a boolean. Got: {type(algo_cfg_dict['same_test_ids'])}")
             raise TypeError(f"'same_test_ids' must be a boolean. Got: {type(algo_cfg_dict['same_test_ids'])}")
         if not isinstance(algo_cfg_dict['verbose'], bool):
+            logging.error(f"'verbose' must be a boolean. Got: {type(algo_cfg_dict['verbose'])}")
             raise TypeError(f"'verbose' must be a boolean. Got: {type(algo_cfg_dict['verbose'])}")
         
         
@@ -176,6 +191,7 @@ class AlgoConfigParser:
         algo_unc_dict = {'uncertainty_cfg': algo_cfg.get("uncertainty", {})}
 
         if not isinstance(algo_unc_dict["uncertainty_cfg"], dict):
+            logging.error("The 'uncertainty' block must be a dictionary")
             raise TypeError("The 'uncertainty' block must be a dictionary")
 
 
@@ -192,9 +208,11 @@ class AlgoConfigParser:
         # Update the algo_cfg & class object just-in-case
         self.algo_cfg_unc_dict["algo_unc_dict"]["uncertainty_cfg"]['confidence_levels'] = confidence_levels
         if not isinstance(confidence_levels, list):
+            logging.error(f"'confidence_levels' must be a list of numeric values (e.g., [90, 95]). Got: {type(confidence_levels).__name__}")
             raise TypeError(f"'confidence_levels' must be a list of numeric values (e.g., [90, 95]). Got: {type(confidence_levels).__name__}")
         for level in confidence_levels:
                 if not isinstance(level, (int, float)) or not (0 < level <= 100):
+                    logging.error(f"Each 'confidence_levels' entry must be a number between 0 and 100. Got: {level}")
                     raise ValueError(f"Each 'confidence_levels' entry must be a number between 0 and 100. Got: {level}")
 
         # Validate MAPIE parameters if provided
@@ -207,21 +225,25 @@ class AlgoConfigParser:
             alpha = mapie_params.get("alpha")
             if alpha is not None:
                 if not isinstance(alpha, list) or not all(isinstance(a, float) and 0 < a < 1 for a in alpha):
+                    logging.error(f"'alpha' in MAPIE must be a list of floats between 0 and 1. Got: {alpha}")
                     raise ValueError(f"'alpha' in MAPIE must be a list of floats between 0 and 1. Got: {alpha}")
 
                 # Check B. If alpha is provided, 'method' must be 'plus' or 'minmax'
                 method = mapie_params.get("method")
                 if method not in ["plus", "minmax"]:
+                    logging.error(f"If 'alpha' is provided, 'method' must be 'plus' or 'minmax'. Got: {method}")
                     raise ValueError(f"If 'alpha' is provided, 'method' must be 'plus' or 'minmax'. Got: {method}")
 
                 # Check C. If alpha is provided, 'cv' must also be defined and an int
                 cv = mapie_params.get("cv")
                 if not isinstance(cv, int):
+                    logging.error(f"If 'alpha' is provided, 'cv' must also be defined and must be an integer. Got: {cv}")
                     raise TypeError(f"If 'alpha' is provided, 'cv' must also be defined and must be an integer. Got: {cv}")
 
                 # Check D. If alpha is provided, 'agg_function' must be 'mean' or 'median'
                 agg_function = mapie_params.get("agg_function")
                 if agg_function not in ["mean", "median"]:
+                    logging.error(f"If 'alpha' is provided, 'agg_function' must be 'mean' or 'median'. Got: {agg_function}")
                     raise ValueError(f"If 'alpha' is provided, 'agg_function' must be 'mean' or 'median'. Got: {agg_function}")
 
 # %% BASIN ATTRIBUTES (PREDICTORS) & RESPONSE VARIABLES (e.g. METRICS)
@@ -245,6 +267,7 @@ class AttrConfigAndVars:
         """
 
         if not Path(self.path_attr_config).exists():
+            logging.error("Attribute config path does not exist")
             raise ValueError(f"Attribute config path does not exist")
 
         # Attribute data location:
@@ -256,24 +279,11 @@ class AttrConfigAndVars:
         attrs_all_filtered = [attr for attr in attrs_all if attr is not None]
         attrs_sel = [x for x in list(itertools.chain(*attrs_all_filtered)) if x is not None]
 
-        if len(attrs_sel) == None: # If no attributes generated, assume all attributes are of interest
+        if len(attrs_sel) == 0: # If no attributes generated, assume all attributes are of interest
             attrs_sel = 'all'
-            raise warnings.warn(f"No attributes discerned from 'attr_select'." \
-                                "Assuming all attributes desired.",UserWarning)
+            logging.warning("No attributes discerned from 'attr_select'. Assuming all attributes desired.")
         
         home_dir = _define_home_dir(self.attr_config)
-        # # Determine if home_dir. Either defined in attribute config file or assumed to be system default.
-        # home_dir_read = [v for x in self.attr_config['file_io'] for k, v in x.items() if 'home_dir' in k ]
-        # if len(home_dir_read) == 0:
-        #     home_dir = str(Path.home())
-        # elif home_dir_read[0] is None:
-        #     home_dir = str(Path.home())
-        # elif not Path(home_dir_read[0]).exists():
-        #     warnings.warn(f"The user-defined home directory path {home_dir_read[0]} " \
-        #      f"inside {self.path_attr_config} does not exist. Using system default {Path.home()}", UserWarning)
-        #     home_dir = str(Path.home())
-        # else:
-        #     home_dir = home_dir_read[0]
 
         dir_base = list([x for x in self.attr_config['file_io'] if 'dir_base' in x][0].values())[0].format(home_dir=home_dir)
         # Location of attributes (predictor data):
@@ -330,6 +340,7 @@ class PredConfigParser:
         """
 
         if not Path(self.path_pred_config).exists():
+            logging.error(f"Prediction config file not found: {self.path_pred_config}")
             raise FileNotFoundError(f"Prediction config file not found: {self.path_pred_config}")
 
         # Load prediction config YAML
@@ -344,6 +355,7 @@ class PredConfigParser:
 
         missing_keys = [k for k in required_pred_keys if k not in pred_cfg or pred_cfg[k] is None]
         if missing_keys:
+            logging.error(f"Missing required keys in prediction config file: {missing_keys}\nConfig path: {self.path_pred_config}\n")
             raise ValueError(
                 f"Missing required keys in prediction config file: {missing_keys}\n"
                 f"Config path: {self.path_pred_config}\n"
@@ -372,10 +384,12 @@ class PredConfigParser:
 
         # Check if dir_base exists
         if not Path(dir_base).exists():
+            logging.error(f"Resolved dir_base path does not exist: {dir_base}")
             raise FileNotFoundError(f"Resolved dir_base path does not exist: {dir_base}")
 
         # Check if dir_std_base exists
         if not Path(dir_std_base).exists():
+            logging.error(f"Resolved dir_base path does not exist: {dir_std_base}")
             raise FileNotFoundError(f"Resolved dir_base path does not exist: {dir_std_base}")
 
         # Optional prediction config values
@@ -422,8 +436,8 @@ def _define_home_dir(attr_config:dict) -> os.PathLike:
     elif home_dir_read[0] is None:
         home_dir = str(Path.home())
     elif not Path(home_dir_read[0]).exists():
-        warnings.warn(f"The user-defined home directory path {home_dir_read[0]} " \
-            f"inside attribute config file does not exist. Using system default {Path.home()}", UserWarning)
+        logging.warning(f"The user-defined home directory path {home_dir_read[0]} " \
+            f"inside attribute config file does not exist. Using system default {Path.home()}")
         home_dir = str(Path.home())
     else:
         home_dir = home_dir_read[0]
@@ -452,7 +466,7 @@ def _check_attr_rm_dupes(attr_df:pd.DataFrame,
     """
 
     if attr_df[['featureID','attribute']].duplicated().any():
-        print("Duplicate attribute data exist. Attempting to remove using fs_algo_train_eval._check_attr_rm_dupes().")
+        logging.info("Duplicate attribute data exist. Attempting to remove using fs_algo_train_eval._check_attr_rm_dupes().")
         attr_df = attr_df.sort_values(sort_col, ascending = ascending)
         attr_df = attr_df.drop_duplicates(subset=uniq_cols, keep='first')
     return attr_df
@@ -531,11 +545,12 @@ def fs_read_attr_comid(dir_db_attrs:str | os.PathLike, comids_resp:list | Iterab
     else:
         # Initialize attr_ddf_sub
         attr_ddf_sub = None
+        logging.error(f"Unrecognized read_type provided in fs_read_attr_comid: {read_type}")
         raise ValueError(f"Unrecognized read_type provided in fs_read_attr_comid: {read_type}")
     
     if attr_ddf_subloc.shape[0].compute() == 0:
-        warnings.warn(f'None of the provided featureIDs exist in {dir_db_attrs}: \
-                      \n {", ".join(attrs_sel)} ', UserWarning)
+        logging.warning(f'None of the provided featureIDs exist in {dir_db_attrs}: \
+                      \n {", ".join(attrs_sel)} ')
     
     # ------------------- Subset based on attributes of interest ------------------
     if attrs_sel == 'all':
@@ -546,8 +561,8 @@ def fs_read_attr_comid(dir_db_attrs:str | os.PathLike, comids_resp:list | Iterab
     attr_df_sub = attr_ddf_sub.compute() # This takes a while querying many files.
 
     if attr_df_sub.shape[0] == 0:
-        warnings.warn(f'The provided attributes do not exist with the retrieved featureIDs : \
-                        \n {",".join(attrs_sel)}',UserWarning)
+        logging.warning(f'The provided attributes do not exist with the retrieved featureIDs : \
+                        \n {",".join(attrs_sel)}')
     # ------------------- Remove any duplicates & run checks -------------------
     attr_df_sub = _check_attr_rm_dupes(attr_df=attr_df_sub)
 
@@ -556,14 +571,13 @@ def fs_read_attr_comid(dir_db_attrs:str | os.PathLike, comids_resp:list | Iterab
     attr_df_sub, attrs_sel_ser = dict_rslt['df_attr'], dict_rslt['attrs_sel']
 
     if not pd.api.types.is_float_dtype(attr_df_sub['value']):
-        warnings.warn("Forcing all attribute values to be float")
+        logging.warning("Forcing all attribute values to be float")
         attr_df_sub['value'] = np.float64(attr_df_sub['value'])
 
     if attr_df_sub['value'].isna().any():
-        warnings.warn('The attribute dataset contains unexpected NA values, \
+        logging.warning('The attribute dataset contains unexpected NA values, \
                       which may be problematic for some algo training/testing. \
-                      \nConsider reprocessing the attribute grabber (proc.attr.hydfab R package)',
-                      UserWarning)
+                      \nConsider reprocessing the attribute grabber (proc.attr.hydfab R package)')
     
     if reindex:
         attr_df_sub = attr_df_sub.reindex()
@@ -604,8 +618,8 @@ def _check_attributes_exist(df_attr: pd.DataFrame, attrs_sel:pd.Series | Iterabl
             bad_comids = counts.index.tolist() if vec_missing else []
         # vec_missing = df_attr.groupby('featureID')['attribute'].count() != len(attrs_sel)
         # bad_comids = vec_missing.index.values[vec_missing]
-        msg_tot_loc = f"    TOTAL unique locations with missing attributes: {len(bad_comids)}"
-        warnings.warn(msg_tot_loc,UserWarning)
+        msg_tot_loc = f"    TOTAL unique locations with missing attributes: {len(bad_comids)} of {df_attr['featureID'].nunique()} total unique locations"
+        logging.warning(msg_tot_loc)
         df_attr_sub_missing = df_attr[df_attr['featureID'].isin(bad_comids)]
     
         if isinstance(attrs_sel,list):
@@ -613,8 +627,8 @@ def _check_attributes_exist(df_attr: pd.DataFrame, attrs_sel:pd.Series | Iterabl
             missing_attrs = pd.DataFrame({'attribute':missing_attrs})
         else:
             missing_attrs = attrs_sel[~attrs_sel.isin(df_attr_sub_missing['attribute'])]
-        msg_tot_miss = f"    TOTAL MISSING ATTRS: {len(missing_attrs)}"
-        warnings.warn(msg_tot_miss,UserWarning)
+        msg_tot_miss = f"    TOTAL MISSING ATTRS: {len(missing_attrs)} of {len(attrs_sel)}"
+        logging.warning(msg_tot_miss)
         str_missing = '\n    '.join(missing_attrs.values)
 
         warn_msg_missing_attrs = "\
@@ -622,8 +636,11 @@ def _check_attributes_exist(df_attr: pd.DataFrame, attrs_sel:pd.Series | Iterabl
         \n This could be problematic for model training and/or prediction. \
         \n Consider running attribute grabber with proc.attr.hydfab."
         warn_msg2 = "\nMissing attributes include: \n    " + str_missing
-        warn_msg_3 = "\n COMIDs with missing attributes include: \n" + ', '.join(bad_comids)
-        warnings.warn(warn_msg_missing_attrs + warn_msg2 + warn_msg_3,UserWarning)
+        if df_attr['featureID'].nunique() > 0:
+            warn_msg_3 = "\n COMIDs with missing attributes include: \n" + ', '.join(bad_comids)
+        else: # An empty dataframe was passed to this function, so we can't say what location IDs are missing
+            warn_msg_3 = ''
+        logging.warning(warn_msg_missing_attrs + warn_msg2 + warn_msg_3)
     return {'df_attr': df_attr, 'attrs_sel': attrs_sel}
 
 
@@ -697,6 +714,7 @@ def _find_feat_srce_id(dat_resp: Optional[xr.core.dataset.Dataset] = None,
             pass
     
     if not featureSource:
+        logging.error('The featureSource could not be found. Ensure it is present in the col_schema section of the attribute config file.')
         raise ValueError(f'The featureSource could not be found. Ensure it is present in the col_schema section of the attribute config file.')
     # Attempt to grab featureID from dataset attributes, fallback to the config file
     featureID = None
@@ -710,6 +728,7 @@ def _find_feat_srce_id(dat_resp: Optional[xr.core.dataset.Dataset] = None,
         except:
             pass
     if not featureID:
+        logging.error('The featureID could not be found. Ensure it is present in the col_schema section of the attribute config file.')
         raise ValueError(f'The featureID could not be found. Ensure it is present in the col_schema section of the attribute config file.')
         # TODO need to map gage_id to location identifier in attribute data!
 
@@ -754,7 +773,7 @@ def fs_retr_nhdp_comids_geom(featureSource:str,featureID:str,gage_ids: Iterable[
             comid = upstr_flowline['nhdplus_comid']
             comids_resp.append(comid)
         except Exception as e:
-            print(f"Error processing gage_id {gage_id}: {e}")
+            logging.info(f"Error processing gage_id {gage_id}: {e}")
             # Handle the error (e.g., log it, append None, or any other fallback mechanism)
 
             # TODO Attempt a different approach for retrieving comid:
@@ -787,15 +806,17 @@ def build_cfig_path(path_known_config:str | os.PathLike, path_or_name_cfig:str |
     """
     dir_parent_cfig = Path(path_known_config).parent
     if not dir_parent_cfig.exists():
+        logging.error(f"The provided 'known' configuration file does not exist: \n{path_known_config}")
         raise FileNotFoundError(f"The provided 'known' configuration file does not exist: \n{path_known_config}")
     if path_or_name_cfig: # Only perform if path_or_name_cfig not None
         path_cfig = Path(dir_parent_cfig/Path(path_or_name_cfig))
         if not path_cfig.exists():
             path_cfig = Path(path_or_name_cfig)
             if not path_cfig.exists():
+                logging.error(f'The following configuration file could not be found: \n{path_or_name_cfig}')
                 raise FileNotFoundError(f'The following configuration file could not be found: \n{path_or_name_cfig}')
     else:
-        warnings.warn("The configuration file may not have specified the path or file name.",UserWarning)
+        logging.warning("The configuration file may not have specified the path or file name.")
         path_cfig = None
     return path_cfig
 
@@ -831,6 +852,10 @@ def fs_save_algo_dir_struct(dir_base: str | os.PathLike ) -> dict:
     """
 
     if not Path(dir_base).exists():
+        logging.error(f"The provided dir_base does not exist. \
+                         \n Double check the config file to make sure \
+                         \n an existing directory is provided. dir_base= \
+                         \n{dir_base}")
         raise ValueError(f"The provided dir_base does not exist. \
                          \n Double check the config file to make sure \
                          \n an existing directory is provided. dir_base= \
@@ -911,6 +936,8 @@ def _open_response_data_fs(dir_std_base: str | os.PathLike, ds:str, mtch_str:str
     """
     # Implement a check to ensure each dataset directory exists
     if not Path(dir_std_base).exists:
+        logging.error(f'The dir_std_base directory does not exist. Double check dir_std_base: \
+                         \n{dir_std_base}')
         raise ValueError(f'The dir_std_base directory does not exist. Double check dir_std_base: \
                          \n{dir_std_base}')
     
@@ -918,6 +945,7 @@ def _open_response_data_fs(dir_std_base: str | os.PathLike, ds:str, mtch_str:str
     #path_nc = [x for x in Path(dir_std_base/Path(ds)).glob("*.nc") if x.is_file()]
     if len(path_nc) > 1:
         error_str = f"The following directory contains too many .nc files: {path_nc}"
+        logging.error(error_str)
         raise ValueError(error_str)
 
     try:
@@ -927,6 +955,7 @@ def _open_response_data_fs(dir_std_base: str | os.PathLike, ds:str, mtch_str:str
         try:
             dat_resp = xr.open_dataset(path_zarr[0],engine='zarr')
         except:
+            logging.error(f"Could not identify an approach to read in dataset via {path_nc} nor {path_zarr}")
             raise ValueError(f"Could not identify an approach to read in dataset via {path_nc} nor {path_zarr}")
     return dat_resp
 
@@ -1025,28 +1054,34 @@ def _read_pred_comid(path_pred_locs: str | os.PathLike, comid_pred_col:str ) -> 
     # Changelog/contributions
     # 2025-03-30 Add in drop_duplicates(), GL
     if not Path(path_pred_locs).exists():
-        FileNotFoundError(f"The path to prediction location data could not be found: \n{path_pred_locs} ")
+        logging.error(f"The path to prediction location data could not be found: \n{path_pred_locs} ")
+        raise FileNotFoundError(f"The path to prediction location data could not be found: \n{path_pred_locs} ")
     if '.csv' in Path(path_pred_locs).suffix:
         try:
             comids_pred = pd.read_csv(path_pred_locs)[comid_pred_col].drop_duplicates().values            
         except:
+            logging.error(f"Could not successfully read in {path_pred_locs} & select col {comid_pred_col}")
             raise ValueError(f"Could not successfully read in {path_pred_locs} & select col {comid_pred_col}")
     elif '.parquet' in Path(path_pred_locs).suffix:
         try:
             comids_pred = pd.read_parquet(path_pred_locs)[comid_pred_col].drop_duplicates().values
         except:
+            logging.error(f"Could not successfully read in {path_pred_locs} & select col {comid_pred_col}")
             raise ValueError(f"Could not successfully read in {path_pred_locs} & select col {comid_pred_col}")
     elif '.parquet' in Path(path_pred_locs).suffix:
         try:
             comids_pred = pd.read_parquet(path_pred_locs)[comid_pred_col].drop_duplicates().values
         except:
+            logging.error(f"Could not successfully read in {path_pred_locs} & select col {comid_pred_col}")
             raise ValueError(f"Could not successfully read in {path_pred_locs} & select col {comid_pred_col}")
     elif '.parquet' in Path(path_pred_locs).suffix:
         try:
             comids_pred = pd.read_parquet(path_pred_locs)[comid_pred_col].drop_duplicates().values
         except:
+            logging.error(f"Could not successfully read in {path_pred_locs} & select col {comid_pred_col}")
             raise ValueError(f"Could not successfully read in {path_pred_locs} & select col {comid_pred_col}")
     else:
+        logging.error(f"NEED TO ADD CAPABILITY THAT HANDLES {Path(path_pred_locs).suffix} file extensions")
         raise ValueError(f"NEED TO ADD CAPABILITY THAT HANDLES {Path(path_pred_locs).suffix} file extensions")
     comids_pred = [str(x) for x in comids_pred]
     return comids_pred
@@ -1163,6 +1198,7 @@ def _read_metadata(path_attr_config:str|os.PathLike, ds:str) -> pd.DataFrame:
     vals = {'ds_type':ds_type,'write_type':write_type, 'dir_std_base':dir_std_base,'ds':ds}
     path_meta = path_meta_fstr.format(**vals)
     if not Path(path_meta).exists():
+        logging.error(f"The dataset's metadata mapping file could not be found: \n{path_meta}")
         raise FileNotFoundError(f"The dataset's metadata mapping file could not be found: \n{path_meta}")
     if 'parquet' in Path(path_meta).suffix:
         df_meta = pd.read_parquet(path_meta)
@@ -1209,6 +1245,7 @@ def combine_resp_gdf_comid_wrap(dir_std_base:str|os.PathLike,ds:str,path_attr_co
     path_fs_dat_resp =  _std_fs_prep_ds_paths(dir_std_base=dir_std_base,ds=ds,mtch_str='*.nc')
     if len(path_fs_dat_resp) > 1:
         error_str = f"The following directory contains too many .nc files: {path_fs_dat_resp}"
+        logging.error(error_str)
         raise ValueError(error_str)
     path_gpkg_fs_prep = _std_fs_prep_ds_companion_gpkg_path(path_fs_dat_resp[0])
 
@@ -1235,9 +1272,10 @@ def combine_resp_gdf_comid_wrap(dir_std_base:str|os.PathLike,ds:str,path_attr_co
     # Subset gdf to the gage_ids that are present in the standardized response variable
     sub_gdf_comid = gdf_comid[gdf_comid['gage_id'].isin(dat_resp['gage_id'].values)]
     if sub_gdf_comid.shape[0] != len(dat_resp['gage_id']):
-        warnings.warn(f"Warning: The number of gage_ids in the response variable ({len(dat_resp['gage_id'])}) does not match the number of gage_ids in the geodataframe ({sub_gdf_comid.shape[0]}).")
+        logging.warning(f"Warning: The number of gage_ids in the response variable ({len(dat_resp['gage_id'])}) does not match the number of gage_ids in the geodataframe ({sub_gdf_comid.shape[0]}).")
         # TODO consider dropping the gage_ids that are not present in the geodataframe
         if sub_gdf_comid.shape[0] < len(dat_resp['gage_id']):
+            logging.error(f"The number of gage_ids in the response variable ({len(dat_resp['gage_id'])}) is less than the number of gage_ids in the geodataframe ({sub_gdf_comid.shape[0]}).")
             raise ValueError(f"The number of gage_ids in the response variable ({len(dat_resp['gage_id'])}) is less than the number of gage_ids in the geodataframe ({sub_gdf_comid.shape[0]}).")
             # TODO consider dropping the gage_ids that are not present in the geodataframe
     
@@ -1246,6 +1284,7 @@ def combine_resp_gdf_comid_wrap(dir_std_base:str|os.PathLike,ds:str,path_attr_co
     elif('comid' in sub_gdf_comid.columns):
         feature_id_col = 'comid'
     else:
+        logging.error("The geodataframe does not contain a column named 'featureID' or 'comid'.")
         raise ValueError(f"The geodataframe does not contain a column named 'featureID' or 'comid'.")
 
     gage_to_feat_source_map = sub_gdf_comid.set_index('gage_id')['featureSource']
@@ -1259,7 +1298,7 @@ def combine_resp_gdf_comid_wrap(dir_std_base:str|os.PathLike,ds:str,path_attr_co
     gage_id_mask = ~np.isin(np.arange(len(dat_resp['gage_id'])),idxs_na_comid)
     if len(idxs_na_comid) > 0:
         gage_ids_missing = dat_resp['gage_id'].isel(gage_id=~gage_id_mask).values
-        print(f"A total of {len(idxs_na_comid)} returned comids are NA values. \
+        logging.info(f"A total of {len(idxs_na_comid)} returned comids are NA values. \
                \nRemoving the following gage_ids from dataset: \
               \n{gage_ids_missing}")
         # Remove the unknown comids now that they've been matched up to the original dims in dat_resp:
@@ -1268,7 +1307,7 @@ def combine_resp_gdf_comid_wrap(dir_std_base:str|os.PathLike,ds:str,path_attr_co
     
     sub_gdf_comid = sub_gdf_comid.drop_duplicates().dropna(subset=['featureID'],axis=0)
     if any(sub_gdf_comid[feature_id_col].duplicated()):
-        print("Note that some duplicated comids found in dataset based on initial location identifier, gage_id")
+        logging.info("Note that some duplicated comids found in dataset based on initial location identifier, gage_id")
     sub_gdf_comid['dataset'] = ds 
 
     dict_resp_gdf = dict({'dat_resp':dat_resp,
@@ -1422,16 +1461,16 @@ class AlgoTrainEval:
         # Check for NA values first
         self.df_non_na = self.df[self.attrs + [self.metric]].dropna()
         if self.df_non_na.shape[0] < self.df.shape[0]:
-            warnings.warn(f"\
+            logging.warning(f"\
                 \n   !!!!!!!!!!!!!!!!!!!\
                 \n   NA VALUES FOUND IN INPUT DATASET!! \
                 \n   DROPPING {self.df.shape[0] - self.df_non_na.shape[0]} ROWS OF DATA. \
-                \n   !!!!!!!!!!!!!!!!!!!",UserWarning)
+                \n   !!!!!!!!!!!!!!!!!!!")
                 
         if self.test_ids is not None:
             # The Truth is in the indices: e.g. `self.df` shares the same indicise as `self.test_ids`` 
             # Use the manually provided comids for testing, then the remaining data for training
-            print("Using the custom test comids, and letting all remaining comids be used for training.")
+            logging.info("Using the custom test comids, and letting all remaining comids be used for training.")
             df_sub_test = self.df.loc[self.test_ids.index]#self.df[self.df[self.test_id_col].isin(self.test_ids)].dropna(subset=self.attrs + [self.metric])
             df_sub_train = self.df.loc[~self.df.index.isin(df_sub_test.index)]#self.df[~self.df[self.test_id_col].isin(self.test_ids)].dropna(subset=self.attrs + [self.metric])
             # Assign class objects
@@ -1441,7 +1480,7 @@ class AlgoTrainEval:
             self.X_train = df_sub_train[self.attrs]
         else: # The standard train_test_split (Caution when processing multiple datasets, if total dims differ, then basin splits may differ)
             if self.verbose:
-                print(f"      Performing train/test split as {round(1-self.test_size,2)}/{self.test_size}")
+                logging.info(f"      Performing train/test split as {round(1-self.test_size,2)}/{self.test_size}")
             X = self.df_non_na[self.attrs]
             y = self.df_non_na[self.metric]
             self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(X,y, test_size=self.test_size, random_state=self.rs)
@@ -1509,7 +1548,7 @@ class AlgoTrainEval:
                     totl_opts_per_param.append(1)
             if any([x > 1 for x in totl_opts_per_param]):
                 if self.verbose:
-                    print(f"Performing grid search CV for {k}")
+                    logging.info(f"Performing grid search CV for {k}")
                 self.grid_search_algs.append(k)
                 ls_move_to_srch_cfig.append(k)
 
@@ -1580,6 +1619,7 @@ class AlgoTrainEval:
         # algo_cfg = self.algo_config[algo_str]
         algo_cfg = self.algo_config.get(algo_str, self.algo_config_grid.get(algo_str))
         if algo_cfg is None:
+            logging.error(f"Algorithm {algo_str} not found in configurations.")
             raise KeyError(f"Algorithm {algo_str} not found in configurations.")
 
         # n_algos = self.bagging_ci_params['n_algos']
@@ -1594,6 +1634,7 @@ class AlgoTrainEval:
                     algo_step = step
                     break
             if algo_step is None:
+                logging.error(f"Could not find '{algo_str}' in the pipeline steps.")
                 raise ValueError(f"Could not find '{algo_str}' in the pipeline steps.")
         else:
             algo_step = best_algo  # Direct model
@@ -1652,6 +1693,7 @@ class AlgoTrainEval:
                 mapie.fit(self.X_train, self.y_train)
                 self.algs_dict[algo_str]['mapie'] = mapie
         except ValueError as e:
+            logging.error(f"Invalid MAPIE method '{mapie_method}'. Please choose either 'plus' or 'minmax'.")
             raise ValueError(f"Invalid MAPIE method '{mapie_method}'. Please choose either 'plus' or 'minmax'.") from e
             
     def train_algos(self):
@@ -1665,7 +1707,7 @@ class AlgoTrainEval:
         # Train algorithms based on config
         if 'rf' in self.algo_config:  # RANDOM FOREST
             if self.verbose:
-                print(f"      Performing Random Forest Training")
+                logging.info(f"      Performing Random Forest Training")
             
             rf = RandomForestRegressor(n_estimators=self.algo_config['rf'].get('n_estimators',300),
                                        max_depth = self.algo_config['rf'].get('max_depth', None),
@@ -1686,7 +1728,7 @@ class AlgoTrainEval:
                 }
         if 'mlp' in self.algo_config:  # MULTI-LAYER PERCEPTRON
             if self.verbose:
-                print(f"      Performing Multilayer Perceptron Training")
+                logging.info(f"      Performing Multilayer Perceptron Training")
             mlpcfg = self.algo_config['mlp']
             mlp = MLPRegressor(random_state=self.rs,
                                hidden_layer_sizes=mlpcfg.get('hidden_layer_sizes', (100,)),
@@ -1718,7 +1760,7 @@ class AlgoTrainEval:
 
         if 'rf' in self.algo_config_grid:  # RANDOM FOREST
             if self.verbose:
-                print(f"      Performing Random Forest Training with Grid Search")
+                logging.info(f"      Performing Random Forest Training with Grid Search")
             rf = RandomForestRegressor(oob_score=True, random_state=self.rs)
             # TODO move into main Param dict
             param_grid_rf = {
@@ -1742,7 +1784,7 @@ class AlgoTrainEval:
         
         if 'mlp' in self.algo_config_grid:  # MULTI-LAYER PERCEPTRON
             if self.verbose:
-                print(f"      Performing Multilayer Perceptron Training with Grid Search")
+                logging.info(f"      Performing Multilayer Perceptron Training with Grid Search")
             mlpcfg = self.algo_config_grid['mlp']
             mlp = MLPRegressor(random_state=self.rs)
             param_grid_mlp = {
@@ -1778,7 +1820,7 @@ class AlgoTrainEval:
             pipe = v['pipeline']
             type_algo = v['type']
             if self.verbose:
-                print(f"      Generating predictions for {type_algo} algorithm.")   
+                logging.info(f"      Generating predictions for {type_algo} algorithm.")   
             
             y_pred = pipe.predict(self.X_test)
             if 'mapie' in v:
@@ -1817,7 +1859,7 @@ class AlgoTrainEval:
         """
        
         if self.verbose:
-            print(f"      Evaluating predictions.")   
+            logging.info(f"      Evaluating predictions.")   
         # TODO add more evaluation metrics here
         for k, v in self.preds_dict.items():
             y_pred = v['y_pred']
@@ -1834,7 +1876,7 @@ class AlgoTrainEval:
         
         for algo in self.algs_dict.keys():
             if self.verbose:
-                print(f"      Saving {algo} pipeline for {self.metric} to file")
+                logging.info(f"      Saving {algo} pipeline for {self.metric} to file")
 
             path_algo = std_algo_path(self.dir_out_alg_ds, algo, self.metric, self.dataset_id)
             # basename_alg_ds_metr = f'algo_{algo}_{self.metric}__{self.dataset_id}'
@@ -2000,7 +2042,7 @@ def plot_corr_mat_save_wrap(df_X:pd.DataFrame, title:str,
     fig_corr_mat = plot_corr_mat(df_X, title)
     path_corr_mat = std_corr_mat_plot_path(dir_out_viz_base,ds)
     fig_corr_mat.savefig(path_corr_mat)
-    print(f"Wrote the {ds} dataset correlation matrix to:\n{path_corr_mat}")
+    logging.info(f"Wrote the {ds} dataset correlation matrix to:\n{path_corr_mat}")
     return fig_corr_mat
 
 def std_corr_path(dir_out_anlys_base: str|os.PathLike, ds:str,
@@ -2060,8 +2102,8 @@ def write_corr_attrs_thr(df_corr_rslt:pd.DataFrame,path_corr_attrs: str | os.Pat
     """
 
     df_corr_rslt.to_csv(path_corr_attrs) # INSPECT THIS FILE 
-    print(f"Wrote highly correlated attributes to {path_corr_attrs}")
-    print("The user may now inspect the correlated attributes and make decisions on which ones to exclude")
+    logging.info(f"Wrote highly correlated attributes to {path_corr_attrs}")
+    logging.info("The user may now inspect the correlated attributes and make decisions on which ones to exclude")
 
 def corr_thr_write_table_wrap(df_X:pd.DataFrame,dir_out_anlys_base:str|os.PathLike,
                               ds:str,corr_thr:float=0.8)->pd.DataFrame:
@@ -2227,7 +2269,7 @@ def plot_pca_save_wrap(df_X:pd.DataFrame,
     fig_pca_stdscale = plot_pca_stdscaled_tfrm(pca_scaled)
     path_pca_stdscaled_fig = std_pca_plot_path(dir_out_viz_base,ds,cstm_str=cstm_str)
     fig_pca_stdscale.savefig(path_pca_stdscaled_fig)
-    print(f"Wrote the {ds} PCA explained variance ratio plot to\n{path_pca_stdscaled_fig}")
+    logging.info(f"Wrote the {ds} PCA explained variance ratio plot to\n{path_pca_stdscaled_fig}")
     plt.clf()
     plt.close()
     # CREATE THE CUMULATIVE VARIANCE PLOT
@@ -2237,7 +2279,7 @@ def plot_pca_save_wrap(df_X:pd.DataFrame,
     path_pca_stdscaled_cum_fig = std_pca_plot_path(dir_out_viz_base,ds,cstm_str=cstm_str_cum)
     fig_pca_cumulative = plot_pca_stdscaled_cumulative_var(pca_scaled)
     fig_pca_cumulative.savefig(path_pca_stdscaled_cum_fig)
-    print(f"Wrote the {ds} PCA cumulative variance explained plot to\n{path_pca_stdscaled_cum_fig}")
+    logging.info(f"Wrote the {ds} PCA cumulative variance explained plot to\n{path_pca_stdscaled_cum_fig}")
     plt.clf()
     plt.close()
     return None
@@ -2254,7 +2296,7 @@ def _extr_rf_algo(train_eval:AlgoTrainEval)->RandomForestRegressor:
     if 'rf' in train_eval.algs_dict.keys():
         rfr = train_eval.algs_dict['rf']['algo']
     else:
-        print("Trained random forest object 'rf' non-existent in the provided AlgoTrainEval class object.",
+        logging.info("Trained random forest object 'rf' non-existent in the provided AlgoTrainEval class object.",
               "Check to make sure the algo processing config file creates a random forest. Then make sure the ")
         rfr = None
     return rfr
@@ -2326,7 +2368,7 @@ def save_feat_imp_fig_wrap(rfr:RandomForestRegressor,
                                           ds,metr)
 
     fig_feat_imp.savefig(path_fig_imp)
-    print(f"Wrote feature importance plot to {path_fig_imp}")
+    logging.info(f"Wrote feature importance plot to {path_fig_imp}")
     plt.clf()
     plt.close()
 
@@ -2711,12 +2753,12 @@ def gen_conus_basemap(dir_out_basemap:str | os.PathLike, # This should be the da
     path_shp_basemap = f'{dir_out_basemap}/{fn_basemap}'
 
     if not Path(path_zip_basemap).exists():
-        print('Downloading shapefile...')
+        logging.info('Downloading shapefile...')
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
         req = urllib.request.Request(url, headers=headers)
         with urllib.request.urlopen(req) as response, open(path_zip_basemap, 'wb') as out_file:
             out_file.write(response.read())
-        print('Shapefile downloaded.')
+        logging.info('Shapefile downloaded.')
     if not Path(path_shp_basemap).exists():
         with zipfile.ZipFile(path_zip_basemap, 'r') as zip_ref:
             zip_ref.extractall(f'{path_shp_basemap}')
@@ -2789,7 +2831,7 @@ def plot_map_pred_wrap(test_gdf,dir_out_viz_base, ds,
 
     # Save the plot as a .png file
     plot_pred_map.savefig(path_pred_map_plot, dpi=300, bbox_inches='tight')
-    print(f"Wrote prediction map to \n{path_pred_map_plot}")
+    logging.info(f"Wrote prediction map to \n{path_pred_map_plot}")
     plt.clf()
     plt.close()
 
@@ -2886,7 +2928,7 @@ def plot_map_pred_wrap_mapie(test_gdf,dir_out_viz_base, ds,
 
     # Save the plot as a .png file
     plot_pred_map.savefig(path_pred_map_plot_mapie, dpi=300, bbox_inches='tight')
-    print(f"Wrote prediction map to \n{path_pred_map_plot}")
+    logging.info(f"Wrote prediction map to \n{path_pred_map_plot}")
     plt.clf()
     plt.close()
 
@@ -2961,7 +3003,7 @@ def plot_best_algo_wrap(geo_df, dir_out_viz_base,subdir_anlys, metr,comparison_c
 
     plot_best_perf = plot_best_perf_map(geo_df, states,title, comparison_col)
     plot_best_perf.savefig(path_best_map_plot, dpi=300, bbox_inches='tight')
-    print(f"Wrote top predicted value map to \n{path_best_map_plot}")
+    logging.info(f"Wrote top predicted value map to \n{path_best_map_plot}")
 
     plt.clf()
     plt.close()

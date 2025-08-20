@@ -37,10 +37,17 @@ from sklearn.pipeline import Pipeline
 from mapie.regression import MapieRegressor
 import yaml
 import shutil
+import logging
+import io
+import sys
+from contextlib import redirect_stdout
 
 # %% UNIT TESTING FOR AttrConfigAndVars
 parent_dir_test = Path(__file__).parent
 dir_test_data = Path(parent_dir_test,"test_data")
+
+# Set up logging, do not write to file!
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class TestAttrConfigAndVars(unittest.TestCase):
     print("Testing AttrConfigAndVars")
@@ -128,16 +135,23 @@ class TestFsReadAttrComid(unittest.TestCase):
         self.assertNotIn('cly_pc_sav',single_result['attribute'].values)
 
         # When COMID requested that doesn't exist
-        with self.assertWarns(UserWarning):
-                fs_algo_train_eval.fs_read_attr_comid(dir_db_attrs=dir_db_attrs,
-                                                            comids_resp= ['010101010'],
-                                                            attrs_sel= ['pet_mm_s01'])
+        with self.assertLogs(level="INFO") as cm:
+            fsate.fs_read_attr_comid(
+                dir_db_attrs=dir_db_attrs,
+                comids_resp=['010101010'],
+                attrs_sel=['pet_mm_s01']
+            )
+        self.assertTrue(
+            any("None of the provided featureIDs exist" in m for m in cm.output)
+        )
 
         # When attribute requested that doesn't exist
-        with self.assertWarns(UserWarning):
+        with self.assertLogs(level="INFO") as cm:
             fs_algo_train_eval.fs_read_attr_comid(dir_db_attrs=dir_db_attrs,
                                             comids_resp= comids_resp,
                                             attrs_sel= ['nonexistent'])
+        self.assertTrue(any("Missing attributes include:" in m for m in cm.output))
+        self.assertTrue(any("nonexistent" in m for m in cm.output))
         print("✅ fs_read_attr_comid single-row test passed.")
 
 # %% UNIT TESTING FOR AlgoConfigParser
@@ -231,9 +245,20 @@ class TestCheckAttributesExist(unittest.TestCase):
             self.assertEqual(len(w),0)
 
         mock_pdf_bad = mock_pdf.copy()
-        mock_pdf_bad.drop(index=0, inplace = True)
-        with self.assertWarns(UserWarning):
-            fs_algo_train_eval._check_attributes_exist(mock_pdf_bad,pd.Series(['pet_mm_s01','cly_pc_sav']))
+        mock_pdf_bad.drop(index=0, inplace=True)
+
+        with self.assertLogs(level="INFO") as cm:
+            fs_algo_train_eval._check_attributes_exist(
+                mock_pdf_bad, pd.Series(['pet_mm_s01', 'cly_pc_sav'])
+            )
+
+        #self.assertTrue(any("None of the provided featureIDs exist" in m for m in cm.output))
+        self.assertTrue(any("Not all featureID groupings" in m for m in cm.output))
+        self.assertTrue(any("TOTAL unique locations with missing attributes" in m for m in cm.output))
+        self.assertTrue(any("TOTAL MISSING ATTRS" in m for m in cm.output))
+
+        # with self.assertWarns(UserWarning):
+        #     fs_algo_train_eval._check_attributes_exist(mock_pdf_bad,pd.Series(['pet_mm_s01','cly_pc_sav']))
         
         print("✅ _check_attributes_exist test passed.")
 class TestFsRetrNhdpComids(unittest.TestCase):
@@ -319,8 +344,9 @@ class build_cfig_path(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             fs_algo_train_eval.build_cfig_path('this_dir/doesnt/exist','test.yaml')
 
-        with self.assertWarns(UserWarning):
+        with self.assertLogs(level="INFO") as cm:
             fs_algo_train_eval.build_cfig_path(dir_new,'')
+        self.assertTrue(any("configuration file may not have specified the path or file name." in m for m in cm.output))
         print("✅ test_build_cfig_path build config paths test passed.")
 
     @patch('pathlib.Path.exists')
@@ -1101,6 +1127,7 @@ def test_build_pred_locs_path():
     assert result_path == expected
 
 if __name__ == '__main__':
-    unittest.main()
 
+    unittest.main()
+    logging.shutdown()
     
