@@ -17,7 +17,8 @@ python fs_tfrm_attrs.py "/path/to/tfrm_config.yaml"
 
 Changelog/contributions
 2024 originally created, GL
-2025-05-20 refactor: address oconus compatibility
+2025-05-20 refactor: address oconus compatibility, GL
+2025-08-21 add logging, GL
 """
 
 import argparse
@@ -37,6 +38,7 @@ from functools import partial
 import fs_prep.proc_eval_metrics as pem
 import logging
 from logging.handlers import MemoryHandler
+import datetime
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = 'process the algorithm config file')
@@ -81,9 +83,20 @@ if __name__ == "__main__":
     # ---- Generate path to the log file & initialize logging
     path_log = pem.std_path_log(dir_input=dir_base, path_config=path_tfrm_cfig,
                             script='fs_tfrm_attrs')
+    # In a workflow requiring transformation, fs_tfrm_attrs is called 
+    # twice (once for training and again for prediction). Set this to append
+    # in lieu of overwriting the log file when run within 24 hours such that
+    # the first log doesn't get overwritten.
+    now = datetime.datetime.now()
+    file_mode = 'w'
+    if Path(path_log).exists():
+        mod_time = datetime.datetime.fromtimestamp(Path(path_log).stat().st_mtime)
+        if now - mod_time < datetime.timedelta(days=1):
+            file_mode = 'a' # Append to existing log file
+
     logging.basicConfig(level=logging.INFO, filename=path_log, 
                         format='%(asctime)s - %(levelname)s - %(message)s',
-                        filemode='w',
+                        filemode=file_mode,
                         force=True)
 
     # We need to find the new FileHandler that basicConfig created and set it
