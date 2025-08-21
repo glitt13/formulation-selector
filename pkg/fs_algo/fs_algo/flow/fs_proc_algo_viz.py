@@ -59,11 +59,18 @@ if __name__ == "__main__":
     path_attr_config = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["path_attr_config"]
     uncertainty_cfg = algo_cfig.algo_cfg_unc_dict["algo_unc_dict"]["uncertainty_cfg"]
     confidence_levels = algo_cfig.algo_cfg_unc_dict["algo_unc_dict"]["uncertainty_cfg"].get("confidence_levels")
+    uncn_bound = algo_cfig.algo_cfg_unc_dict["algo_unc_dict"]["uncertainty_cfg"].get("uncn_bound")
 
     #%% Attribute configuration
     # Initialize attribute configuration class for extracting attributes
     attr_cfig = fsate.AttrConfigAndVars(path_attr_config)
     attr_cfig._read_attr_config()
+
+    # READ fs_categories_uncn.yaml
+    print("Reading uncertainty bounds from fs_categories_uncn.yaml...")
+    uncn_config = pem._read_std_config_uncn() 
+    fs_catagories_uncn = pem._conv_ls_dicts_df_long_uncn(uncn_config)
+    print("Successfully loaded uncertainty bounds.")
 
     # Grab the attributes of interest from the attribute config file,
     #  OR a .csv file if specified in the algo config file.
@@ -251,6 +258,19 @@ if __name__ == "__main__":
 
             # TODO may need to add additional distinguishing strings to dataset_id, e.g. in cases of probabilistic simulation
 
+            # GET MIN/MAX BOUNDS FOR THE CURRENT METRIC
+            metric_bounds = fs_catagories_uncn[fs_catagories_uncn['var'] == metr]
+            if not metric_bounds.empty:
+                min_lim = metric_bounds['min_lim'].iloc[0]
+                max_lim = metric_bounds['max_lim'].iloc[0]
+                if verbose:
+                    print(f"   Bounds for '{metr}': min={min_lim}, max={max_lim}")
+            else:
+                min_lim = None
+                max_lim = None
+                if verbose:
+                    print(f"   WARNING: No uncertainty bounds found for metric '{metr}'.")
+
             # Instantiate the training, testing, and evaluation class
             train_eval = fsate.AlgoTrainEval(df=df_pred_resp,
                                         attrs=attrs_sel,
@@ -260,6 +280,9 @@ if __name__ == "__main__":
                                         metr=metr,test_size=test_size, rs = seed,
                                         verbose=verbose,
                                         confidence_levels=confidence_levels,
+                                        uncn_bound=uncn_bound,
+                                        min_lim=min_lim,
+                                        max_lim=max_lim
                                         )
             train_eval.train_eval() # Train, test, eval wrapper
 
