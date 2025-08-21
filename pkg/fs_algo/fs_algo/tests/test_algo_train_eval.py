@@ -81,7 +81,7 @@ class TestAttrConfigAndVars(unittest.TestCase):
             'dir_db_attrs': '/mocked/home/base_dir/db_attrs',
             'dir_std_base': '/mocked/home/base_dir/std_base',
             'dir_base': '/mocked/home/base_dir',
-            'home_dir': Path('/mocked/home'),
+            'home_dir': Path('/mocked/home').as_posix(),
             'datasets': ['dataset1', 'dataset2']
         }
            
