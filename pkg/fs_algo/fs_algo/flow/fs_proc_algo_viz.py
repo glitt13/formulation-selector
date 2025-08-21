@@ -1,44 +1,51 @@
-import argparse
-import yaml
-import pandas as pd
-from pathlib import Path
-import fs_algo.fs_algo_train_eval as fsate
-import ast
-import numpy as np
-import geopandas as gpd
-from shapely import wkt
-import matplotlib.pyplot as plt
-import xarray as xr
-import warnings
 """Workflow script to train algorithms on catchment attribute data for predicting
     formulation metrics and/or hydrologic signatures.
 
-:raises ValueError: When the algorithm config file path does not exist
-
 Example: 
-    >>> python fs_proc_algo.py "/path/to/algo_config.yaml"
-
+    >>> python fs_proc_algo_viz.py "/path/to/algo_config.yaml"
 
 Changelog/Contributions
 2024 Originally created, GL
 2025-05-19 oconus refactor using hard-coded default col_locid = 'featureID'
  in lieu of 'comid; add try/except based on read_type, GL
+2025-08-21 implement logging, GL
 """
+import argparse
+import pandas as pd
+from pathlib import Path
+import fs_algo.fs_algo_train_eval as fsate
+import numpy as np
+import matplotlib.pyplot as plt
+import xarray as xr
+import fs_prep.proc_eval_metrics as pem
+from logging.handlers import MemoryHandler
+import logging
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = 'process the algorithm config file')
-    parser.add_argument('path_algo_config', type=str, help='Path to the YAML configuration file specific for algorithm training')
+    parser.add_argument('path_algo_config', type=str,
+                        help='Path to the YAML configuration file specific for algorithm training')
     args = parser.parse_args()
 
-    path_algo_config = Path(args.path_algo_config).expanduser() #Path(f'~/git/formulation-selector/scripts/workflow_configs/legacy/xssa/xssa_algo_config.yaml') 
-    print("BEGINNING algorithm training, testing, & evaluation.")
+    path_algo_config = Path(args.path_algo_config).expanduser() #Path(f'~/git/formulation-selector/scripts/workflow_configs/legacy/xssa/xssa_algo_config.yaml').expanduser()
+    # --- Commence logging before creating the log file
+    memory_handler = MemoryHandler(capacity=30)
+    # Get the root logger and add the memory handler to it
+    # The root logger is the ancestor of all other loggers
+    root_logger = logging.getLogger()
+    root_logger.addHandler(memory_handler)
+    root_logger.setLevel(logging.INFO) # Set the level to capture INFO messages
+    logging.info(f"Running fs_proc_algo_viz.py with \
+                {path_algo_config.parent / path_algo_config.name} config file")
+    # ---
+    logging.info("BEGINNING algorithm training, testing, & evaluation.")
     # Initialize algo configuration class for extracting attributes
     algo_cfig = fsate.AlgoConfigParser(path_algo_config)
     algo_cfig._read_algo_config()
 
     # Extract variables from dictionary created by AlgoConfigParser
     algo_config = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["algo_config"]
-    
+
     # Generate variable algo_config_og
     algo_config_og = algo_config.copy()
 
@@ -76,6 +83,29 @@ if __name__ == "__main__":
     ds_type = [x for x in attr_cfig.attr_config.get('file_io') if 'ds_type' in x][0]['ds_type']
     write_type = [x for x in attr_cfig.attr_config.get('file_io') if 'write_type' in x][0]['write_type']
     path_meta_fstr = [x for x in attr_cfig.attr_config.get('file_io') if 'path_meta' in x][0]['path_meta']
+
+
+    # ---------- Generate path to the log file & initialize logging -----------
+    path_log = pem.std_path_log(dir_input=dir_base, 
+                                path_config=path_algo_config,
+                            script='fs_proc_algo_viz')
+    logging.basicConfig(level=logging.INFO, 
+                        filename=path_log, 
+                        format='%(asctime)s - %(levelname)s - %(message)s',
+                        filemode='w', 
+                        force = True) # overwrite log file when force=T
+
+    # We need to find the new FileHandler that basicConfig created and set it
+    # as the target for our MemoryHandler - aka we can now put previous logs
+    # into the log file now that it has been created
+    for handler in root_logger.handlers:
+        if isinstance(handler, logging.FileHandler):
+            memory_handler.setTarget(handler)
+            memory_handler.flush()
+            break  
+    logging.info(f"Writing logs to {path_log}")
+    root_logger.removeHandler(memory_handler) # Remove the pre-file logger
+    # -------------------------------------------------------------------------
     #%%  Generate standardized output directories
     dirs_std_dict = fsate.fs_save_algo_dir_struct(dir_base)
     dir_out = dirs_std_dict.get('dir_out')
@@ -102,15 +132,16 @@ if __name__ == "__main__":
 
     # %% Looping over datasets
     for ds in datasets: 
-        print(f'PROCESSING {ds} dataset inside \n {dir_std_base}')
+        logging.info(f'PROCESSING {ds} dataset inside \n {dir_std_base}')
 
         dir_out_alg_ds = Path(dir_out_alg_base/Path(ds))
         dir_out_alg_ds.mkdir(exist_ok=True)
 
-        # TODO allow secondary option where dat_resp and metrics read in from elsewhere
         vals = {'ds_type':ds_type,'write_type':write_type, 'dir_std_base':dir_std_base,'ds':ds}
         path_meta = path_meta_fstr.format(**vals)
         if Path(path_meta).exists() and False:
+            # TODO allow secondary option where dat_resp and metrics read in from elsewhere. 
+            # NOTE dataset metadata handling will also need to be considered
             # TODO first check for comids from metadata in the path_attr_config file
             if 'parquet' in Path(path_meta).suffix:
                 df_meta = pd.read_parquet(path_meta)
@@ -159,13 +190,13 @@ if __name__ == "__main__":
         if df_attr_wide.isna().any().any(): # 
             df_attr_wide_dropna = df_attr_wide.dropna()
             locids_with_na_attrs = [x for x in df_attr_wide.index if x not in df_attr_wide_dropna.index]
-            warnings.warn(f"Dropping {df_attr_wide.shape[0] - df_attr_wide_dropna.shape[0]} total locations from analysis \
+            logging.warning(f"Dropping {df_attr_wide.shape[0] - df_attr_wide_dropna.shape[0]} total locations from analysis \
             for correlation/PCA assessment due to NA values, reducing dataset to {df_attr_wide_dropna.shape[0]} points")
             missing_locs_str = '\n'.join(locids_with_na_attrs)
-            print(f"Locations with missing attribute data include:\n{missing_locs_str}")
+            logging.warning(f"Locations with missing attribute data include:\n{missing_locs_str}")
             frac_na = (df_attr_wide.shape[0] - df_attr_wide_dropna.shape[0])/df_attr_wide.shape[0]
             if frac_na > 0.1:
-                raise UserWarning(f"!!!!{np.round(frac_na*100,1)}%  of data are NA values and will be discarded before training/testing!!!!")
+                logging.warning(f"!!!!{np.round(frac_na*100,1)}%  of data are NA values and will be discarded before training/testing!!!!")
         else:
             df_attr_wide_dropna = df_attr_wide.copy()
         # ---------  UPDATE gdf and comid list after possible data removal ---------- #
@@ -201,7 +232,7 @@ if __name__ == "__main__":
         # %% Train, test, and evaluate
         rslt_eval = dict()
         for metr in metrics:
-            print(f' - Processing {metr}')
+            logging.info(f' - Processing {metr}')
             if len(algo_config) == 0:
                 algo_config = algo_config_og.copy()
             # Subset response data to metric of interest & the comid
@@ -213,10 +244,10 @@ if __name__ == "__main__":
             if df_pred_resp.isna().any().any(): # Check for NA values and remove them if present to avoid errors during evaluation
                 tot_na_dfpred = df_pred_resp.shape[0] - df_pred_resp.dropna().shape[0]
                 pct_na_dfpred = tot_na_dfpred/df_pred_resp.shape[0]*100
-                print(f"Removing {tot_na_dfpred} NA values, which is {pct_na_dfpred}% of total data")
+                logging.info(f"Removing {tot_na_dfpred} NA values, which is {pct_na_dfpred}% of total data")
                 df_pred_resp = df_pred_resp.dropna()
                 if pct_na_dfpred > 10:
-                    raise UserWarning(f"!!!!More than 10% of data are NA values!!!!")
+                    logging.warning(f"!!!!More than 10% of data are NA values!!!!")
 
             # TODO may need to add additional distinguishing strings to dataset_id, e.g. in cases of probabilistic simulation
 
@@ -353,20 +384,20 @@ if __name__ == "__main__":
             # TODO why does test_gdf end up with a size larger than total comids? Should be the split test amount
             df_pred_obs_ds_metr = pd.concat(dict_test_gdf)
             df_pred_obs_ds_metr.to_csv(path_pred_obs)
-            print(f"Wrote the prediction-observation-coordinates dataset to file\n{path_pred_obs}")
+            logging.info(f"Wrote the prediction-observation-coordinates dataset to file\n{path_pred_obs}")
                 
             del train_eval
         # Compile results and write to file
         rslt_eval_df = pd.concat(rslt_eval).reset_index(drop=True)
         rslt_eval_df['dataset'] = ds
         rslt_eval_df.to_parquet(Path(dir_out_alg_ds)/Path('algo_eval_'+ds+'.parquet'))
-        print(f'... Wrote training and testing evaluation to file for {ds}')
+        logging.info(f'... Wrote training and testing evaluation to file for {ds}')
 
         dat_resp.close()
     #%% Cross-comparison across all datasets: determining where the best metric lives
     if same_test_ids and len(datasets)>1:
-        print("Cross-comparison across multiple datasets possible.\n"+
+        logging.info("Cross-comparison across multiple datasets possible.\n"+
         f"Refer to custom script processing example inside scripts/analysis/fs_proc_viz_best_ealstm.py")
 
-    print("FINISHED algorithm training, testing, & evaluation")
-
+    logging.info("FINISHED algorithm training, testing, & evaluation")
+    logging.shutdown()
