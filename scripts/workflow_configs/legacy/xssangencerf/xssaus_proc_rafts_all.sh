@@ -16,7 +16,7 @@ DIR_R="${DIR_REPO}/pkg/proc.attr.hydfab/flow/"
 echo "Running processing from $DIR_CONFIG"
 
 # Prepare the initial dataset here (only needs to happen once)
-# "${DIR_CONFIG}prep_xssaus_metrics.py" "${DIR_CONFIG}xssaus_prep_config.yaml"
+"${DIR_CONFIG}prep_xssaus_metrics.py" "${DIR_CONFIG}xssaus_prep_config.yaml"
 
 # Print a message to indicate the script is running
 echo "Starting execution of xssa_us process sensitivity scripts..."
