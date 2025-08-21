@@ -441,7 +441,7 @@ def _define_home_dir(attr_config:dict) -> os.PathLike:
         home_dir = str(Path.home())
     else:
         home_dir = home_dir_read[0]
-    home_dir = Path(home_dir).expanduser()
+    home_dir = Path(home_dir).expanduser().as_posix()
     return home_dir        
 
 
