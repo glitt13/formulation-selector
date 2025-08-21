@@ -259,7 +259,7 @@ if __name__ == "__main__":
             # TODO may need to add additional distinguishing strings to dataset_id, e.g. in cases of probabilistic simulation
 
             # GET MIN/MAX BOUNDS FOR THE CURRENT METRIC
-            metric_bounds = fs_catagories_uncn[fs_catagories_uncn['var'] == metr]
+            metric_bounds = fs_catg_uncn[fs_catg_uncn['var'] == metr]
             if not metric_bounds.empty:
                 min_lim = metric_bounds['min_lim'].iloc[0]
                 max_lim = metric_bounds['max_lim'].iloc[0]
