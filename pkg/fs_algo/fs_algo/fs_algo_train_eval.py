@@ -284,12 +284,25 @@ class AttrConfigAndVars:
             logging.warning("No attributes discerned from 'attr_select'. Assuming all attributes desired.")
         
         home_dir = _define_home_dir(self.attr_config)
-        dir_base = list([x for x in self.attr_config['file_io'] if 'dir_base' in x][0].values())[0].format(home_dir=home_dir_posix)
+        # # Determine if home_dir. Either defined in attribute config file or assumed to be system default.
+        # home_dir_read = [v for x in self.attr_config['file_io'] for k, v in x.items() if 'home_dir' in k ]
+        # if len(home_dir_read) == 0:
+        #     home_dir = str(Path.home())
+        # elif home_dir_read[0] is None:
+        #     home_dir = str(Path.home())
+        # elif not Path(home_dir_read[0]).exists():
+        #     warnings.warn(f"The user-defined home directory path {home_dir_read[0]} " \
+        #      f"inside {self.path_attr_config} does not exist. Using system default {Path.home()}", UserWarning)
+        #     home_dir = str(Path.home())
+        # else:
+        #     home_dir = home_dir_read[0]
+
+        dir_base = list([x for x in self.attr_config['file_io'] if 'dir_base' in x][0].values())[0].format(home_dir=home_dir)
         # Location of attributes (predictor data):
-        dir_db_attrs = list([x for x in self.attr_config['file_io'] if 'dir_db_attrs' in x][0].values())[0].format(dir_base = dir_base, home_dir=home_dir_posix)
+        dir_db_attrs = list([x for x in self.attr_config['file_io'] if 'dir_db_attrs' in x][0].values())[0].format(dir_base = dir_base, home_dir=home_dir)
 
         # parent location of response variable data:
-        dir_std_base =  list([x for x in self.attr_config['file_io'] if 'dir_std_base' in x][0].values())[0].format(dir_base = dir_base, home_dir=home_dir_posix)
+        dir_std_base =  list([x for x in self.attr_config['file_io'] if 'dir_std_base' in x][0].values())[0].format(dir_base = dir_base, home_dir=home_dir)
 
         # The datasets of interest
         datasets = list([x for x in self.attr_config['formulation_metadata'] if 'datasets' in x][0].values())[0]
@@ -420,7 +433,7 @@ class PredConfigParser:
             'path_pred_config': self.path_pred_config,
         }   
     
-def _define_home_dir(attr_config:dict) -> os.PathLike:
+def _define_home_dir(attr_config:dict) -> str: # os.PathLike:
     """Define the home directory of this system
 
     :param attr_config: The attribute config file object generated using fs_algo_train_eval.AttrConfigAndVars
