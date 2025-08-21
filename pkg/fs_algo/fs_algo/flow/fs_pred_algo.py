@@ -13,19 +13,15 @@ Usage:
 """
 
 import argparse
-import yaml
 import joblib
 import fs_algo.fs_algo_train_eval as fsate
 import pandas as pd
 from pathlib import Path
-import ast
-import warnings
-import os
-import numpy as np
 import forestci as fci
 from sklearn.model_selection import train_test_split
-
-# TODO create a function that's flexible/converts user formatted checks (a la fs_prep)
+from logging.handlers import MemoryHandler
+import logging
+import fs_prep.proc_eval_metrics as pem
 
 # Predict values and evaluate predictions
 if __name__ == "__main__":
@@ -36,6 +32,16 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     path_pred_config = Path(args.path_pred_config).expanduser() # Path(f'~/git/formulation-selector/scripts/eval_ingest/xssa/xssa_pred_config.yaml') 
+    # --- Commence logging before creating the log file
+    memory_handler = MemoryHandler(capacity=30)
+    # Get the root logger and add the memory handler to it
+    # The root logger is the ancestor of all other loggers
+    root_logger = logging.getLogger()
+    root_logger.addHandler(memory_handler)
+    root_logger.setLevel(logging.INFO) # Set the level to capture INFO messages
+    logging.info(f"Running fs_pred_algo.py with \
+                {path_pred_config.parent / path_pred_config.name} config file")
+    # ---
     pred_cfg = fsate.PredConfigParser(path_pred_config)
     pred_cfg._read_pred_config()
 
@@ -50,6 +56,28 @@ if __name__ == "__main__":
     dir_std_base = attr_cfig.attrs_cfg_dict.get('dir_std_base')
     dir_db_attrs = attr_cfig.attrs_cfg_dict.get('dir_db_attrs')
     datasets = attr_cfig.attrs_cfg_dict.get('datasets') # Identify datasets of interest
+
+    # ---------- Generate path to the log file & initialize logging -----------
+    path_log = pem.std_path_log(dir_input=dir_base, 
+                                path_config=path_pred_config,
+                            script='fs_pred_algo')
+    logging.basicConfig(level=logging.INFO, 
+                        filename=path_log, 
+                        format='%(asctime)s - %(levelname)s - %(message)s',
+                        filemode='w', 
+                        force = True) # overwrite log file when force=T
+
+    # We need to find the new FileHandler that basicConfig created and set it
+    # as the target for our MemoryHandler - aka we can now put previous logs
+    # into the log file now that it has been created
+    for handler in root_logger.handlers:
+        if isinstance(handler, logging.FileHandler):
+            memory_handler.setTarget(handler)
+            memory_handler.flush()
+            break  
+    logging.info(f"Writing logs to {path_log}")
+    root_logger.removeHandler(memory_handler) # Remove the pre-file logger
+    # -------------------------------------------------------------------------
 
     # Initialize algo configuration class for extracting attributes
     algo_cfig = fsate.AlgoConfigParser(path_algo_config)
@@ -117,15 +145,16 @@ if __name__ == "__main__":
 
         # Run predictions & save output
         dir_out_alg_ds = Path(dir_out_alg_base/Path(ds))
-        print(f"PREDICTING algorithm for {ds}")
+        logging.info(f"PREDICTING algorithm for {ds}")
         for resp_var in resp_vars:
             for algo in algos:
                 path_algo = fsate.std_algo_path(dir_out_alg_ds, algo=algo, metric=resp_var, dataset_id=ds)
                 if not Path(path_algo).exists():
-                    raise FileNotFoundError(f"The following algorithm path does not exist: \n{path_algo}")
+                    msg_nonexst = f"The following algorithm path does not exist: \n{path_algo}"
+                    logging.error(msg_nonexst)
+                    raise FileNotFoundError(msg_nonexst)
 
-                # Read in the algorithm's pipeline
-                # pipe = joblib.load(path_algo)
+                # Read in the algorithm's pipelin
                 pipeline_data = joblib.load(path_algo)
                 
                 pipe = pipeline_data['pipeline']
@@ -143,7 +172,7 @@ if __name__ == "__main__":
                     text_join = '\n'.join(ids_na)
                     msg_rm_na = f"Removing the following featureIDs from prediction due " + \
                      f"to NA values:\n{text_join}"
-                    warnings.warn(msg_rm_na)
+                    logging.warning(msg_rm_na)
 
                 # Perform prediction
                 resp_pred = pipe.predict(df_attr_sub_rmna)
@@ -168,7 +197,7 @@ if __name__ == "__main__":
                         df_pred[f'mapie_lower_{alpha:.2f}'] = y_pis[:, 0, i]
                         df_pred[f'mapie_upper_{alpha:.2f}'] = y_pis[:, 1, i]
                 elif mapie_alpha and 'mapie' not in pipeline_data:
-                    warnings.warn("MAPIE prediction interval estimation is not available in the " \
+                    logging.warning("MAPIE prediction interval estimation is not available in the " \
                     "trained algorithm pipeline, but mapie_alpha is specified in the prediction config file." \
                     "If prediction uncertainty desired, re-run the algorithm training fs_proc_algo_viz.py, " \
                     "with mapie specified in the Uncertainty section of the algo config file.")
@@ -184,4 +213,6 @@ if __name__ == "__main__":
 
                 # Write prediction results
                 df_pred_mrge.to_parquet(path_pred_out)
-                print(f"   Completed {algo} prediction of {resp_var}")
+                logging.info(f"   Completed {algo} prediction of {resp_var}")
+    logging.info(f"FINISHED algorithm prediction for {path_pred_config.name}")
+    logging.shutdown()

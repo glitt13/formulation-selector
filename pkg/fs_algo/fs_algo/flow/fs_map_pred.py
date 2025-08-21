@@ -1,22 +1,20 @@
+"""Workflow script to generate a map of predictions
+
+Make sure to add in a unique string pertaining to the prediction of interest!
+Example: 
+    >>> python fs_map_pred.py "/path/to/pred_config.yaml" "huc08"
+
+# Changelog/contributions
+    2025-08-21 added logging, GL
+"""
 import argparse
-import yaml
 import pandas as pd
 from pathlib import Path
 import fs_algo.fs_algo_train_eval as fsate
-import ast
-import numpy as np
 import geopandas as gpd
-from shapely import wkt
-import matplotlib.pyplot as plt
-
-import warnings             
-
-"""Workflow script to generate a map of predictions
-
-:raises ValueError: When the algorithm config file path does not exist
-:note python fs_map_pred.py "/path/to/pred_config.yaml" "huc08"
-
-"""
+import logging
+from logging.handlers import MemoryHandler
+import fs_prep.proc_eval_metrics as pem
 
 # Predict values and evaluate predictions
 if __name__ == "__main__":
@@ -27,6 +25,16 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     path_pred_config = Path(args.path_pred_config).expanduser() #Path(f'~/git/formulation-selector/scripts/eval_ingest/xssangencerf/xssangencerf_pred_config.yaml') 
+    # --- Commence logging before creating the log file
+    memory_handler = MemoryHandler(capacity=30)
+    # Get the root logger and add the memory handler to it
+    # The root logger is the ancestor of all other loggers
+    root_logger = logging.getLogger()
+    root_logger.addHandler(memory_handler)
+    root_logger.setLevel(logging.INFO) # Set the level to capture INFO messages
+    logging.info(f"Running fs_map_pred.py with \
+                {path_pred_config.parent / path_pred_config.name} config file")
+    # ---
     analysis_str = args.analysis_str
 
     pred_cfg = fsate.PredConfigParser(path_pred_config)
@@ -72,6 +80,27 @@ if __name__ == "__main__":
     dirs_std_dict.get('dir_out')
     dir_out = dirs_std_dict.get('dir_out')
 
+    # ---------- Generate path to the log file & initialize logging -----------
+    path_log = pem.std_path_log(dir_input=dir_base, 
+                                path_config=path_pred_config,
+                            script='fs_map_pred')
+    logging.basicConfig(level=logging.INFO, 
+                        filename=path_log, 
+                        format='%(asctime)s - %(levelname)s - %(message)s',
+                        filemode='w', 
+                        force = True) # overwrite log file when force=T
+
+    # We need to find the new FileHandler that basicConfig created and set it
+    # as the target for our MemoryHandler - aka we can now put previous logs
+    # into the log file now that it has been created
+    for handler in root_logger.handlers:
+        if isinstance(handler, logging.FileHandler):
+            memory_handler.setTarget(handler)
+            memory_handler.flush()
+            break  
+    logging.info(f"Writing logs to {path_log}")
+    root_logger.removeHandler(memory_handler) # Remove the pre-file logger
+    # -------------------------------------------------------------------------
     for ds in datasets: 
         path_pred_locs = fsate.build_pred_locs_path(path_meta_template=path_meta_pred, dir_std_base=dir_std_base, 
                                                     ds=ds,ds_type=ds_type, write_type=write_type)
@@ -85,7 +114,8 @@ if __name__ == "__main__":
 
         for metr in resp_vars:
             for algo_str in pred_cfg.pred_cfg_dict.get('algo_type'):
-          
+                logging.info(f"Generating prediction map for dataset: {ds}\n"
+                             f"Algorithm: {algo_str}\nResponse variable: {metr}")
                 # Read in the prediction file for each response variable
                 path_pred_in = fsate.std_pred_path(dir_out=dir_out,algo=algo_str,metric=metr,dataset_id=ds)
         
@@ -100,4 +130,5 @@ if __name__ == "__main__":
                                     metr,algo_str,
                                     split_type=analysis_str,
                                     colname_data='prediction')
-                            
+        logging.info(f"Completed prediction map generation for {path_pred_config}")
+    logging.shutdown()
