@@ -22,6 +22,7 @@ from sklearn.model_selection import train_test_split
 from logging.handlers import MemoryHandler
 import logging
 import fs_prep.proc_eval_metrics as pem
+import numpy as np
 
 # Predict values and evaluate predictions
 if __name__ == "__main__":
@@ -49,11 +50,13 @@ if __name__ == "__main__":
     path_attr_config = fsate.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_attr_config'))
     path_algo_config = fsate.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_algo_config'))
     
-    # READ fs_categories_uncn.yaml
-    print("Reading uncertainty bounds from fs_categories_uncn.yaml...")
-    uncn_config = pem._read_std_config_uncn()
-    fs_catg_uncn = pem._conv_ls_dicts_df_long_uncn(uncn_config)
-    print("Successfully loaded uncertainty bounds.")
+    # READ fs_categories_uncn.yaml if uncn_bound is True
+    uncn_bound = pred_cfg.pred_cfg_dict.get('uncn_bound')
+    if uncn_bound:
+        print("Reading uncertainty bounds from fs_categories_uncn.yaml...")
+        uncn_config = pem._read_std_config_uncn()
+        fs_catg_uncn = pem._conv_ls_dicts_df_long_uncn(uncn_config)
+        print("Successfully loaded uncertainty bounds.")
 
     attr_cfig = fsate.AttrConfigAndVars(path_attr_config)
     attr_cfig._read_attr_config()
@@ -153,6 +156,17 @@ if __name__ == "__main__":
         dir_out_alg_ds = Path(dir_out_alg_base/Path(ds))
         logging.info(f"PREDICTING algorithm for {ds}")
         for resp_var in resp_vars:
+            min_lim = None
+            max_lim = None
+            if uncn_bound:
+                metric_bounds = fs_catg_uncn[fs_catg_uncn['var'] == resp_var]
+                if not metric_bounds.empty:
+                    min_lim = metric_bounds['min_lim'].iloc[0]
+                    max_lim = metric_bounds['max_lim'].iloc[0]
+                    logging.info(f"   Applying bounds for '{resp_var}': min={min_lim}, max={max_lim}")
+                else:
+                    logging.warning(f"   uncn_bound is True, but no bounds found for '{resp_var}'. Predictions will not be clipped.")
+
             for algo in algos:
                 path_algo = fsate.std_algo_path(dir_out_alg_ds, algo=algo, metric=resp_var, dataset_id=ds)
                 if not Path(path_algo).exists():
@@ -198,6 +212,13 @@ if __name__ == "__main__":
                     mapie = pipeline_data['mapie']
                     y_pred_mapie, y_pis = mapie.predict(df_attr_sub_rmna, alpha=mapie_alpha)
         
+                    # Apply bounds if the flag was set and bounds were found
+                    if uncn_bound and (min_lim is not None or max_lim is not None):
+                        # Use -inf and +inf as fallbacks if one limit is None
+                        clip_min = min_lim if min_lim is not None else -np.inf
+                        clip_max = max_lim if max_lim is not None else np.inf
+                        y_pis = np.clip(y_pis, clip_min, clip_max)
+
                     # Rename columns based on self.mapie_alpha values
                     for i, alpha in enumerate(mapie_alpha):
                         df_pred[f'mapie_lower_{alpha:.2f}'] = y_pis[:, 0, i]
