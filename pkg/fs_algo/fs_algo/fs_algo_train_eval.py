@@ -411,7 +411,7 @@ class PredConfigParser:
         algo_response_vars = pred_cfg.get("algo_response_vars", [])
         algo_type = pred_cfg.get("algo_type", [])
         mapie_alpha = pred_cfg.get("MAPIE_alpha", None)
-        uncn_bound = pred_cfg.get("uncn_bound", False)
+        uncn_bnd_pred = pred_cfg.get("uncn_bnd_pred", False)
 
         # Compile dictionary
         self.pred_cfg_dict = {
@@ -431,7 +431,7 @@ class PredConfigParser:
             'conda_env': conda_env,
             'pred_file_comid_colname': pred_file_comid_colname,
             'mapie_alpha': mapie_alpha,
-            'uncn_bound': uncn_bound,
+            'uncn_bnd_pred': uncn_bnd_pred,
             'path_pred_config': self.path_pred_config,
         }   
     
@@ -1392,7 +1392,7 @@ class AlgoTrainEval:
                  test_ids = None,test_id_col:str = 'comid',
                  verbose: bool = False,
                  confidence_levels: list[int] = [95],
-                 uncn_bound: bool = False, min_lim: float = None, max_lim: float = None
+                 uncn_bnd_algo: bool = False, min_lim: float = None, max_lim: float = None
                  ):
         """The algorithm training and evaluation class.
 
@@ -1432,8 +1432,8 @@ class AlgoTrainEval:
         :type confidence_levels: int, optional
         :param mapie_alpha: alpha for MAPIE, defaults to 0.05.
         :type mapie_alpha: float, optional
-        :param uncn_bound: Flag to apply min/max bounds to predictions, defaults to False.
-        :type uncn_bound: bool, optional
+        :param uncn_bnd_algo: Flag to apply min/max bounds to predictions, defaults to False.
+        :type uncn_bnd_algo: bool, optional
         :param min_lim: The minimum bound for the metric, defaults to None.
         :type min_lim: float, optional
         :param max_lim: The maximum bound for the metric, defaults to None.
@@ -1453,7 +1453,7 @@ class AlgoTrainEval:
         self.dataset_id = dataset_id
         self.verbose = verbose
         self.confidence_levels = confidence_levels
-        self.uncn_bound = uncn_bound
+        self.uncn_bnd_algo = uncn_bnd_algo
         self.min_lim = min_lim
         self.max_lim = max_lim
 
@@ -1840,7 +1840,7 @@ class AlgoTrainEval:
         """
           
         # Determine the clipping bounds based on the instance configuration
-        if self.uncn_bound:
+        if self.uncn_bnd_algo:
             # Replace None with -inf/+inf for clipping if one bound is not defined
             clip_min = self.min_lim if self.min_lim is not None else -np.inf
             clip_max = self.max_lim if self.max_lim is not None else np.inf

@@ -59,7 +59,7 @@ if __name__ == "__main__":
     path_attr_config = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["path_attr_config"]
     uncertainty_cfg = algo_cfig.algo_cfg_unc_dict["algo_unc_dict"]["uncertainty_cfg"]
     confidence_levels = algo_cfig.algo_cfg_unc_dict["algo_unc_dict"]["uncertainty_cfg"].get("confidence_levels")
-    uncn_bound = algo_cfig.algo_cfg_unc_dict["algo_unc_dict"]["uncertainty_cfg"].get("uncn_bound")
+    uncn_bnd_algo = algo_cfig.algo_cfg_unc_dict["algo_unc_dict"]["uncertainty_cfg"].get("uncn_bnd_algo")
 
     #%% Attribute configuration
     # Initialize attribute configuration class for extracting attributes
@@ -280,7 +280,7 @@ if __name__ == "__main__":
                                         metr=metr,test_size=test_size, rs = seed,
                                         verbose=verbose,
                                         confidence_levels=confidence_levels,
-                                        uncn_bound=uncn_bound,
+                                        uncn_bnd_algo=uncn_bnd_algo,
                                         min_lim=min_lim,
                                         max_lim=max_lim
                                         )
