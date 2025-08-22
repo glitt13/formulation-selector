@@ -411,6 +411,7 @@ class PredConfigParser:
         algo_response_vars = pred_cfg.get("algo_response_vars", [])
         algo_type = pred_cfg.get("algo_type", [])
         mapie_alpha = pred_cfg.get("MAPIE_alpha", None)
+        uncn_bound = pred_cfg.get("uncn_bound", False)
 
         # Compile dictionary
         self.pred_cfg_dict = {
@@ -430,6 +431,7 @@ class PredConfigParser:
             'conda_env': conda_env,
             'pred_file_comid_colname': pred_file_comid_colname,
             'mapie_alpha': mapie_alpha,
+            'uncn_bound': uncn_bound,
             'path_pred_config': self.path_pred_config,
         }   
     
