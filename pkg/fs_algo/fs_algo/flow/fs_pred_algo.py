@@ -49,6 +49,12 @@ if __name__ == "__main__":
     path_attr_config = fsate.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_attr_config'))
     path_algo_config = fsate.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_algo_config'))
     
+    # READ fs_categories_uncn.yaml
+    print("Reading uncertainty bounds from fs_categories_uncn.yaml...")
+    uncn_config = pem._read_std_config_uncn()
+    fs_catg_uncn = pem._conv_ls_dicts_df_long_uncn(uncn_config)
+    print("Successfully loaded uncertainty bounds.")
+
     attr_cfig = fsate.AttrConfigAndVars(path_attr_config)
     attr_cfig._read_attr_config()
 
