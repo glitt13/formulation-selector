@@ -59,7 +59,7 @@ if __name__ == "__main__":
     path_attr_config = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["path_attr_config"]
     uncertainty_cfg = algo_cfig.algo_cfg_unc_dict["algo_unc_dict"]["uncertainty_cfg"]
     confidence_levels = algo_cfig.algo_cfg_unc_dict["algo_unc_dict"]["uncertainty_cfg"].get("confidence_levels")
-    uncn_bnd_algo = algo_cfig.algo_cfg_unc_dict["algo_unc_dict"]["uncertainty_cfg"].get("uncn_bnd_algo")
+    uncn_bnd_algo = algo_cfig.algo_cfg_unc_dict["algo_unc_dict"]["uncertainty_cfg"].get("uncn_bnd_algo",False)
 
     #%% Attribute configuration
     # Initialize attribute configuration class for extracting attributes
@@ -67,10 +67,10 @@ if __name__ == "__main__":
     attr_cfig._read_attr_config()
 
     # READ fs_categories_uncn.yaml
-    print("Reading uncertainty bounds from fs_categories_uncn.yaml...")
+    logging.info("Reading uncertainty bounds from fs_categories_uncn.yaml...")
     uncn_config = pem._read_std_config_uncn() 
     fs_catg_uncn = pem._conv_ls_dicts_df_long_uncn(uncn_config)
-    print("Successfully loaded uncertainty bounds.")
+    logging.info("Successfully loaded uncertainty bounds.")
 
     # Grab the attributes of interest from the attribute config file,
     #  OR a .csv file if specified in the algo config file.
@@ -259,17 +259,17 @@ if __name__ == "__main__":
             # TODO may need to add additional distinguishing strings to dataset_id, e.g. in cases of probabilistic simulation
 
             # GET MIN/MAX BOUNDS FOR THE CURRENT METRIC
-            metric_bounds = fs_catg_uncn[fs_catg_uncn['var'] == metr]
-            if not metric_bounds.empty:
-                min_lim = metric_bounds['min_lim'].iloc[0]
-                max_lim = metric_bounds['max_lim'].iloc[0]
-                if verbose:
-                    print(f"   Bounds for '{metr}': min={min_lim}, max={max_lim}")
-            else:
-                min_lim = None
-                max_lim = None
-                if verbose:
-                    print(f"   WARNING: No uncertainty bounds found for metric '{metr}'.")
+            min_lim = None
+            max_lim = None
+            if uncn_bnd_algo:
+                metric_bounds = fs_catg_uncn[fs_catg_uncn['var'] == metr]
+                if not metric_bounds.empty:
+                    min_lim = metric_bounds['min_lim'].iloc[0]
+                    max_lim = metric_bounds['max_lim'].iloc[0]
+                    logging.info(f"   Applying bounds for '{metr}': min={min_lim}, max={max_lim}")
+                    logging.warning(f"   Applying bounds for '{metr}': min={min_lim}, max={max_lim}")
+                else:
+                    logging.warning(f"   uncn_bnd_algo is True, but no bounds found for '{metr}'. Predictions will not be clipped.")
 
             # Instantiate the training, testing, and evaluation class
             train_eval = fsate.AlgoTrainEval(df=df_pred_resp,
