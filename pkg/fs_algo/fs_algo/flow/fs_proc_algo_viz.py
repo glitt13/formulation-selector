@@ -248,6 +248,11 @@ if __name__ == "__main__":
                                         metr : dat_resp[metr].data})
             # Join attribute data and response data
             df_pred_resp = df_metr_resp.merge(df_attr_wide_dropna, left_on = col_locid, right_on = col_locid)
+
+            # ---Set index to featureID before passing to the training class ---
+            # This is critical for the new warning message to correctly identify locations.
+            df_pred_resp.set_index(col_locid, inplace=True)
+
             if df_pred_resp.isna().any().any(): # Check for NA values and remove them if present to avoid errors during evaluation
                 tot_na_dfpred = df_pred_resp.shape[0] - df_pred_resp.dropna().shape[0]
                 pct_na_dfpred = tot_na_dfpred/df_pred_resp.shape[0]*100
@@ -266,7 +271,6 @@ if __name__ == "__main__":
                 if not metric_bounds.empty:
                     min_lim = metric_bounds['min_lim'].iloc[0]
                     max_lim = metric_bounds['max_lim'].iloc[0]
-                    logging.info(f"   Applying bounds for '{metr}': min={min_lim}, max={max_lim}")
                     logging.warning(f"   Applying bounds for '{metr}': min={min_lim}, max={max_lim}")
                 else:
                     logging.warning(f"   uncn_bnd_algo is True, but no bounds found for '{metr}'. Predictions will not be clipped.")
