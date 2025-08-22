@@ -45,10 +45,6 @@ if __name__ == "__main__":
     # ---
     pred_cfg = fsate.PredConfigParser(path_pred_config)
     pred_cfg._read_pred_config()
-
-    #%%  READ CONTENTS FROM THE ATTRIBUTE CONFIG
-    path_attr_config = fsate.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_attr_config'))
-    path_algo_config = fsate.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_algo_config'))
     
     # READ fs_categories_uncn.yaml if uncn_bnd_pred is True
     uncn_bnd_pred = pred_cfg.pred_cfg_dict.get('uncn_bnd_pred')
@@ -57,6 +53,10 @@ if __name__ == "__main__":
         uncn_config = pem._read_std_config_uncn()
         fs_catg_uncn = pem._conv_ls_dicts_df_long_uncn(uncn_config)
         logging.info("Successfully loaded uncertainty bounds.")
+
+    #%%  READ CONTENTS FROM THE ATTRIBUTE CONFIG
+    path_attr_config = fsate.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_attr_config'))
+    path_algo_config = fsate.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_algo_config'))
 
     attr_cfig = fsate.AttrConfigAndVars(path_attr_config)
     attr_cfig._read_attr_config()
@@ -214,11 +214,14 @@ if __name__ == "__main__":
         
                     # Apply bounds if the flag was set and bounds were found
                     if uncn_bnd_pred and (min_lim is not None or max_lim is not None):
-                        # Use -inf and +inf as fallbacks if one limit is None
-                        clip_min = min_lim if min_lim is not None else -np.inf
-                        clip_max = max_lim if max_lim is not None else np.inf
-                        y_pis = np.clip(y_pis, clip_min, clip_max)
-
+                        y_pis = fsate.clip_predictions_with_bounds(
+                            y_pis=y_pis,
+                            feature_ids=df_attr_sub_rmna.index,
+                            min_lim=min_lim,
+                            max_lim=max_lim,
+                            resp_var=resp_var
+                        )
+                        
                     # Rename columns based on self.mapie_alpha values
                     for i, alpha in enumerate(mapie_alpha):
                         df_pred[f'mapie_lower_{alpha:.2f}'] = y_pis[:, 0, i]
