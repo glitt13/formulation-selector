@@ -41,6 +41,7 @@ import scipy.stats as st
 import pyarrow as pa
 import pyarrow.dataset as ds
 import ast
+import logging
 
 # Set up basic logging configuration
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -1383,6 +1384,51 @@ def split_train_test_comid_wrap(dir_std_base:str|os.PathLike,
                 'sub_train_ids': train_ids[id_col]}
     return split_dict
 
+def clip_predictions_with_bounds(y_pis: np.ndarray, feature_ids: pd.Index, 
+                                 min_lim: float, max_lim: float, 
+                                 resp_var: str) -> np.ndarray:
+    """
+    Clips prediction intervals (y_pis) to specified bounds and logs a warning if any values are corrected.
+
+    :param y_pis: The prediction interval array from MAPIE.
+    :type y_pis: np.ndarray
+    :param feature_ids: The feature IDs corresponding to the predictions.
+    :type feature_ids: pd.Index
+    :param min_lim: The minimum allowable value for the prediction.
+    :type min_lim: float
+    :param max_lim: The maximum allowable value for the prediction.
+    :type max_lim: float
+    :param resp_var: The name of the response variable being predicted.
+    :type resp_var: str
+    :return: The clipped prediction interval array.
+    :rtype: np.ndarray
+    """
+    if min_lim is None and max_lim is None:
+        return y_pis
+
+    clip_min = min_lim if min_lim is not None else -np.inf
+    clip_max = max_lim if max_lim is not None else np.inf
+
+    # Find where original values are out of bounds
+    out_of_bounds_mask = (y_pis < clip_min) | (y_pis > clip_max)
+    
+    # Check if any value across any dimension of the mask is True
+    if np.any(out_of_bounds_mask):
+        # Identify the indices (locations) where at least one interval value was clipped
+        affected_indices = np.any(out_of_bounds_mask, axis=(1, 2))
+        affected_feature_ids = feature_ids[affected_indices].tolist()
+        
+        logging.warning(
+            f"Post-hoc correction applied to '{resp_var}' predictions. "
+            f"{len(affected_feature_ids)} location(s) had prediction intervals clipped to the "
+            f"allowable range [{clip_min}, {clip_max}]. "
+            f"Affected featureIDs: {affected_feature_ids}"
+        )
+
+    # Perform the clipping
+    y_pis_clipped = np.clip(y_pis, clip_min, clip_max)
+    
+    return y_pis_clipped
 
 class AlgoTrainEval:
     def __init__(self, df: pd.DataFrame, attrs: Iterable[str], algo_config: dict,
@@ -1839,16 +1885,6 @@ class AlgoTrainEval:
         :rtype: dict
         """
           
-        # Determine the clipping bounds based on the instance configuration
-        if self.uncn_bnd_algo:
-            # Replace None with -inf/+inf for clipping if one bound is not defined
-            clip_min = self.min_lim if self.min_lim is not None else -np.inf
-            clip_max = self.max_lim if self.max_lim is not None else np.inf
-            bounds = (clip_min, clip_max)
-        else:
-            # If bounds are not applied, use (-inf, +inf) to effectively not clip.
-            bounds = (-np.inf, np.inf)
-          
         for k, v in self.algs_dict.items():
             algo = v['algo']
             pipe = v['pipeline']
@@ -1861,9 +1897,16 @@ class AlgoTrainEval:
                 mapie_alpha = next((d['alpha'] for d in self.uncertainty.get('mapie', []) if 'alpha' in d), None)
                 y_test_pred, y_test_pis = v['mapie'].predict(self.X_test, alpha=mapie_alpha)
                 
-                # Clip the prediction intervals to the specified bounds
-                y_test_pis_clipped = np.clip(y_test_pis, bounds[0], bounds[1])
-                
+                # Apply bounds using the centralized function if flags are set
+                if self.uncn_bnd_algo:
+                    y_test_pis = clip_predictions_with_bounds(
+                        y_pis=y_test_pis,
+                        feature_ids=self.X_test.index,
+                        min_lim=self.min_lim,
+                        max_lim=self.max_lim,
+                        resp_var=self.metric
+                    )
+                    
                 # Rename rows
                 row_labels = ['lower_limit', 'upper_limit']
                 
@@ -1871,7 +1914,7 @@ class AlgoTrainEval:
                 col_labels = [f'alpha_{alpha:.2f}' for alpha in mapie_alpha]  
                 
                 # Convert to DataFrame
-                y_pis_list = [pd.DataFrame(y_test_pis_clipped[i], index=row_labels, columns=col_labels) for i in range(y_test_pis_clipped.shape[0])]
+                y_pis_list = [pd.DataFrame(y_test_pis[i], index=row_labels, columns=col_labels) for i in range(y_test_pis.shape[0])]
                 
                 self.preds_dict[k] = {'y_pred': y_pred,
                                       'y_pis': y_pis_list,
