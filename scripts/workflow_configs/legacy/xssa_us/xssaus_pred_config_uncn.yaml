@@ -26,4 +26,5 @@ algo_type: # List out the regressor algorithms desired for prediction (e.g. rf, 
   - 'rf'
   - 'mlp'
 MAPIE_alpha: [0.05, 0.32] # OPTIONAL. Enabled if not empty. Alpha parameter (0 < α < 1) in an array format to calculate MAPIE prediction intervals. If empty, MAPIE is not calculated. Note: 1/α (or 1/(1 - α)) must be lower than the number of samples.
+uncn_bound: True  # Optional. Default False. Should the minimum and maximum bounds be applied when calculating the uncertainty? 
 
