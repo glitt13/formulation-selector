@@ -196,6 +196,15 @@ if __name__ == "__main__":
 
                 # Perform prediction
                 resp_pred = pipe.predict(df_attr_sub_rmna)
+                # --- Apply bounds to the primary prediction value (resp_pred) ---
+                if uncn_bnd_pred:
+                    resp_pred = fsate.clip_and_warn_predictions(
+                        y_pred=resp_pred,
+                        feature_ids=df_attr_sub_rmna.index,
+                        min_lim=min_lim,
+                        max_lim=max_lim,
+                        resp_var=resp_var
+                    )
 
                 # Initialize DataFrame for storing results
                 df_pred = pd.DataFrame({'featureID': df_attr_sub_rmna.index, 'prediction': resp_pred, 'resp_var': resp_var, 'dataset': ds, 'algo': algo, 'name_algo': Path(path_algo).name})
