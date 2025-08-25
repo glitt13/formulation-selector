@@ -43,6 +43,7 @@ import pyarrow.dataset as ds
 import ast
 import logging
 
+logger = logging.getLogger(__name__)
 # Set up basic logging configuration
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -1418,7 +1419,7 @@ def clip_predictions_with_bounds(y_pis: np.ndarray, feature_ids: pd.Index,
         affected_indices = np.any(out_of_bounds_mask, axis=(1, 2))
         affected_feature_ids = feature_ids[affected_indices].tolist()
         
-        logging.warning(
+        logger.warning(
             f"Post-hoc correction applied to '{resp_var}' predictions. "
             f"{len(affected_feature_ids)} location(s) had prediction intervals clipped to the "
             f"allowable range [{clip_min}, {clip_max}]. "

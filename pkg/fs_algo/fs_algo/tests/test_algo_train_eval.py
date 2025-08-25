@@ -1126,6 +1126,92 @@ def test_build_pred_locs_path():
     expected = Path("/test/standardized/camels/pred_camels_prediction.parquet")
     assert result_path == expected
 
+# %% UNIT TESTING FOR clip_predictions_with_bounds
+class TestClipPredictionsWithBounds(unittest.TestCase):
+    print("Testing clip_predictions_with_bounds")
+
+    def setUp(self):
+        """Set up common data for all test cases."""
+        self.feature_ids = pd.Index(['ID_01', 'ID_02', 'ID_03', 'ID_04'])
+        # Shape corresponds to: (n_samples=4, n_bounds=2, n_alphas=1)
+        self.y_pis_original = np.array([
+            [[0.1], [0.9]],  # Stays within bounds [0, 1]
+            [[-0.5], [0.8]], # Should be clipped at lower bound
+            [[0.2], [1.5]],  # Should be clipped at upper bound
+            [[-0.7], [1.7]]  # Should be clipped at both bounds
+        ])
+        self.resp_var = 'test_metric'
+
+    def test_no_clipping_needed(self):
+        """Test the case where all prediction intervals are already within the bounds."""
+        min_lim, max_lim = -1.0, 2.0
+        
+        # Capture logs to ensure no warning is generated
+        clipped_pis = fsate.clip_predictions_with_bounds(
+            self.y_pis_original.copy(), self.feature_ids, min_lim, max_lim, self.resp_var
+        )
+
+        # The array should be unchanged
+        np.testing.assert_array_equal(clipped_pis, self.y_pis_original)
+        print("✅ test_no_clipping_needed passed.")
+
+    def test_clipping_and_warning_log(self):
+        """Test that values are clipped correctly and a specific warning is logged."""
+        min_lim, max_lim = 0.0, 1.0
+        
+        expected_clipped_pis = np.array([
+            [[0.1], [0.9]],
+            [[0.0], [0.8]],
+            [[0.2], [1.0]],
+            [[0.0], [1.0]]
+        ])
+
+        # Capture logs to verify the warning message
+        with self.assertLogs('fs_algo.fs_algo_train_eval', level='WARNING') as cm:
+            clipped_pis = fsate.clip_predictions_with_bounds(
+                self.y_pis_original.copy(), self.feature_ids, min_lim, max_lim, self.resp_var
+            )
+
+            # Check that a warning was logged
+            self.assertEqual(len(cm.output), 1)
+            # Check the content of the warning message
+            self.assertIn("Post-hoc correction applied", cm.output[0])
+            self.assertIn("3 location(s)", cm.output[0])
+            self.assertIn("['ID_02', 'ID_03', 'ID_04']", cm.output[0])
+            
+        # Check that the array was clipped as expected
+        np.testing.assert_array_equal(clipped_pis, expected_clipped_pis)
+        print("✅ test_clipping_and_warning_log passed.")
+
+    def test_one_sided_clipping_min_only(self):
+        """Test clipping with only a minimum bound."""
+        min_lim, max_lim = 0.0, None
+
+        expected_clipped_pis = np.array([
+            [[0.1], [0.9]],
+            [[0.0], [0.8]],
+            [[0.2], [1.5]],
+            [[0.0], [1.7]]
+        ])
+
+        clipped_pis = fsate.clip_predictions_with_bounds(
+            self.y_pis_original.copy(), self.feature_ids, min_lim, max_lim, self.resp_var
+        )
+
+        np.testing.assert_array_equal(clipped_pis, expected_clipped_pis)
+        print("✅ test_one_sided_clipping_min_only passed.")
+
+    def test_no_bounds_provided(self):
+        """Test that the function returns the original array if no bounds are given."""
+        min_lim, max_lim = None, None
+
+        clipped_pis = fsate.clip_predictions_with_bounds(
+            self.y_pis_original.copy(), self.feature_ids, min_lim, max_lim, self.resp_var
+        )
+        # The array should be unchanged
+        np.testing.assert_array_equal(clipped_pis, self.y_pis_original)
+        print("✅ test_no_bounds_provided passed.")
+
 if __name__ == '__main__':
 
     unittest.main()
