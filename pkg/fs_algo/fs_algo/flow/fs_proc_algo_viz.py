@@ -266,14 +266,13 @@ if __name__ == "__main__":
             # GET MIN/MAX BOUNDS FOR THE CURRENT METRIC
             min_lim = None
             max_lim = None
-            if uncn_bnd_algo:
-                metric_bounds = fs_catg_uncn[fs_catg_uncn['var'] == metr]
-                if not metric_bounds.empty:
-                    min_lim = metric_bounds['min_lim'].iloc[0]
-                    max_lim = metric_bounds['max_lim'].iloc[0]
-                    logging.warning(f"   Applying bounds for '{metr}': min={min_lim}, max={max_lim}")
-                else:
-                    logging.warning(f"   uncn_bnd_algo is True, but no bounds found for '{metr}'. Predictions will not be clipped.")
+            metric_bounds = fs_catg_uncn[fs_catg_uncn['var'] == metr]            
+            if not metric_bounds.empty:
+                min_lim = metric_bounds['min_lim'].iloc[0]
+                max_lim = metric_bounds['max_lim'].iloc[0]
+                logging.warning(f"   Applying bounds for '{metr}': min={min_lim}, max={max_lim}")
+            else:
+                logging.warning(f"   No bounds found for '{metr}'. Predictions will not be clipped.")
 
             # Instantiate the training, testing, and evaluation class
             train_eval = fsate.AlgoTrainEval(df=df_pred_resp,
