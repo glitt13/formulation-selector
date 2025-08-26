@@ -48,11 +48,10 @@ if __name__ == "__main__":
     
     # READ fs_categories_uncn.yaml if uncn_bnd_pred is True
     uncn_bnd_pred = pred_cfg.pred_cfg_dict.get('uncn_bnd_pred')
-    if uncn_bnd_pred:
-        logging.info("Reading uncertainty bounds from fs_categories_uncn.yaml...")
-        uncn_config = pem._read_std_config_uncn()
-        fs_catg_uncn = pem._conv_ls_dicts_df_long_uncn(uncn_config)
-        logging.info("Successfully loaded uncertainty bounds.")
+    logging.info("Reading uncertainty bounds from fs_categories_uncn.yaml...")
+    uncn_config = pem._read_std_config_uncn()
+    fs_catg_uncn = pem._conv_ls_dicts_df_long_uncn(uncn_config)
+    logging.info("Successfully loaded uncertainty bounds.")
 
     #%%  READ CONTENTS FROM THE ATTRIBUTE CONFIG
     path_attr_config = fsate.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_attr_config'))
@@ -158,14 +157,13 @@ if __name__ == "__main__":
         for resp_var in resp_vars:
             min_lim = None
             max_lim = None
-            if uncn_bnd_pred:
-                metric_bounds = fs_catg_uncn[fs_catg_uncn['var'] == resp_var]
-                if not metric_bounds.empty:
-                    min_lim = metric_bounds['min_lim'].iloc[0]
-                    max_lim = metric_bounds['max_lim'].iloc[0]
-                    logging.info(f"   Applying bounds for '{resp_var}': min={min_lim}, max={max_lim}")
-                else:
-                    logging.warning(f"   uncn_bnd_pred is True, but no bounds found for '{resp_var}'. Predictions will not be clipped.")
+            metric_bounds = fs_catg_uncn[fs_catg_uncn['var'] == resp_var]            
+            if not metric_bounds.empty:
+                min_lim = metric_bounds['min_lim'].iloc[0]
+                max_lim = metric_bounds['max_lim'].iloc[0]
+                logging.warning(f"   Applying bounds for '{resp_var}': min={min_lim}, max={max_lim}")
+            else:
+                logging.warning(f"   No bounds found for '{resp_var}'. Predictions will not be clipped.")
 
             for algo in algos:
                 path_algo = fsate.std_algo_path(dir_out_alg_ds, algo=algo, metric=resp_var, dataset_id=ds)
@@ -196,15 +194,19 @@ if __name__ == "__main__":
 
                 # Perform prediction
                 resp_pred = pipe.predict(df_attr_sub_rmna)
+                # Unconditionally warn if any predictions fall out of the physical range.
+                fsate.warn_if_out_of_bounds(
+                    predictions=resp_pred,
+                    feature_ids=df_attr_sub_rmna.index,
+                    min_lim=min_lim,
+                    max_lim=max_lim,
+                    resp_var=resp_var,
+                    correction_is_active=uncn_bnd_pred,
+                    prediction_type="values"
+                )
                 # --- Apply bounds to the primary prediction value (resp_pred) ---
                 if uncn_bnd_pred:
-                    resp_pred = fsate.clip_and_warn_predictions(
-                        y_pred=resp_pred,
-                        feature_ids=df_attr_sub_rmna.index,
-                        min_lim=min_lim,
-                        max_lim=max_lim,
-                        resp_var=resp_var
-                    )
+                    resp_pred = fsate.clip_predictions(resp_pred, min_lim, max_lim)
 
                 # Initialize DataFrame for storing results
                 df_pred = pd.DataFrame({'featureID': df_attr_sub_rmna.index, 'prediction': resp_pred, 'resp_var': resp_var, 'dataset': ds, 'algo': algo, 'name_algo': Path(path_algo).name})
@@ -221,15 +223,18 @@ if __name__ == "__main__":
                     mapie = pipeline_data['mapie']
                     y_pred_mapie, y_pis = mapie.predict(df_attr_sub_rmna, alpha=mapie_alpha)
         
+                    fsate.warn_if_out_of_bounds(
+                        predictions=y_pis,
+                        feature_ids=df_attr_sub_rmna.index,
+                        min_lim=min_lim,
+                        max_lim=max_lim,
+                        resp_var=resp_var,
+                        correction_is_active=uncn_bnd_pred,
+                        prediction_type="intervals"
+                    )
                     # Apply bounds if the flag was set and bounds were found
                     if uncn_bnd_pred and (min_lim is not None or max_lim is not None):
-                        y_pis = fsate.clip_predictions_with_bounds(
-                            y_pis=y_pis,
-                            feature_ids=df_attr_sub_rmna.index,
-                            min_lim=min_lim,
-                            max_lim=max_lim,
-                            resp_var=resp_var
-                        )
+                        y_pis = fsate.clip_pis(y_pis, min_lim, max_lim)
                         
                     # Rename columns based on self.mapie_alpha values
                     for i, alpha in enumerate(mapie_alpha):
