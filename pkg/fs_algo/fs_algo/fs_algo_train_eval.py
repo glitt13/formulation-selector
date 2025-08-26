@@ -1385,95 +1385,79 @@ def split_train_test_comid_wrap(dir_std_base:str|os.PathLike,
                 'sub_train_ids': train_ids[id_col]}
     return split_dict
 
-def clip_and_warn_predictions(y_pred: np.ndarray, feature_ids: pd.Index, 
-                              min_lim: float, max_lim: float, 
-                              resp_var: str) -> np.ndarray:
+def warn_if_out_of_bounds(predictions: np.ndarray, feature_ids: pd.Index, 
+                          min_lim: float, max_lim: float, resp_var: str, 
+                          correction_is_active: bool, prediction_type: str):
     """
-    Clips 1D prediction values (y_pred) to specified bounds and logs a warning if any values are corrected.
+    Checks if predictions are within bounds and logs a specific warning if they are not.
+
+    :param predictions: The 1D (values) or 3D (intervals) prediction array.
+    :param feature_ids: The feature IDs corresponding to the predictions.
+    :param correction_is_active: Flag indicating if a correction will be applied.
+    :param prediction_type: A string ('values' or 'intervals') for the log message.
+    """
+    if min_lim is None and max_lim is None:
+        return
+
+    clip_min = min_lim if min_lim is not None else -np.inf
+    clip_max = max_lim if max_lim is not None else np.inf
+
+    # Find where original values are out of bounds
+    out_of_bounds_mask = (predictions < clip_min) | (predictions > clip_max)
+    
+    if np.any(out_of_bounds_mask):
+        # Logic to find affected IDs works for both 1D and 3D arrays
+        if predictions.ndim == 3:
+            affected_indices = np.any(out_of_bounds_mask, axis=(1, 2))
+        else: # Handles 1D arrays
+            affected_indices = out_of_bounds_mask
+        
+        affected_feature_ids = feature_ids[affected_indices].tolist()
+        
+        message = (
+            f"'{resp_var}' prediction {prediction_type} found outside allowable range "
+            f"[{clip_min}, {clip_max}] for {len(affected_feature_ids)} location(s): "
+            f"{affected_feature_ids}."
+        )
+        if correction_is_active:
+            message += " Post-hoc correction will be applied."
+        else:
+            message += " Correction was NOT applied because the relevant flag is disabled."
+        logger.warning(message)
+
+def clip_predictions(y_pred: np.ndarray, min_lim: float, max_lim: float) -> np.ndarray:
+    """Clips a 1D prediction array to the specified min/max bounds.
 
     :param y_pred: The 1D prediction array.
     :type y_pred: np.ndarray
-    :param feature_ids: The feature IDs corresponding to the predictions.
-    :type feature_ids: pd.Index
     :param min_lim: The minimum allowable value for the prediction.
     :type min_lim: float
     :param max_lim: The maximum allowable value for the prediction.
     :type max_lim: float
-    :param resp_var: The name of the response variable being predicted.
-    :type resp_var: str
-    :return: The clipped prediction array.
-    :rtype: np.ndarray
     """
     if min_lim is None and max_lim is None:
         return y_pred
-
     clip_min = min_lim if min_lim is not None else -np.inf
     clip_max = max_lim if max_lim is not None else np.inf
+    return np.clip(y_pred, clip_min, clip_max)
 
-    # Find where original values are out of bounds
-    out_of_bounds_mask = (y_pred < clip_min) | (y_pred > clip_max)
+def clip_pis(y_pis: np.ndarray, min_lim: float, max_lim: float) -> np.ndarray:
+    """Clips prediction intervals (y_pis) to the specified min/max bounds.
     
-    if np.any(out_of_bounds_mask):
-        affected_feature_ids = feature_ids[out_of_bounds_mask].tolist()
-        
-        logger.warning(
-            f"Post-hoc correction applied to '{resp_var}' prediction values. "
-            f"{len(affected_feature_ids)} location(s) had predictions clipped to the "
-            f"allowable range [{clip_min}, {clip_max}]. "
-            f"Affected featureIDs: {affected_feature_ids}"
-        )
-
-    # Perform the clipping
-    y_pred_clipped = np.clip(y_pred, clip_min, clip_max)
-    
-    return y_pred_clipped
-
-def clip_predictions_with_bounds(y_pis: np.ndarray, feature_ids: pd.Index, 
-                                 min_lim: float, max_lim: float, 
-                                 resp_var: str) -> np.ndarray:
-    """
-    Clips prediction intervals (y_pis) to specified bounds and logs a warning if any values are corrected.
-
     :param y_pis: The prediction interval array from MAPIE.
     :type y_pis: np.ndarray
-    :param feature_ids: The feature IDs corresponding to the predictions.
-    :type feature_ids: pd.Index
     :param min_lim: The minimum allowable value for the prediction.
     :type min_lim: float
     :param max_lim: The maximum allowable value for the prediction.
     :type max_lim: float
-    :param resp_var: The name of the response variable being predicted.
-    :type resp_var: str
-    :return: The clipped prediction interval array.
-    :rtype: np.ndarray
+    
     """
     if min_lim is None and max_lim is None:
         return y_pis
-
     clip_min = min_lim if min_lim is not None else -np.inf
     clip_max = max_lim if max_lim is not None else np.inf
-
-    # Find where original values are out of bounds
-    out_of_bounds_mask = (y_pis < clip_min) | (y_pis > clip_max)
+    return np.clip(y_pis, clip_min, clip_max)
     
-    # Check if any value across any dimension of the mask is True
-    if np.any(out_of_bounds_mask):
-        # Identify the indices (locations) where at least one interval value was clipped
-        affected_indices = np.any(out_of_bounds_mask, axis=(1, 2))
-        affected_feature_ids = feature_ids[affected_indices].tolist()
-        
-        logger.warning(
-            f"Post-hoc correction applied to '{resp_var}' predictions. "
-            f"{len(affected_feature_ids)} location(s) had prediction intervals clipped to the "
-            f"allowable range [{clip_min}, {clip_max}]. "
-            f"Affected featureIDs: {affected_feature_ids}"
-        )
-
-    # Perform the clipping
-    y_pis_clipped = np.clip(y_pis, clip_min, clip_max)
-    
-    return y_pis_clipped
-
 class AlgoTrainEval:
     def __init__(self, df: pd.DataFrame, attrs: Iterable[str], algo_config: dict,
                  uncertainty: dict,
@@ -1937,29 +1921,36 @@ class AlgoTrainEval:
                 logging.info(f"      Generating predictions for {type_algo} algorithm.")   
             
             y_pred = pipe.predict(self.X_test)
-            # --- Apply bounds to the primary prediction value (y_pred) ---
+            # --- Unconditionally warn if any predictions fall out of the physical range. ---
+            warn_if_out_of_bounds(
+                predictions=y_pred,
+                feature_ids=self.X_test.index,
+                min_lim=self.min_lim,
+                max_lim=self.max_lim,
+                resp_var=self.metric,
+                correction_is_active=self.uncn_bnd_algo,
+                prediction_type="values"
+            )
+            # Conditionally apply the correction based on flags.
             if self.uncn_bnd_algo:
-                y_pred = clip_and_warn_predictions(
-                    y_pred=y_pred,
-                    feature_ids=self.X_test.index,
-                    min_lim=self.min_lim,
-                    max_lim=self.max_lim,
-                    resp_var=self.metric
-                )
+                y_pred = clip_predictions(y_pred, self.min_lim, self.max_lim)
 
             if 'mapie' in v:
                 mapie_alpha = next((d['alpha'] for d in self.uncertainty.get('mapie', []) if 'alpha' in d), None)
                 y_test_pred, y_test_pis = v['mapie'].predict(self.X_test, alpha=mapie_alpha)
                 
-                # Apply bounds using the centralized function if flags are set
+                # Apply same warn-then-clip logic for prediction intervals.
+                warn_if_out_of_bounds(
+                    predictions=y_test_pis,
+                    feature_ids=self.X_test.index,
+                    min_lim=self.min_lim,
+                    max_lim=self.max_lim,
+                    resp_var=self.metric,
+                    correction_is_active=self.uncn_bnd_algo,
+                    prediction_type="intervals"
+                )
                 if self.uncn_bnd_algo:
-                    y_test_pis = clip_predictions_with_bounds(
-                        y_pis=y_test_pis,
-                        feature_ids=self.X_test.index,
-                        min_lim=self.min_lim,
-                        max_lim=self.max_lim,
-                        resp_var=self.metric
-                    )
+                    y_test_pis = clip_pis(y_test_pis, self.min_lim, self.max_lim)
                     
                 # Rename rows
                 row_labels = ['lower_limit', 'upper_limit']
