@@ -195,7 +195,7 @@ if __name__ == "__main__":
                 # Perform prediction
                 resp_pred = pipe.predict(df_attr_sub_rmna)
                 # Unconditionally warn if any predictions fall out of the physical range.
-                fsate.warn_if_out_of_bounds(
+                fsate._warn_if_out_of_bounds(
                     predictions=resp_pred,
                     feature_ids=df_attr_sub_rmna.index,
                     min_lim=min_lim,
@@ -223,7 +223,7 @@ if __name__ == "__main__":
                     mapie = pipeline_data['mapie']
                     y_pred_mapie, y_pis = mapie.predict(df_attr_sub_rmna, alpha=mapie_alpha)
         
-                    fsate.warn_if_out_of_bounds(
+                    fsate._warn_if_out_of_bounds(
                         predictions=y_pis,
                         feature_ids=df_attr_sub_rmna.index,
                         min_lim=min_lim,
