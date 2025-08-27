@@ -1150,7 +1150,7 @@ class TestWarningAndClippingFunctions(unittest.TestCase):
 
     def test_warn_values_correction_active(self):
         """Test warning for 1D values when correction is ON."""
-        with self.assertLogs('fs_algo.fs_algo_train_eval', level='WARNING') as cm:
+        with self.assertLogs(level='WARNING') as cm:  # root logger
             fsate.warn_if_out_of_bounds(
                 self.y_pred, self.feature_ids, 0.0, 1.0, self.resp_var,
                 correction_is_active=True, prediction_type="values"
@@ -1162,7 +1162,7 @@ class TestWarningAndClippingFunctions(unittest.TestCase):
 
     def test_warn_intervals_correction_inactive(self):
         """Test warning for 3D intervals when correction is OFF."""
-        with self.assertLogs('fs_algo.fs_algo_train_eval', level='WARNING') as cm:
+        with self.assertLogs(level='WARNING') as cm:  # root logger
             fsate.warn_if_out_of_bounds(
                 self.y_pis, self.feature_ids, 0.0, 1.0, self.resp_var,
                 correction_is_active=False, prediction_type="intervals"
@@ -1172,15 +1172,21 @@ class TestWarningAndClippingFunctions(unittest.TestCase):
             self.assertIn("['ID_02', 'ID_03', 'ID_04']", cm.output[0])
         print("✅ test_warn_intervals_correction_inactive passed.")
 
-    def test_no_warning_when_in_bounds(self):
+    @patch('logging.getLogger')
+    def test_no_warning_when_in_bounds(self, mock_get_logger):
         """Test that no warning is logged when all values are within bounds."""
-        # Create a mock logger and check if it was called
-        with patch('fs_algo.fs_algo_train_eval.logger') as mock_logger:
-            fsate.warn_if_out_of_bounds(
-                np.array([0.1, 0.5, 0.9]), self.feature_ids, 0.0, 1.0, self.resp_var,
-                correction_is_active=True, prediction_type="values"
-            )
-            mock_logger.warning.assert_not_called()
+        # Configure the patch to return a mock logger we can inspect
+        mock_logger = MagicMock()
+        mock_get_logger.return_value = mock_logger
+
+        # Run the function that would normally create and use a logger
+        fsate.warn_if_out_of_bounds(
+            np.array([0.1, 0.5, 0.9]), self.feature_ids, 0.0, 1.0, self.resp_var,
+            correction_is_active=True, prediction_type="values"
+        )
+
+        # Assert that the .warning() method on our mock logger was never called
+        mock_logger.warning.assert_not_called()
         print("✅ test_no_warning_when_in_bounds passed.")
 
     # --- Tests for clip_predictions (1D) ---
