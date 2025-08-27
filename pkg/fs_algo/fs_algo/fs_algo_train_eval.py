@@ -43,7 +43,6 @@ import pyarrow.dataset as ds
 import ast
 import logging
 
-logger = logging.getLogger(__name__)
 # Set up basic logging configuration
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -1423,7 +1422,7 @@ def warn_if_out_of_bounds(predictions: np.ndarray, feature_ids: pd.Index,
             message += " Post-hoc correction will be applied."
         else:
             message += " Correction was NOT applied because the relevant flag is disabled."
-        logger.warning(message)
+        logging.warning(message)
 
 def clip_predictions(y_pred: np.ndarray, min_lim: float, max_lim: float) -> np.ndarray:
     """Clips a 1D prediction array to the specified min/max bounds.
