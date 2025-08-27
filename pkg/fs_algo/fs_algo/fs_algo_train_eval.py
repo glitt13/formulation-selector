@@ -1372,7 +1372,7 @@ def split_train_test_comid_wrap(dir_std_base:str|os.PathLike,
                 'sub_train_ids': train_ids[id_col]}
     return split_dict
 
-def warn_if_out_of_bounds(predictions: np.ndarray, feature_ids: pd.Index, 
+def _warn_if_out_of_bounds(predictions: np.ndarray, feature_ids: pd.Index, 
                           min_lim: float, max_lim: float, resp_var: str, 
                           correction_is_active: bool, prediction_type: str):
     """
@@ -1922,7 +1922,7 @@ class AlgoTrainEval:
             
             y_pred = pipe.predict(self.X_test)
             # --- Unconditionally warn if any predictions fall out of the physical range. ---
-            warn_if_out_of_bounds(
+            _warn_if_out_of_bounds(
                 predictions=y_pred,
                 feature_ids=self.X_test.index,
                 min_lim=self.min_lim,
@@ -1940,7 +1940,7 @@ class AlgoTrainEval:
                 y_test_pred, y_test_pis = v['mapie'].predict(self.X_test, alpha=mapie_alpha)
                 
                 # Apply same warn-then-clip logic for prediction intervals.
-                warn_if_out_of_bounds(
+                _warn_if_out_of_bounds(
                     predictions=y_test_pis,
                     feature_ids=self.X_test.index,
                     min_lim=self.min_lim,
