@@ -285,18 +285,6 @@ class AttrConfigAndVars:
             logging.warning("No attributes discerned from 'attr_select'. Assuming all attributes desired.")
         
         home_dir = _define_home_dir(self.attr_config)
-        # # Determine if home_dir. Either defined in attribute config file or assumed to be system default.
-        # home_dir_read = [v for x in self.attr_config['file_io'] for k, v in x.items() if 'home_dir' in k ]
-        # if len(home_dir_read) == 0:
-        #     home_dir = str(Path.home())
-        # elif home_dir_read[0] is None:
-        #     home_dir = str(Path.home())
-        # elif not Path(home_dir_read[0]).exists():
-        #     warnings.warn(f"The user-defined home directory path {home_dir_read[0]} " \
-        #      f"inside {self.path_attr_config} does not exist. Using system default {Path.home()}", UserWarning)
-        #     home_dir = str(Path.home())
-        # else:
-        #     home_dir = home_dir_read[0]
 
         dir_base = list([x for x in self.attr_config['file_io'] if 'dir_base' in x][0].values())[0].format(home_dir=home_dir)
         # Location of attributes (predictor data):
@@ -1391,9 +1379,19 @@ def warn_if_out_of_bounds(predictions: np.ndarray, feature_ids: pd.Index,
     Checks if predictions are within bounds and logs a specific warning if they are not.
 
     :param predictions: The 1D (values) or 3D (intervals) prediction array.
+    :type predictions: np.ndarray
     :param feature_ids: The feature IDs corresponding to the predictions.
+    :type feature_ids: pd.Index
+    :param min_lim: The minimum allowable value for the prediction.
+    :type min_lim: float
+    :param max_lim: The maximum allowable value for the prediction.
+    :type max_lim: float
+    :param resp_var: The name of the response variable for logging purposes.
+    :type resp_var: str
     :param correction_is_active: Flag indicating if a correction will be applied.
+    :type correction_is_active: bool
     :param prediction_type: A string ('values' or 'intervals') for the log message.
+    :type prediction_type: str
     """
     if min_lim is None and max_lim is None:
         return
@@ -1433,6 +1431,8 @@ def clip_predictions(y_pred: np.ndarray, min_lim: float, max_lim: float) -> np.n
     :type min_lim: float
     :param max_lim: The maximum allowable value for the prediction.
     :type max_lim: float
+    :return: The clipped 1D prediction array.
+    :rtype: np.ndarray
     """
     if min_lim is None and max_lim is None:
         return y_pred
@@ -1449,7 +1449,8 @@ def clip_pis(y_pis: np.ndarray, min_lim: float, max_lim: float) -> np.ndarray:
     :type min_lim: float
     :param max_lim: The maximum allowable value for the prediction.
     :type max_lim: float
-    
+    :return: The clipped prediction interval array.
+    :rtype: np.ndarray    
     """
     if min_lim is None and max_lim is None:
         return y_pis
