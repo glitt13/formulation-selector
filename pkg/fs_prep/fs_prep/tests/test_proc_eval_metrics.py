@@ -24,9 +24,10 @@ import yaml
 import xarray as xr
 from fs_prep.proc_eval_metrics import read_schm_ls_of_dict, proc_col_schema,\
       _proc_check_input_config, _proc_flatten_ls_of_dict_keys, \
-      _proc_check_input_df, _proc_check_std_fs_ids, check_fix_nwissite_gageids
+      _proc_check_input_df, _proc_check_std_fs_ids, check_fix_nwissite_gageids, \
+      _read_std_config, _conv_ls_dicts_df_long
 import numpy as np
-from unittest.mock import patch
+from unittest.mock import patch, mock_open
 import tempfile
 import logging
 import os
@@ -65,6 +66,35 @@ def read_log_file():
     else:
         print("LOG FILE NOT FOUND")
     return ""
+
+class TestStdConfigFunctions(unittest.TestCase):
+    
+    @patch('fs_prep.proc_eval_metrics.impresources.files')
+    def test_read_std_config(self, mock_files):
+        """Test reading the standard config file."""
+        m = mock_open(read_data="metric_mappings:\n  - {'resp_var': 'NSE'}")
+        mock_files.return_value.__truediv__.return_value.open = m
+        
+        config = _read_std_config()
+        
+        mock_files.return_value.__truediv__.assert_called_with('fs_categories.yaml')
+        self.assertIn('metric_mappings', config)
+
+    def test_conv_ls_dicts_df_long(self):
+        """Test converting the uncertainty config structure."""
+        uncn_config = {
+            'metric_mappings': [
+                {'resp_var': 'NSE', 'description': 'Nash-Sutcliffe Efficiency', 'Q_lims': {'min_lim': -999, 'max_lim': 1}}
+            ],
+            'target_var_mappings': [{'streamflow': 'Streamflow'}]
+        }
+        df = _conv_ls_dicts_df_long(uncn_config)
+        self.assertIsInstance(df, pd.DataFrame)
+        self.assertEqual(list(df.columns), ['var', 'description', 'category', 'min_lim', 'max_lim'])
+        self.assertEqual(len(df), 2)
+        self.assertEqual(df.loc[df['var'] == 'NSE', 'min_lim'].iloc[0], -999)
+        self.assertTrue(pd.isna(df.loc[df['var'] == 'streamflow', 'min_lim'].iloc[0]))
+        
 
 class TestReadSchmLsOfDict(unittest.TestCase):
     '''
