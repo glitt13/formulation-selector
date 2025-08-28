@@ -46,11 +46,11 @@ if __name__ == "__main__":
     pred_cfg = fsate.PredConfigParser(path_pred_config)
     pred_cfg._read_pred_config()
     
-    # READ fs_categories_uncn.yaml if uncn_bnd_pred is True
+    # READ fs_categories.yaml if uncn_bnd_pred is True
     uncn_bnd_pred = pred_cfg.pred_cfg_dict.get('uncn_bnd_pred')
-    logging.info("Reading uncertainty bounds from fs_categories_uncn.yaml...")
-    uncn_config = pem._read_std_config_uncn()
-    fs_catg_uncn = pem._conv_ls_dicts_df_long_uncn(uncn_config)
+    logging.info("Reading uncertainty bounds from fs_categories.yaml...")
+    uncn_config = pem._read_std_config()
+    fs_catg_uncn = pem._conv_ls_dicts_df_long(uncn_config)
     logging.info("Successfully loaded uncertainty bounds.")
 
     #%%  READ CONTENTS FROM THE ATTRIBUTE CONFIG
