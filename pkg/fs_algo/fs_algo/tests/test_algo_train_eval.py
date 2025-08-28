@@ -76,12 +76,13 @@ class TestAttrConfigAndVars(unittest.TestCase):
         mock_home.assert_called()
         print(attr_obj.attrs_cfg_dict)
         # Test the parsed data from the config
+        expected_home_dir = Path('/mocked/home')
         expected_attrs_cfg_dict = {
             'attrs_sel': ['attr1', 'attr2', 'attr3'],
-            'dir_db_attrs': '/mocked/home/base_dir/db_attrs',
-            'dir_std_base': '/mocked/home/base_dir/std_base',
-            'dir_base': '/mocked/home/base_dir',
-            'home_dir': Path('/mocked/home').as_posix(),
+            'dir_db_attrs': str(expected_home_dir / 'base_dir' / 'db_attrs'),
+            'dir_std_base': str(expected_home_dir / 'base_dir' / 'std_base'),
+            'dir_base': str(expected_home_dir / 'base_dir'),
+            'home_dir': expected_home_dir,
             'datasets': ['dataset1', 'dataset2']
         }
            
@@ -1151,7 +1152,7 @@ class TestWarningAndClippingFunctions(unittest.TestCase):
     def test_warn_values_correction_active(self):
         """Test warning for 1D values when correction is ON."""
         with self.assertLogs(level='WARNING') as cm:  # root logger
-            fsate.warn_if_out_of_bounds(
+            fsate._warn_if_out_of_bounds(
                 self.y_pred, self.feature_ids, 0.0, 1.0, self.resp_var,
                 correction_is_active=True, prediction_type="values"
             )
@@ -1163,7 +1164,7 @@ class TestWarningAndClippingFunctions(unittest.TestCase):
     def test_warn_intervals_correction_inactive(self):
         """Test warning for 3D intervals when correction is OFF."""
         with self.assertLogs(level='WARNING') as cm:  # root logger
-            fsate.warn_if_out_of_bounds(
+            fsate._warn_if_out_of_bounds(
                 self.y_pis, self.feature_ids, 0.0, 1.0, self.resp_var,
                 correction_is_active=False, prediction_type="intervals"
             )
@@ -1180,7 +1181,7 @@ class TestWarningAndClippingFunctions(unittest.TestCase):
         mock_get_logger.return_value = mock_logger
 
         # Run the function that would normally create and use a logger
-        fsate.warn_if_out_of_bounds(
+        fsate._warn_if_out_of_bounds(
             np.array([0.1, 0.5, 0.9]), self.feature_ids, 0.0, 1.0, self.resp_var,
             correction_is_active=True, prediction_type="values"
         )
