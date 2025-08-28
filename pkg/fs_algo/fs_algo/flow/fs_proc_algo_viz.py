@@ -66,10 +66,10 @@ if __name__ == "__main__":
     attr_cfig = fsate.AttrConfigAndVars(path_attr_config)
     attr_cfig._read_attr_config()
 
-    # READ fs_categories_uncn.yaml
-    logging.info("Reading uncertainty bounds from fs_categories_uncn.yaml...")
-    uncn_config = pem._read_std_config_uncn() 
-    fs_catg_uncn = pem._conv_ls_dicts_df_long_uncn(uncn_config)
+    # READ fs_categories.yaml
+    logging.info("Reading uncertainty bounds from fs_categories.yaml...")
+    uncn_config = pem._read_std_config() 
+    fs_catg_uncn = pem._conv_ls_dicts_df_long(uncn_config)
     logging.info("Successfully loaded uncertainty bounds.")
 
     # Grab the attributes of interest from the attribute config file,
