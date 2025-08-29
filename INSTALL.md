@@ -37,9 +37,9 @@ Linux and macOS:
    - e.g., ```cd C:/GITDIR/formulation-selector/install```
 
 - With UV, you can specify the python version when creating your virtual environment
-   - E.g., If I use ```--python 3.11``` as a flage to create my virtual environment, that environment will have python 3.11 associated with it.
+   - E.g., If I use ```--python 3.12``` as a flage to create my virtual environment, that environment will have python 3.11 associated with it.
 
-   - ```uv venv ../.venv --python 3.11```
+   - ```uv venv ../.venv --python 3.12```
 
    - NOTE: .venv will be the name of your virtual environment and it will be at formulation-selector/.venv
 - Activate your new virtual environment:
@@ -49,7 +49,7 @@ Linux and macOS:
    - ```source ../.venv/bin/activate```
 
 3. Install the python dependencies:
-   - ```uv install -r requirements.txt```
+   - ```uv pip install -r requirements.txt```
 
 
 ### Using pip
