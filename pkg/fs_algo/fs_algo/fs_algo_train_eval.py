@@ -1393,6 +1393,11 @@ def _warn_if_out_of_bounds(predictions: np.ndarray, feature_ids: pd.Index,
     :param prediction_type: A string ('values' or 'intervals') for the log message.
     :type prediction_type: str
     """
+    if isinstance(min_lim, str) and min_lim.lower() == 'none':
+        min_lim = None
+    if isinstance(max_lim, str) and max_lim.lower() == 'none':
+        max_lim = None
+        
     if min_lim is None and max_lim is None:
         return
 
