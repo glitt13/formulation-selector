@@ -79,9 +79,9 @@ class TestAttrConfigAndVars(unittest.TestCase):
         expected_home_dir = Path('/mocked/home')
         expected_attrs_cfg_dict = {
             'attrs_sel': ['attr1', 'attr2', 'attr3'],
-            'dir_db_attrs': str(expected_home_dir / 'base_dir' / 'db_attrs'),
-            'dir_std_base': str(expected_home_dir / 'base_dir' / 'std_base'),
-            'dir_base': str(expected_home_dir / 'base_dir'),
+            'dir_db_attrs': expected_home_dir / 'base_dir' / 'db_attrs',
+            'dir_std_base': expected_home_dir / 'base_dir' / 'std_base',
+            'dir_base': expected_home_dir / 'base_dir',
             'home_dir': expected_home_dir,
             'datasets': ['dataset1', 'dataset2']
         }
@@ -1083,8 +1083,8 @@ class TestPredConfigParser(unittest.TestCase):
         self.assertEqual(parser.pred_cfg_dict['datasets'], ['test_dataset'])
         self.assertEqual(parser.pred_cfg_dict['algo_type'], ['rf'])
         self.assertEqual(parser.pred_cfg_dict['path_pred_config'], str(self.path_pred_config))
-        self.assertEqual(parser.pred_cfg_dict['dir_base'], str(self.dir_base))
-        self.assertEqual(parser.pred_cfg_dict['dir_std_base'], str(self.dir_std_base))
+        self.assertEqual(parser.pred_cfg_dict['dir_base'], self.dir_base)
+        self.assertEqual(parser.pred_cfg_dict['dir_std_base'], self.dir_std_base)
 
     def test_read_pred_config_missing_required(self):
         # Remove a required field
