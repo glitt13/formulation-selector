@@ -286,15 +286,16 @@ class AttrConfigAndVars:
         
         home_dir = _define_home_dir(self.attr_config)
 
-        dir_base = list([x for x in self.attr_config['file_io'] if 'dir_base' in x][0].values())[0].format(home_dir=home_dir)
-        dir_base = str(Path(dir_base)) # Normalize path for OS
-        # Location of attributes (predictor data):
-        dir_db_attrs = list([x for x in self.attr_config['file_io'] if 'dir_db_attrs' in x][0].values())[0].format(dir_base = dir_base, home_dir=home_dir)
-        dir_db_attrs = str(Path(dir_db_attrs)) # Normalize path for OS
+        # dir_base = list([x for x in self.attr_config['file_io'] if 'dir_base' in x][0].values())[0].format(home_dir=home_dir)
+        # # Location of attributes (predictor data):
+        # dir_db_attrs = list([x for x in self.attr_config['file_io'] if 'dir_db_attrs' in x][0].values())[0].format(dir_base = dir_base, home_dir=home_dir)
 
-        # parent location of response variable data:
-        dir_std_base =  list([x for x in self.attr_config['file_io'] if 'dir_std_base' in x][0].values())[0].format(dir_base = dir_base, home_dir=home_dir)
-        dir_std_base = str(Path(dir_std_base)) # Normalize path for OS
+        # # parent location of response variable data:
+        # dir_std_base =  list([x for x in self.attr_config['file_io'] if 'dir_std_base' in x][0].values())[0].format(dir_base = dir_base, home_dir=home_dir)
+
+        dir_base = Path(list([x for x in self.attr_config['file_io'] if 'dir_base' in x][0].values())[0].format(home_dir=home_dir))
+        dir_db_attrs = Path(list([x for x in self.attr_config['file_io'] if 'dir_db_attrs' in x][0].values())[0].format(dir_base=dir_base, home_dir=home_dir))
+        dir_std_base = Path(list([x for x in self.attr_config['file_io'] if 'dir_std_base' in x][0].values())[0].format(dir_base=dir_base, home_dir=home_dir))
 
         # The datasets of interest
         datasets = list([x for x in self.attr_config['formulation_metadata'] if 'datasets' in x][0].values())[0]
@@ -413,8 +414,8 @@ class PredConfigParser:
             'path_meta': path_meta,
             'write_type': write_type,
             'ds_type': ds_type,
-            'dir_std_base': dir_std_base,
-            'dir_base': dir_base,
+            'dir_std_base': Path(dir_std_base),
+            'dir_base': Path(dir_base),
             'home_dir': home_dir,
             'name_attr_config': name_attr_config,
             'name_algo_config': name_algo_config,
