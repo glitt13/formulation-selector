@@ -229,12 +229,51 @@ def read_schm_ls_of_dict(schema_path: str | os.PathLike) -> pd.DataFrame:
     df_all = pd.concat(ls_form, axis=1)
 
     return df_all
+# --------------------------------------------------------------------------- #
+# ----------------------- Standard dirs & paths ----------------------------- #
+def name_std_uniq(dataset_name:str, formulation_id:str) -> str:
+    uniq_filename = f'{dataset_name}_{formulation_id}'
+    return uniq_filename
+def dir_std_dataset(dir_save: str|os.PathLike, 
+                    dataset_name: str) -> os.PathLike:
+    save_dir_base = Path(Path(dir_save) / Path('user_data_std') / dataset_name)
+    return save_dir_base
+def path_std_dataset(dir_save: str|os.PathLike, dataset_name:str,
+                formulation_id:str, fmt:str = ['nc','zarr'][0])->os.PathLike:
+    dir_save_base = dir_std_dataset(dir_save,dataset_name)
+    uniq_filename = name_std_uniq(dataset_name,formulation_id)
+    save_path = Path(dir_save_base / Path(f'{uniq_filename}.{fmt}'))
+    return save_path
+def dir_std_meta_raw(dir_save:str|os.PathLike, dataset_name:str)->os.PathLike:
+    dir_save_base = dir_std_dataset(dir_save, dataset_name)
+    dir_save_meta = Path(dir_save_base / Path('metadata'))
+    return dir_save_meta
+def path_std_meta_raw(dir_save: str | os.PathLike, dataset_name:str,
+                      formulation_id:str,fmt=['csv','parquet']) -> os.PathLike:
+    uniq_filename = name_std_uniq(dataset_name,formulation_id)
+    dir_save_meta = dir_std_meta_raw(dir_save, dataset_name)
+    path_save_meta = dir_save_meta / f'{uniq_filename}_metadata.{fmt}'
+    return path_save_meta
+def dir_std_eval_metr(dir_save:str|os.PathLike,dataset_name:str)->os.PathLike:
+    dir_save_base = dir_std_dataset(dir_save, dataset_name)
+    dir_eval_metr = dir_save_base / 'eval' / 'metrics'
+    return dir_eval_metr
+def path_std_eval_metr(dir_save: str | os.PathLike, dataset_name:str,
+                      formulation_id:str) -> os.PathLike:
+    dir_eval_metr =dir_std_eval_metr(dir_save,dataset_name)
+    uniq_filename = name_std_uniq(dataset_name,formulation_id)
+    save_path_eval_metr = dir_eval_metr / Path(f'{uniq_filename}.csv')
+    return save_path_eval_metr
 
 def _save_dir_struct(dir_save: str | os.PathLike, 
                         dataset_name: str, 
                         save_type:str ) -> tuple[Path, dict]:
     # Create a standard directory saving structure (in cases of local filesaving)
-    save_dir_base = Path(Path(dir_save) / Path('user_data_std') / dataset_name)
+    # Changelog / contributions
+    #. 2024 Summer - originally created
+    #. 2025-09-01 Commented out dirs that haven't been used but keeping as 
+    #       placeholders; adapted with standardized dir/path funcs, GL
+    save_dir_base = dir_std_dataset(dir_save, dataset_name) #Path(Path(dir_save) / Path('user_data_std') / dataset_name)
     save_dir_base.mkdir(exist_ok=True, parents = True)
 
     other_save_dirs = dict()
@@ -243,27 +282,28 @@ def _save_dir_struct(dir_save: str | os.PathLike,
         # subdirectories populated w/ .csv files
 
         # Design dir structure for writing multiple files
-        save_dir_attr = Path(save_dir_base / Path('attributes'))
-        save_dir_eval_metr = Path(save_dir_base / Path('eval')/Path('metrics'))
-        save_dir_eval_ts = Path(save_dir_base / Path('eval')/Path('timeseries'))
-        save_dir_meta = Path(save_dir_base / Path('metadata'))
-        save_dir_meta_lic = Path(save_dir_meta/Path('license'))
-        save_dir_config =  Path(save_dir_base / Path('config'))
+        #save_dir_attr = Path(save_dir_base / Path('attributes'))
+        save_dir_eval_metr = dir_std_eval_metr(dir_save,dataset_name)
+        #save_dir_eval_ts = Path(save_dir_base / Path('eval')/Path('timeseries'))
+        save_dir_meta = dir_std_meta_raw(dir_save,dataset_name)
+        #save_dir_meta_lic = Path(save_dir_meta/Path('license'))
+        #save_dir_config =  Path(save_dir_base / Path('config'))
         # Generate the expected subdirectories for storing multiple files
-        save_dir_attr.mkdir(exist_ok=True, parents = True)
+        # save_dir_attr.mkdir(exist_ok=True, parents = True)
         save_dir_eval_metr.mkdir(exist_ok=True, parents = True)
-        save_dir_eval_ts.mkdir(exist_ok=True, parents = True)
-        save_dir_meta_lic.mkdir(exist_ok=True, parents = True)
-        save_dir_config.mkdir(exist_ok=True, parents = True)
-        other_save_dirs = {'attr': save_dir_attr, 
+        #save_dir_eval_ts.mkdir(exist_ok=True, parents = True)
+        save_dir_meta.mkdir(exist_ok=True, parents = True)
+        #save_dir_config.mkdir(exist_ok=True, parents = True)
+        other_save_dirs = {#'attr': save_dir_attr, 
                             'eval_metr': save_dir_eval_metr, 
-                            'eval_ts' : save_dir_eval_ts,
+                            #'eval_ts' : save_dir_eval_ts,
                             'meta': save_dir_meta, 
-                            'meta_lic': save_dir_meta_lic, 
-                            'config': save_dir_meta}
+                            #'meta_lic': save_dir_meta_lic, 
+                            #'config': save_dir_meta
+                            }
 
     return save_dir_base, other_save_dirs
-
+# --------------------------------------------------------------------------- #
 def _proc_check_std_fs_ids(vars: list, category=['metric','target_var'][0]):
     """
     Run check to ensure that variables are listed in the standardized 
@@ -510,9 +550,7 @@ def proc_col_schema(df: pd.DataFrame,
 
         # TODO allow output write to a variety of locations (e.g. local/cloud)
         # Write data in long format
-        save_path_eval_metr = Path(
-            _other_save_dirs['eval_metr'] / f'{uniq_filename}.csv'
-            )
+        save_path_eval_metr = path_std_eval_metr(dir_save,dataset_name,formulation_id)
              
         if save_type == 'csv':
             df.to_csv(save_path_eval_metr)
@@ -522,15 +560,14 @@ def proc_col_schema(df: pd.DataFrame,
                 )
         # Write metadata table corresponding to these metric data table(s) 
         # (e.g. startDate, endDate)
-        save_path_meta = Path(
-            _other_save_dirs['meta'] / f'{uniq_filename}_metadata.csv'
-            )
+        
         if save_type == 'csv':
+            save_path_meta = path_std_meta_raw(dir_save, dataset_name, formulation_id,fmt='csv') 
             col_schema_df.to_csv(save_path_meta)
         else:
-            col_schema_df.to_parquet(
-                Path(str(save_path_meta).replace('.csv','.parquet'))
-                )
+            save_path_meta = path_std_meta_raw(dir_save, dataset_name, formulation_id,fmt='parquet') 
+            col_schema_df.to_parquet(save_path_meta)
+                
         logging.info(f"Saved files within a sub-directory structure inside {dir_save}")
     elif save_type == 'netcdf':
         save_path_nc = Path(_save_dir_base/Path(f'{uniq_filename}.nc'))
@@ -547,7 +584,6 @@ def proc_col_schema(df: pd.DataFrame,
         ds.to_zarr(save_path_zarr)   # Re-write to directory
         logging.info(f"Saved zarr files inside {save_path_zarr}")
     return ds # Returning not intended use case, but it's an option
-
 
 def check_fix_nwissite_gageids(df:pd.DataFrame, gage_id_col:str,
                                 featureSource:str = 'nwissite', 
