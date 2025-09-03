@@ -88,7 +88,7 @@ def _read_std_config():
     :return: YAML configuration file mappings as a dictionary.
     :rtype: dict
     """
-    catg_file = impresources.files(data) / 'fs_categories.yaml'    
+    catg_file = impresources.files(data) / 'fs_categories.yaml'
     with catg_file.open("rt") as f:
         std_config = yaml.safe_load(f)
     return std_config
