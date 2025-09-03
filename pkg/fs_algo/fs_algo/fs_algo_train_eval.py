@@ -418,9 +418,32 @@ class PredConfigParser:
             'uncn_bnd_pred': uncn_bnd_pred,
             'path_pred_config': self.path_pred_config,
         }   
-    
+
+def _make_home_dir(home_dir_read:str|os.PathLike=[])-> os.PathLike:
+    """Make the home directory based on what is passed or use default
+
+    :param home_dir_read: A desired home directory, defaults to None which means the system default will be used
+    :type home_dir_read: str | os.PathLike, optional
+    :return: home directory path
+    :rtype: os.PathLike
+    """
+    if len(home_dir_read) == 0:
+        home_dir = str(Path.home())
+    elif home_dir_read[0] is None:
+        home_dir = str(Path.home())
+    elif "~" in str(home_dir_read):
+        home_dir = Path(home_dir).expanduser()
+    elif not Path(home_dir_read[0]).exists():
+        logging.warning(f"The user-defined home directory path {home_dir_read[0]} " \
+            f"inside attribute config file does not exist. Using system default {Path.home()}")
+        home_dir = str(Path.home())
+    else:
+        home_dir = home_dir_read[0]
+    home_dir = Path(home_dir).expanduser()
+    return home_dir
+
 def _define_home_dir(attr_config:dict) -> os.PathLike:
-    """Define the home directory of this system
+    """Define the home directory of this system after parsing the attr config
 
     :param attr_config: The attribute config file object generated using fs_algo_train_eval.AttrConfigAndVars
     :type attr_config: dict
@@ -429,19 +452,8 @@ def _define_home_dir(attr_config:dict) -> os.PathLike:
     """
     # Determine if home_dir. Either defined in attribute config file or assumed to be system default.
     home_dir_read = [v for x in attr_config['file_io'] for k, v in x.items() if 'home_dir' in k ]
-    if len(home_dir_read) == 0:
-        home_dir = str(Path.home())
-    elif home_dir_read[0] is None:
-        home_dir = str(Path.home())
-    elif not Path(home_dir_read[0]).exists():
-        logging.warning(f"The user-defined home directory path {home_dir_read[0]} " \
-            f"inside attribute config file does not exist. Using system default {Path.home()}")
-        home_dir = str(Path.home())
-    else:
-        home_dir = home_dir_read[0]
-    home_dir = Path(home_dir).expanduser()
+    home_dir = _make_home_dir(home_dir_read)
     return home_dir        
-
 
 def _check_attr_rm_dupes(attr_df:pd.DataFrame, 
                    uniq_cols:list = ['featureID','featureSource','data_source','attribute','value'],
