@@ -460,6 +460,7 @@ class TestAlgoTrainEval(unittest.TestCase):
     def setUp(self):
         # Create a simple DataFrame for testing
         data = {
+            'comid': [f'id_{i}' for i in range(20)],
             'attr1': list(range(1, 21)),
             'attr2': list(range(21, 1, -1)),
             'metric1': [0.1, 0.9, 0.3, 0.1, 0.8, 0.2, 0.7, 0.5, 0.3, 0.6,
@@ -498,9 +499,8 @@ class TestAlgoTrainEval(unittest.TestCase):
                                         uncertainty=uncertainty_cfg,
                                  dir_out_alg_ds=self.dir_out_alg_ds, dataset_id=self.dataset_id,
                                  metr=self.metric, test_size=0.4, rs=42,
+                                 test_id_col='comid',
                                  confidence_levels = self.confidence_levels,
-                                 # bagging_ci_params=self.bagging_ci_params,
-                                 # mapie_alpha=self.mapie_alpha
                                  )
 
     def test_split_data(self):
@@ -645,7 +645,7 @@ class TestAlgoTrainEvalMlti(unittest.TestCase):
     def setUp(self):
         # Sample data for testing
         data = {
-            #'comid':['1', '2', '3', '4', '5,1', '2', '3', '4', '5','1', '2', '3', '4', '5'],
+            'comid':[f'id_{i}' for i in range(15)],
             'attr1': [1, 2, 3, 4, 5,1, 2, 3, 4, 5,1, 2, 3, 4, 5],
             'attr2': [5, 4, 3, 2, 1,5, 4, 3, 2, 1,5, 4, 3, 2, 1],
             'metric': [0.1, 0.9, 0.3, 0.1, 0.8,0.1, 0.9, 0.3, 0.1, 0.8,0.1, 0.9, 0.3, 0.1, 0.8]
@@ -682,10 +682,9 @@ class TestAlgoTrainEvalMlti(unittest.TestCase):
                                              uncertainty=uncertainty_cfg,
                                               dir_out_alg_ds=self.dir_out_alg_ds,dataset_id=self.dataset_id,
                                               metr=self.metric, test_size=self.test_size, rs=self.rs,
+                                              test_id_col=self.test_id_col,
                                               verbose=self.verbose,
                                               confidence_levels = self.confidence_levels,
-                                              # bagging_ci_params=self.bagging_ci_params,
-                                              # mapie_alpha=self.mapie_alpha
                                               )
     def test_initialization(self):
         self.assertEqual(self.algo_train_eval.df.shape, self.df.shape)
@@ -785,6 +784,7 @@ class TestAlgoTrainEvalSngl(unittest.TestCase):
     def setUp(self):
         # Sample data for testing
         self.df = pd.DataFrame({
+            'comid': [f'id_{i}' for i in range(5)],
             'attr1': [1, 2, 3, 4, 5],
             'attr2': [5, 4, 3, 2, 1],
             'metric': [1, 0, 1, 0, 1]
@@ -814,7 +814,9 @@ class TestAlgoTrainEvalSngl(unittest.TestCase):
             df=self.df, attrs=self.attrs, algo_config=self.algo_config, 
             uncertainty=uncertainty_cfg,
             dir_out_alg_ds=self.dir_out_alg_ds,
-            dataset_id=self.dataset_id, metr=self.metr, test_size=self.test_size, rs=self.rs, verbose=self.verbose
+            dataset_id=self.dataset_id, metr=self.metr, test_size=self.test_size, 
+            rs=self.rs, verbose=self.verbose,
+            test_id_col='comid'
         )
 
     @patch('fs_algo.fs_algo_train_eval.joblib.dump')
@@ -837,10 +839,14 @@ class TestAlgoTrainEvalSngl(unittest.TestCase):
 
         # Mock pipeline with a .predict() method
         mock_pipeline = MagicMock()
-        mock_pipeline.predict.return_value = [0.1, 0.2, 0.3]
+        test_indices = [1, 4]  # Example indices from the original df
     
-        self.algo_train_eval.X_test = [[1, 2], [3, 4], [5, 6]]
-        self.algo_train_eval.y_test = [0.0, 0.1, 0.2]
+        # Create a realistic X_test DataFrame with a valid index
+        self.algo_train_eval.X_test = self.algo_train_eval.df.loc[test_indices, self.algo_train_eval.attrs]
+        self.algo_train_eval.y_test = self.algo_train_eval.df.loc[test_indices, self.algo_train_eval.metric]
+    
+        # Update mock prediction length to match the new X_test size
+        mock_pipeline.predict.return_value = np.random.rand(len(test_indices))
         self.algo_train_eval.preds_dict = {}
         self.algo_train_eval.uncertainty = {
             'forestci': [{'fci_flag': True}],
@@ -880,6 +886,7 @@ class TestAlgoTrainEvalBasic(unittest.TestCase):
     def setUp(self):
         # Set up a small test dataframe
         self.df = pd.DataFrame({
+            'comid': [f'id_{i}' for i in range(15)],
             'attr1': [1, 2, 3, 4, 5,1, 2, 3, 4, 5,1, 2, 3, 4, 5],
             'attr2': [5, 4, 3, 2, 1,5, 4, 3, 2, 1,5, 4, 3, 2, 1],
             'target': [10, 15, 20, 25, 30,10, 15, 20, 25, 30,10, 15, 20, 25, 30]
@@ -919,10 +926,9 @@ class TestAlgoTrainEvalBasic(unittest.TestCase):
                                   uncertainty=uncertainty_cfg,
                                   dir_out_alg_ds=self.dir_out_alg_ds, dataset_id=self.dataset_id, 
                                   metr=self.metric, test_size=self.test_size, rs=self.rs, 
+                                  test_id_col='comid',
                                   verbose=self.verbose,
                                   confidence_levels = self.confidence_levels,
-                                  # bagging_ci_params=self.bagging_ci_params,
-                                  # mapie_alpha=self.mapie_alpha
                                   )
 
     @patch('joblib.dump')  # Mock saving the model to disk
