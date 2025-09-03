@@ -1372,7 +1372,7 @@ def split_train_test_comid_wrap(dir_std_base:str|os.PathLike,
                 'sub_train_ids': train_ids[id_col]}
     return split_dict
 
-def _warn_if_out_of_bounds(predictions: np.ndarray, feature_ids: pd.Index, 
+def _warn_if_out_of_bounds(predictions: np.ndarray, feature_ids: pd.Series, 
                           min_lim: float, max_lim: float, resp_var: str, 
                           correction_is_active: bool, prediction_type: str):
     """
@@ -1381,7 +1381,7 @@ def _warn_if_out_of_bounds(predictions: np.ndarray, feature_ids: pd.Index,
     :param predictions: The 1D (values) or 3D (intervals) prediction array.
     :type predictions: np.ndarray
     :param feature_ids: The feature IDs corresponding to the predictions.
-    :type feature_ids: pd.Index
+    :type feature_ids: pd.Series
     :param min_lim: The minimum allowable value for the prediction.
     :type min_lim: float
     :param max_lim: The maximum allowable value for the prediction.
@@ -1925,11 +1925,14 @@ class AlgoTrainEval:
             if self.verbose:
                 logging.info(f"      Generating predictions for {type_algo} algorithm.")   
             
+            # Get the feature IDs corresponding to the test set rows from the original dataframe
+            feature_ids = self.df.loc[self.X_test.index, self.test_id_col]
+
             y_pred = pipe.predict(self.X_test)
             # --- Unconditionally warn if any predictions fall out of the physical range. ---
             _warn_if_out_of_bounds(
                 predictions=y_pred,
-                feature_ids=self.X_test.index,
+                feature_ids=feature_ids,
                 min_lim=self.min_lim,
                 max_lim=self.max_lim,
                 resp_var=self.metric,
@@ -1947,7 +1950,7 @@ class AlgoTrainEval:
                 # Apply same warn-then-clip logic for prediction intervals.
                 _warn_if_out_of_bounds(
                     predictions=y_test_pis,
-                    feature_ids=self.X_test.index,
+                    feature_ids=feature_ids,
                     min_lim=self.min_lim,
                     max_lim=self.max_lim,
                     resp_var=self.metric,

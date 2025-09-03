@@ -249,10 +249,6 @@ if __name__ == "__main__":
             # Join attribute data and response data
             df_pred_resp = df_metr_resp.merge(df_attr_wide_dropna, left_on = col_locid, right_on = col_locid)
 
-            # ---Set index to featureID before passing to the training class ---
-            # This is critical for the new warning message to correctly identify locations.
-            df_pred_resp.set_index(col_locid, inplace=True)
-
             if df_pred_resp.isna().any().any(): # Check for NA values and remove them if present to avoid errors during evaluation
                 tot_na_dfpred = df_pred_resp.shape[0] - df_pred_resp.dropna().shape[0]
                 pct_na_dfpred = tot_na_dfpred/df_pred_resp.shape[0]*100
@@ -281,6 +277,7 @@ if __name__ == "__main__":
                                         uncertainty=uncertainty_cfg,
                                         dir_out_alg_ds=dir_out_alg_ds, dataset_id=ds,
                                         metr=metr,test_size=test_size, rs = seed,
+                                        test_id_col=col_locid,
                                         verbose=verbose,
                                         confidence_levels=confidence_levels,
                                         uncn_bnd_algo=uncn_bnd_algo,
