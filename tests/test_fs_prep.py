@@ -2,7 +2,7 @@ import subprocess
 import unittest
 from pathlib import Path
 import fs_prep.proc_eval_metrics as pem
-from fs_algo.fs_algo_train_eval import _make_home_dir, _open_response_data_fs
+import fs_algo.fs_algo_train_eval as fsate
 import shutil
 
 class TestFsPrepIntegration(unittest.TestCase):
@@ -21,7 +21,7 @@ class TestFsPrepIntegration(unittest.TestCase):
         self.path_fs_prep = self.dir_tests / "config" / "xssa" / "prep_xssa_metrics.py"
         
         # Parse the config file
-        self.home_dir = _make_home_dir([])
+        self.home_dir = fsate._make_home_dir([])
         self.col_schema_df = pem.read_schm_ls_of_dict(schema_path=self.path_cfg_prep)
         
         self.dir_save = Path(self.col_schema_df['dir_save'].iloc[0].format(home_dir=self.home_dir))
@@ -35,7 +35,6 @@ class TestFsPrepIntegration(unittest.TestCase):
                                                 formulation_id=self.formulation_id,
                                                 fmt='nc')
         
-
     # ----------------------------------------------------------------------- #
     #.                  RUN INTEGRATION TEST FOR FS_PREP
     # ----------------------------------------------------------------------- #
@@ -69,7 +68,7 @@ class TestFsPrepIntegration(unittest.TestCase):
         self.assertTrue(self.dir_ds.exists(), "The dir_ds directory was not created.")
 
         # --- Validate the content of the .nc file ---
-        xr_dat = _open_response_data_fs(dir_std_base=self.dir_std_base,
+        xr_dat = fsate._open_response_data_fs(dir_std_base=self.dir_std_base,
                                         ds=self.dataset,
                                         mtch_str="*.nc")
         
@@ -91,7 +90,6 @@ class TestFsPrepIntegration(unittest.TestCase):
         if self.dir_std_base.exists():
             shutil.rmtree(self.dir_std_base)
             print(f"Cleaned up directory: {self.dir_std_base}")
-
 
 if __name__ == '__main__':
     unittest.main()
