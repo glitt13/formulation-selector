@@ -27,7 +27,7 @@ import seaborn as sns
 from sklearn.decomposition import PCA
 from shapely.geometry import Point
 import geopandas as gpd
-import urllib
+import requests
 import zipfile
 import re
 import forestci as fci
@@ -182,8 +182,6 @@ class AlgoConfigParser:
             logging.error(f"'verbose' must be a boolean. Got: {type(algo_cfg_dict['verbose'])}")
             raise TypeError(f"'verbose' must be a boolean. Got: {type(algo_cfg_dict['verbose'])}")
         
-        
-
         # Generate dictionary "algo_unc_dict" with uncertainty parameters
         algo_unc_dict = {'uncertainty_cfg': algo_cfg.get("uncertainty", {})}
 
@@ -2887,24 +2885,32 @@ def gen_conus_basemap(dir_out_basemap:str | os.PathLike, # This should be the da
     :type fn_basemap: str, optional
     :return: The geopandas dataframe of the basemap
     :rtype: gpd.geodataframe.GeoDataFrame
+
+    Changelog / contributions:
+    2024 Originally created
+    2025-09-22, changed from using urlib to using requests to avoid SSL error, GL
     """
-    url = 'https://www2.census.gov/geo/tiger/GENZ2018/shp/cb_2018_us_state_500k.zip'
+
+
+
+    #url = 'https://www2.census.gov/geo/tiger/GENZ2018/shp/cb_2018_us_state_500k.zip'
     path_zip_basemap = f'{dir_out_basemap}/cb_2018_us_state_500k.zip'
     path_shp_basemap = f'{dir_out_basemap}/{fn_basemap}'
 
     if not Path(path_zip_basemap).exists():
-        logging.info('Downloading shapefile...')
-        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'}
-        req = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(req) as response, open(path_zip_basemap, 'wb') as out_file:
-            out_file.write(response.read())
-        logging.info('Shapefile downloaded.')
+        logging.info("Downloading shapefile...")
+        response = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, verify=False)  # disable SSL verification
+        with open(path_zip_basemap, "wb") as out_file:
+            out_file.write(response.content)
+        logging.info("Shapefile downloaded.")
+
     if not Path(path_shp_basemap).exists():
-        with zipfile.ZipFile(path_zip_basemap, 'r') as zip_ref:
-            zip_ref.extractall(f'{path_shp_basemap}')
+        with zipfile.ZipFile(path_zip_basemap, "r") as zip_ref:
+            zip_ref.extractall(path_shp_basemap)
 
     states = gpd.read_file(path_shp_basemap)
     states = states.to_crs("EPSG:4326")
+
     return states
     
 def plot_map_pred(geo_df:gpd.GeoDataFrame, states,title:str,metr:str,
