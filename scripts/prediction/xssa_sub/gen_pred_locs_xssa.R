@@ -63,8 +63,8 @@ main <- function(){
 
   ###################### DATASET-SPECIFIC CUSTOM MUNGING #########################
   # USER INPUT: Paths to relevant config files
-  path_raw_config <- glue::glue("{home_dir}/git/formulation-selector/scripts/eval_ingest/xssa/xssa_prep_config.yaml")
-
+  name_prep_config <- cfig_pred[['name_prep_config']]
+  path_raw_config <- proc.attr.hydfab::build_cfig_path(path_cfig_pred,name_prep_config)#glue::glue("{home_dir}/git/formulation-selector/scripts/eval_ingest/xssa/xssa_prep_config.yaml")
 
 
   # --------------------------- INPUT DATA READ -------------------------------- #
