@@ -764,7 +764,7 @@ def fs_retr_nhdp_comids_geom(featureSource:str,featureID:str,gage_ids: Iterable[
 
     nldi = nhd.NLDI()
     
-    comids_miss = []
+    gageids_miss = []
     comids_resp = []
     geom_pts = []
     feature_id = []
@@ -786,7 +786,7 @@ def fs_retr_nhdp_comids_geom(featureSource:str,featureID:str,gage_ids: Iterable[
             # Handle the error (e.g., log it, append None, or any other fallback mechanism)
 
             # TODO Attempt a different approach for retrieving comid:
-            comids_miss.append(comid)
+            gageids_miss.append(gage_id)
             geom_pts.append(np.nan)
             comids_resp.append(np.nan)  # Appending NA for failed gage_id, or handle differently as needed
 
