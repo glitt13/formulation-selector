@@ -12,3 +12,6 @@ std_dir_logs(dir_db_attrs)
 \description{
 Define the standard directory used for storing log files
 }
+\seealso{
+fs_prep.std_dir_log (python w/ different arg)
+}

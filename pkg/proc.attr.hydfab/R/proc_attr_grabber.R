@@ -1335,6 +1335,7 @@ io_attr_dat <- function(dt_new_dat,path_attrs,
   # Changelog/contributions
   #. 2024 originally created
   #. 2025-05-15 fix: enforce same class for value column, GL
+  #. 2025-09-23 fix: enforce float64 for value column
 
   logl_write_parq <- TRUE
   # Double-check by first reading a possible dataset
@@ -1349,8 +1350,8 @@ io_attr_dat <- function(dt_new_dat,path_attrs,
         dt_exist$value <- base::as.character(dt_exist$value)
         dt_new_dat$value <- base::as.character(dt_new_dat$value)
       } else { # we can handle numeric values (preferable)
-        dt_exist$value <- base::as.numeric(dt_exist$value)
-        dt_new_dat$value <- base::as.numeric(dt_new_dat$value)
+        dt_exist$value <- base::as.double(dt_exist$value)
+        dt_new_dat$value <- base::as.double(dt_new_dat$value)
       }
     }
     # Merge & duplicate check based on a subset of columns
@@ -1373,6 +1374,22 @@ io_attr_dat <- function(dt_new_dat,path_attrs,
     logr::log_print(glue("PROBLEM: more than one comid destined for {path_attrs}"), level = "ERROR")
     stop(glue("PROBLEM: more than one comid destined for {path_attrs}"))
   }
+
+  # Run checks on the value column:
+  if(base::any(base::is.character(dt_cmbo$value))){
+    character_msg <- glue::glue("PROBLEM: the value column is character class.
+                         This could create problems with parquet file reading with
+                         the python fs_read_attr_comid in the fs_algo package.
+                         Edit the fs_read_attr_comid function and consider
+                         one-hot encoding for RaFTS")
+    logr::log_print(character_msg,
+                    level = "WARN")
+    warning(character_msg)
+  } else {
+    # Enforcing float64 needed for fs_algo.fs_algo_train_eval.fs_read_attr_comid
+    dt_cmbo$value <- base::as.double(dt_cmbo$value)
+  }
+
 
   if(logl_write_parq){ # Write update to file
     try_to_write <- try(arrow::write_parquet(dt_cmbo,sink=path_attrs),silent=TRUE)
@@ -2529,7 +2546,7 @@ write_meta_nldi_feat <- function(dt_site_feat, path_meta){
   }
 
   if(!base::dir.exists(base::dirname(path_meta))){
-    logr::log_print(glue(
+    logr::log_print(glue::glue(
       "The dataset directory is expected to exist: {base::dirname(path_meta)}. Creating it."), level = "WARN")
     base::dir.create(base::dirname(path_meta),recursive = TRUE)
   }

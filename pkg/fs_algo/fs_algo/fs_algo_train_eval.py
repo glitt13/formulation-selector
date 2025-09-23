@@ -532,7 +532,8 @@ def fs_read_attr_comid(dir_db_attrs:str | os.PathLike, comids_resp:list | Iterab
     partitioning = ds.partitioning(
         pa.schema([pa.field("featureID", pa.string()), pa.field('featureSource', pa.string()),
                 pa.field("data_source", pa.string()), pa.field('dl_timestamp', pa.string()),
-                pa.field("attribute", pa.string()), pa.field('value', pa.float64())]),flavor="hive")
+                pa.field("attribute", pa.string()), pa.field('value', pa.float64())]),
+                flavor="hive")
 
     # ------------------- Subset based on comids of interest ------------------
     if read_type == 'all': # Considering all parquet files inside directory
