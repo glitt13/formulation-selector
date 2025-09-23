@@ -6,10 +6,11 @@ col_schema:   # required column mappings in the evaluation metrics dataset
   - 'metric_cols': 'nse|rmse|kge' # Column(s) in the dataset corresponding to the evaluation metrics. If multiple exist, separate each string by '|' e.g. 'rmse|kge|nse'
   - 'metric_mappings': 'NSE|RMSE|KGE' # The mapping of metric_cols to the standardized format as specified in fs_categories.yaml, separate each metric name by '|' e.g. 'RMSE|KGE|NSE'
 file_io: # May define {home_dir} for python's '{home_dir}/string_path'.format(home_dir =str(Path.home())) functionality
+  # NOTE: FOR RaFTS INTEGRATION TESTING, the required input data, testdata_20250901 must be extracted from the zip file here: https://drive.google.com/file/d/1z0joW1TMXu9EwejiUNL_Tge5illGSIvg/view?usp=sharing
   - 'path_camels': '{home_dir}/noaa/regionalization/data/tests/testdata_20250901/camels/camels_hydro.txt' # Path to the CAMELS basins dataset. CAMELS data should not always be a requirement for dataset processing, but serves to help analyze common catchments.
   - 'path_data': '{home_dir}/noaa/regionalization/data/tests/testdata_20250901/julemai-xSSA/data_in/basin_metadata/basin_validation_results.txt' # Where the raw input data are stored.
   - 'dir_save': '{home_dir}/noaa/regionalization/data/tests/input' # Required. The save location of standardized output
-  - 'save_type': 'netcdf' #  Required. Save as hierarchical files 'netcdf' or 'zarr'. Default 'netcdf' until attribute 
+  - 'save_type': 'netcdf' #  Required. Save as hierarchical files 'netcdf'. Default 'netcdf'. The zarr format option is non-functional as of 2025.
   - 'save_loc': 'local' #  Required.  Use 'local' for saving to a local path via dir_save. Future work will create an approach for 'aws' or other cloud saving methods
 formulation_metadata:  
   - 'dataset_name': 'juliemai-xSSA' # Required. 
