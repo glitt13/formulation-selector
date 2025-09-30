@@ -514,6 +514,7 @@ def fs_read_attr_comid(dir_db_attrs:str | os.PathLike, comids_resp:list | Iterab
     #  2025-05-19 refactor: remove _NA_ parquet files, udpate 'all' to dd.read_parquet, GL
     #  2025-06-10 fix: rm accidental elif in entry point for read_type; add partitioning schema, GL
     #  2025-06-13 feat: add timestamp datetime coercion, GL
+    #. 2025-09-30 fix: 'filename' option uses only dd instead of pd inside dd
     if _s3:
         storage_options={"anon",True} # for public
         # TODO  Setup the s3fs filesystem that will be used, with xarray to open the parquet files
@@ -548,9 +549,9 @@ def fs_read_attr_comid(dir_db_attrs:str | os.PathLike, comids_resp:list | Iterab
         all_files = [file for file in Path(dir_db_attrs).iterdir() if file.is_file()]
         matching_files = [file for file in all_files if pattern.search(str(file))]
         # Read in all matching filenames and proceed
-        attr_ddf_subloc = dd.from_pandas(pd.read_parquet(matching_files,
-                                                         engine='pyarrow',partitioning=partitioning),
-                                                         npartitions=2)
+        attr_ddf_subloc = dd.read_parquet(matching_files,
+                                          engine='pyarrow',
+                                          partitioning=partitioning)
     else:
         # Initialize attr_ddf_sub
         attr_ddf_sub = None
