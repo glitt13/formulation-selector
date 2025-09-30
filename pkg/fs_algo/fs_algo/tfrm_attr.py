@@ -18,6 +18,27 @@ import logging
 # Set up basic logging configuration
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+class TransformConfigParser:
+    ## Initialize a new instance of the class AlgoConfigParser
+    def __init__(self, path_tfrm_config: str | os.PathLike):
+        self.path_tfrm_config = path_tfrm_config
+        self.tfrm_cfig= dict()
+
+    ## Define a function to read algo configuration parameters from the YAML config file
+    def _read_tfrm_config(self) -> dict:
+        with open(self.path_tfrm_config, 'r') as file:
+            self.tfrm_cfg = yaml.safe_load(file)
+
+        # Read from transformation config file:
+        catgs_attrs_sel = [x for x in list(itertools.chain(*self.tfrm_cfg)) if x is not None]
+        idx_tfrm_attrs = catgs_attrs_sel.index('transform_attrs')
+        #%% Parse aggregation/transformations in config file
+        self.tfrm_cfg_attrs = self.tfrm_cfg[idx_tfrm_attrs]
+        # dict of file input/output, read-only combined view
+        idx_file_io = catgs_attrs_sel.index('file_io')
+        self.fio = dict(ChainMap(*self.tfrm_cfg[idx_file_io]['file_io'])) 
+        self.overwrite_tfrm = self.fio.get('overwrite_tfrm',False)
+
 def read_df_ext(path_to_file: str | os.PathLike) -> pd.DataFrame:
     """Read a tabular file with an extension of csv, parquet, or gpkg
 
@@ -471,16 +492,12 @@ def tfrm_attr_comids_wrap(comids: Iterable, path_tfrm_cfig: str | os.PathLike):
     # Changelog/contributions
     # 2025-03: Changed to wrapper function based on comid and transformation config, GL
 
-
-    with open(path_tfrm_cfig, 'r') as file:
-        tfrm_cfg = yaml.safe_load(file)
-    # Read from transformation config file:
-    catgs_attrs_sel = [x for x in list(itertools.chain(*tfrm_cfg)) if x is not None]
-    idx_tfrm_attrs = catgs_attrs_sel.index('transform_attrs')
-
-    # dict of file input/output, read-only combined view
-    idx_file_io = catgs_attrs_sel.index('file_io')
-    fio = dict(ChainMap(*tfrm_cfg[idx_file_io]['file_io'])) 
+    # Parse & read from transformation config file:
+    tfrm_config = TransformConfigParser(path_tfrm_cfig)
+    tfrm_config._read_tfrm_config()
+    fio = tfrm_config.fio
+    tfrm_cfg_attrs = tfrm_config.tfrm_cfg_attrs
+   
     overwrite_tfrm = fio.get('overwrite_tfrm',False)
     # Extract desired content from attribute config file
     path_attr_config=fsate.build_cfig_path(path_tfrm_cfig, Path(fio.get('name_attr_config')))
@@ -488,12 +505,6 @@ def tfrm_attr_comids_wrap(comids: Iterable, path_tfrm_cfig: str | os.PathLike):
     attr_cfig._read_attr_config()
     dir_db_attrs = attr_cfig.attrs_cfg_dict.get('dir_db_attrs')
     home_dir = attr_cfig.attrs_cfg_dict.get('home_dir',Path.home())
-
-    # Read from transformation config file:
-    catgs_attrs_sel = [x for x in list(itertools.chain(*tfrm_cfg)) if x is not None]
-    idx_tfrm_attrs = catgs_attrs_sel.index('transform_attrs')
-    #%% Parse aggregation/transformations in config file
-    tfrm_cfg_attrs = tfrm_cfg[idx_tfrm_attrs]
 
     # Create the custom functions
     dict_cstm_vars_funcs = _retr_cstm_funcs(tfrm_cfg_attrs)
@@ -549,7 +560,7 @@ def tfrm_attr_comids_wrap(comids: Iterable, path_tfrm_cfig: str | os.PathLike):
             # Retrieve the variables of interest for the function
             try:
                 df_attr_sub = fsate.fs_read_attr_comid(dir_db_attrs, comids_resp=[str(comid)], attrs_sel=attrs_retr_sub,
-                                _s3 = None,storage_options=None,read_type='filename') 
+                                _s3 = None,storage_options=None,read_type='all') 
                 # NOTE read_type='filename' best when only retrieving one location at a time
             except:
                 logging.warning('Could not acquire comid %s attributes. Skipping to next comid.', comid)

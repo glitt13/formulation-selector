@@ -54,18 +54,22 @@ if __name__ == "__main__":
     root_logger.addHandler(memory_handler)
     root_logger.setLevel(logging.INFO)  # Set the level to capture INFO messages
     logging.info(f"Running fs_tfrm_attrs.py with {path_tfrm_cfig.parent / path_tfrm_cfig.name} config file")
-    # ---
+    # --- Read tfrm config file
+    tfrm_config = fta.TransformConfigParser(path_tfrm_cfig)
+    tfrm_config._read_tfrm_config()
+    fio = tfrm_config.fio
 
-    with open(path_tfrm_cfig, 'r') as file:
-        tfrm_cfg = yaml.safe_load(file)
 
-    # Read from transformation config file:
-    catgs_attrs_sel = [x for x in list(itertools.chain(*tfrm_cfg)) if x is not None]
-    idx_tfrm_attrs = catgs_attrs_sel.index('transform_attrs')
+    # with open(path_tfrm_cfig, 'r') as file:
+    #     tfrm_cfg = yaml.safe_load(file)
 
-    # dict of file input/output, read-only combined view
-    idx_file_io = catgs_attrs_sel.index('file_io')
-    fio = dict(ChainMap(*tfrm_cfg[idx_file_io]['file_io'])) 
+    # # Read from transformation config file:
+    # catgs_attrs_sel = [x for x in list(itertools.chain(*tfrm_cfg)) if x is not None]
+    # idx_tfrm_attrs = catgs_attrs_sel.index('transform_attrs')
+
+    # # dict of file input/output, read-only combined view
+    # idx_file_io = catgs_attrs_sel.index('file_io')
+    # fio = dict(ChainMap(*tfrm_cfg[idx_file_io]['file_io'])) 
     overwrite_tfrm = fio.get('overwrite_tfrm',False)
 
     # Extract desired content from attribute config file
@@ -151,11 +155,11 @@ if __name__ == "__main__":
     # Compile unique comid values
     comids = list(filter(partial(is_not, None), set(ls_comid + ls_comids_attrs)))
     
-    #%% Parse aggregation/transformations in config file
-    tfrm_cfg_attrs = tfrm_cfg[idx_tfrm_attrs]
+    # #%% Parse aggregation/transformations in config file
+    # tfrm_cfg_attrs = tfrm_cfg[idx_tfrm_attrs]
 
     # Create the custom functions
-    dict_cstm_vars_funcs = fta._retr_cstm_funcs(tfrm_cfg_attrs)
+    dict_cstm_vars_funcs = fta._retr_cstm_funcs(tfrm_config.tfrm_cfg_attrs)
 
     # Note that this is a flattened length size, based on the total 
     # number of transformation functions & which transformations are needed
@@ -164,13 +168,14 @@ if __name__ == "__main__":
     #%% Retrieve comid-attribute data of interest & grab missing data
     # all the variables of interest
     all_retr_vars = list(set([vv for k, v in dict_retr_vars.items() for vv in v]))
-
+    
+    logging.info("DEBUG: COMIDS ")
     # Read in available comid data of interest (all comids + attributes)
     df_attr_all = fsate.fs_read_attr_comid(dir_db_attrs=dir_db_attrs,
                                               comids_resp=comids,
                                               attrs_sel=all_retr_vars,_s3=None,
                                                storage_options=None,
-                                               read_type= 'filename',# 'filename' tends to be the fastest (2025-06-01)
+                                               read_type= 'all',# 'filename' tends to be the fastest (2025-06-01); 2025-09-28 'filename' observed to be broken
                                                reindex=True)
     # Create unique combination of comid-attribute pairings:
     df_attr_all['uniq_cmbo'] = df_attr_all[col_locid].astype(str) + '_' + df_attr_all['attribute'].values
