@@ -28,7 +28,7 @@ formulation_metadata:
     - 'xSSA_proc_sens_wt_loc_sel' # Required. In this example case, it's a sublist of just one thing.
   - formulation_base: 'Raven_blended' # Informational. Unique name of formulation. Optional.
 hydfab_config: # Required section describing hydrofabric connection details and objects of interest, particularly for hfsubsetR::get_subset()
- - s3_base: "s3://lynker-spatial/tabular-resources" # Required. s3 path containing hydrofabric-formatted attribute datasets
+ - s3_base: "s3://lynker-spatial/tabular" # Required. s3 path containing hydrofabric-formatted attribute datasets
  - s3_bucket: 'lynker-spatial' # Required. s3 bucket containing hydrofabric data
  - hf_cat_sel: "total" # Required. Options include 'total' or 'all'; total: interested in the single location's aggregated catchment data; all: all subcatchments of interest
  - ext: 'gpkg' # The file extension

@@ -15,7 +15,7 @@ retr_attr_hydatl_wrap(
 \arguments{
 \item{paths_ha}{The local filepaths/s3 paths containing the HydroATLAS
 data downscaled to hydrofabric divides. For more details, refer to
-\href{https://www.lynker-spatial.com/data/tabular-resources/hydroATLAS/}{hydrofabric data portal}}
+\href{https://www.lynker-spatial.com/data/tabular/hydroATLAS/}{hydrofabric data portal}}
 
 \item{ha_vars}{They HydroATLAS variables of interest}
 
