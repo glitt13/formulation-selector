@@ -59,17 +59,6 @@ if __name__ == "__main__":
     tfrm_config._read_tfrm_config()
     fio = tfrm_config.fio
 
-
-    # with open(path_tfrm_cfig, 'r') as file:
-    #     tfrm_cfg = yaml.safe_load(file)
-
-    # # Read from transformation config file:
-    # catgs_attrs_sel = [x for x in list(itertools.chain(*tfrm_cfg)) if x is not None]
-    # idx_tfrm_attrs = catgs_attrs_sel.index('transform_attrs')
-
-    # # dict of file input/output, read-only combined view
-    # idx_file_io = catgs_attrs_sel.index('file_io')
-    # fio = dict(ChainMap(*tfrm_cfg[idx_file_io]['file_io'])) 
     overwrite_tfrm = fio.get('overwrite_tfrm',False)
 
     # Extract desired content from attribute config file
@@ -154,9 +143,6 @@ if __name__ == "__main__":
 
     # Compile unique comid values
     comids = list(filter(partial(is_not, None), set(ls_comid + ls_comids_attrs)))
-    
-    # #%% Parse aggregation/transformations in config file
-    # tfrm_cfg_attrs = tfrm_cfg[idx_tfrm_attrs]
 
     # Create the custom functions
     dict_cstm_vars_funcs = fta._retr_cstm_funcs(tfrm_config.tfrm_cfg_attrs)
@@ -184,7 +170,6 @@ if __name__ == "__main__":
     must_have_uniq_cmbo = [f"{comid}_{var}" for comid in comids for var in all_retr_vars]
 
     # Determine which comid-attribute pairings missing using unique key
-    #uniq_cmbo_absent = [item for item in must_have_uniq_cmbo if item not in df_attr_all['uniq_cmbo'].values]
     uniq_cmbo_absent = list(set(must_have_uniq_cmbo) - set(df_attr_all['uniq_cmbo']))
 
     # Split items not in series back into comids and attributes
