@@ -27,6 +27,12 @@ library(stringr)
 library(fs)
 library(logr)
 
+# Ensure that arrow does not write large strings, to prevent dask/pyarrow error:
+# `pyarrow.lib.ArrowTypeError: Unable to merge: Field featureID has incompatible
+# types: large_string vs string`
+base::options(arrow.large_strings = FALSE)
+
+
 attr_cfig_parse <- function(path_attr_config){
   #' @title Read and parse the attribute config yaml file to create parameter
   #' list object
@@ -78,7 +84,7 @@ attr_cfig_parse <- function(path_attr_config){
   path_meta <- base::unlist(raw_config$file_io)[['path_meta']] # (DO NOT PERFORM glue SUBSTITUTION!!)
 
   # Read s3 connection details
-  s3_base <- base::unlist(raw_config$hydfab_config)[['s3_base']]#s3://lynker-spatial/tabular-resources" # s3 path containing hydrofabric-formatted attribute datasets
+  s3_base <- base::unlist(raw_config$hydfab_config)[['s3_base']]#s3://lynker-spatial/tabular" # s3 path containing hydrofabric-formatted attribute datasets
   s3_bucket <- base::unlist(raw_config$hydfab_config)[['s3_bucket']] #'lynker-spatial' # s3 bucket containing hydrofabric data
 
   # Path(s) to HydroATLAS data downscaled to hydrofabric (may be local &/or s3 paths)
@@ -502,7 +508,7 @@ retr_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
   #' present, move on to the `'hf_id'` and finally to `'id'`
   #' @param paths_ha The local filepaths/s3 paths containing the HydroATLAS
   #' data downscaled to hydrofabric divides. For more details, refer to
-  #' [hydrofabric data portal](https://www.lynker-spatial.com/data/tabular-resources/hydroATLAS/)
+  #' [hydrofabric data portal](https://www.lynker-spatial.com/data/tabular/hydroATLAS/)
   #' @param ha_vars They HydroATLAS variables of interest
   #' @param colname_featID The standard column name for location id in the output datatable
   #' @details The hf_ids may contain 1) a COMID, corresponding to CONUS, &/or
@@ -635,7 +641,7 @@ retr_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
 
 
 retr_attr_hydatl <- function(hf_ids, path_ha, ha_vars,hf_id_col=c("hf_uid","hf_id")[2],
-                             s3_ha='s3://lynker-spatial/tabular-resources/hydroATLAS/hydroatlas_vars.parquet'){
+                             s3_ha='s3://lynker-spatial/tabular/hydroATLAS/hydroatlas_vars.parquet'){
   #' @title Retrieve HydroATLAS variables
   #' @description retrieves hydrofabric variables from s3 bucket or a local file
   #' @param hf_ids character or numeric, vector or atomic. The hydrofabric ids

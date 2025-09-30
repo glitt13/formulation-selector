@@ -23,7 +23,7 @@ options(arrow.unsafe_metadata = TRUE)
 
 # TODO establish a basic config file to read in for this functionality
 comid <- "18094981"#"02479560"#14138870# A small basin
-s3_base <- "s3://lynker-spatial/tabular-resources"
+s3_base <- "s3://lynker-spatial/tabular"
 s3_bucket <- 'lynker-spatial'
 s3_path_hydatl <- glue::glue('{s3_base}/hydroATLAS/hydroatlas_vars.parquet')
 
