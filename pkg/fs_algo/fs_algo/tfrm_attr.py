@@ -21,21 +21,31 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 class TransformConfigParser:
     ## Initialize a new instance of the class AlgoConfigParser
     def __init__(self, path_tfrm_config: str | os.PathLike):
-        self.path_tfrm_config = path_tfrm_config
+        self.path_tfrm_config = Path(path_tfrm_config)
         self.tfrm_cfig= dict()
 
+        if not self.path_tfrm_config.exists():
+            logging.error(f"The transformation config file path was not found {self.path_tfrm_config}")
+            raise ValueError()
     ## Define a function to read algo configuration parameters from the YAML config file
     def _read_tfrm_config(self) -> dict:
+
         with open(self.path_tfrm_config, 'r') as file:
             self.tfrm_cfg = yaml.safe_load(file)
 
         # Read from transformation config file:
         catgs_attrs_sel = [x for x in list(itertools.chain(*self.tfrm_cfg)) if x is not None]
         idx_tfrm_attrs = catgs_attrs_sel.index('transform_attrs')
+        if len(idx_tfrm_attrs) == 0:
+            logging.error(f"Problem with parsing the attr tform config file. Index named 'transform_attrs' absent.")
+            raise ValueError(f"Badly formatted {self.tfrm_cfig}")
         #%% Parse aggregation/transformations in config file
         self.tfrm_cfg_attrs = self.tfrm_cfg[idx_tfrm_attrs]
         # dict of file input/output, read-only combined view
         idx_file_io = catgs_attrs_sel.index('file_io')
+        if len(idx_file_io) == 0:
+            logging.error(f"Problem with parsing the attr tform config file. Index named 'file_io' absent.")
+            raise ValueError(f"Badly formatted {self.tfrm_cfig}")
         self.fio = dict(ChainMap(*self.tfrm_cfg[idx_file_io]['file_io'])) 
         self.overwrite_tfrm = self.fio.get('overwrite_tfrm',False)
 
