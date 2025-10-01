@@ -161,7 +161,7 @@ if __name__ == "__main__":
                                               comids_resp=comids,
                                               attrs_sel=all_retr_vars,_s3=None,
                                                storage_options=None,
-                                               read_type= 'all',# 'filename' tends to be the fastest (2025-06-01); 2025-09-28 'filename' observed to be broken
+                                               read_type= 'filename',# 'filename' tends to be the fastest (2025-06-01)
                                                reindex=True)
     # Create unique combination of comid-attribute pairings:
     df_attr_all['uniq_cmbo'] = df_attr_all[col_locid].astype(str) + '_' + df_attr_all['attribute'].values

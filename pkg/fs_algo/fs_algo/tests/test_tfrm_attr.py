@@ -9,6 +9,10 @@ Note that mysterious errors associated with dask.dataframe as dd
 arose when using classses for unittest.TestCase. Now using functions
 instead.
 
+Changelog / Contributions
+2024 Originally created, GL
+2025-09-30 add attr tform yaml parser testing, GL
+
 '''
 
 import pandas as pd
@@ -20,6 +24,11 @@ import unittest
 import dask.dataframe as dd
 import os
 from fs_algo.tfrm_attr import _id_need_tfrm_attrs, _gen_tform_df
+import tempfile
+import itertools
+from collections import ChainMap
+import yaml
+
 
 def test_read_df_ext_csv():
     mock_csv = "col1,col2\n1,2\n3,4"
@@ -108,50 +117,6 @@ class TestSubsetDDFParquetByComid(unittest.TestCase):
         mock_rglob.assert_called_once_with("*67890*")
         mock_read_parquet.assert_not_called()
 
-
-# class TestSubTformAttrDDF(unittest.TestCase):
-    
-#     def setUp(self):
-#         # Set up a sample Dask DataFrame for testing
-#         data = {
-#             'attribute': ['attr1', 'attr2', 'attr3', 'attr1', 'attr2', 'attr3'],
-#             'value': [10, 20, 30, 40, 50, 60]
-#         }
-#         pdf = pd.DataFrame(data)
-#         self.all_attr_ddf = dd.from_pandas(pdf, npartitions=2)  # Create a Dask DataFrame
-
-#     def test_sub_tform_attr_ddf_sum(self):
-#         # Test the function using a sum aggregation
-#         retr_vars = ['attr1', 'attr2']
-#         result = fta._sub_tform_attr_ddf(self.all_attr_ddf, retr_vars, func=sum)
-        
-#         # Expected result for sum of attr1 and attr2 values
-#         expected_result = 10 + 40 + 20 + 50
-#         self.assertEqual(result, expected_result)
-
-#     def test_sub_tform_attr_ddf_mean(self):
-#         # Test the function using a mean aggregation
-#         retr_vars = ['attr1', 'attr3']
-#         result = fta._sub_tform_attr_ddf(self.all_attr_ddf, retr_vars, func=pd.Series.mean)
-        
-#         # Expected mean result for attr1 and attr3 values
-#         expected_result = (10 + 40 + 30 + 60) / 4
-#         self.assertAlmostEqual(result, expected_result, places=5)
-
-#     def test_sub_tform_attr_ddf_no_matching_attribute(self):
-#         # Test with no matching attributes
-#         retr_vars = ['attr4']
-#         result = fta._sub_tform_attr_ddf(self.all_attr_ddf, retr_vars, func=sum)
-        
-#         # Expect 0 or NaN when no matching attributes are found
-#         self.assertEqual(result, 0.0)  # Modify if desired behavior is different (e.g., NaN)
-
-#     @patch("dask.dd.DataFrame.map_partitions")
-#     def test_sub_tform_attr_ddf_function_called(self, mock_map_partitions):
-#         # Ensure that map_partitions is called with the correct function
-#         retr_vars = ['attr1']
-#         fta._sub_tform_attr_ddf(self.all_attr_ddf, retr_vars, func=sum)
-#         mock_map_partitions.assert_called_once()
 #%% 
 # NOTE: Struggled to get this test running when inside a class 
 def test_gentformdf():
@@ -265,12 +230,29 @@ def test_multiple_featureIDs():
     else:
         raise AssertionError("Expected ValueError to be raised")
 
+
+def test_read_tfrm_config_parses_yaml_correctly():
+    """Test that TransformConfigParser._read_tfrm_config correctly parses the YAML file."""
+    path_tfrm_test = Path(__file__).parent / "test_data" / "test_xssatf_attrs_tform.yaml"
+
+    # --- Instantiate the parser and call _read_tfrm_config ---
+    parser = fta.TransformConfigParser(path_tfrm_test)
+    parser._read_tfrm_config()
+
+    # --- Assertions: check internal attributes ---
+    assert isinstance(parser.tfrm_cfg, list), "tfrm_cfg should be a list after parsing"
+    assert 'transform_attrs' in parser.tfrm_cfg_attrs.keys()
+    assert 'Fake_cly_pc_uav_sav_{tform_type}' in parser.tfrm_cfg_attrs['transform_attrs'][0].keys()
+    assert parser.fio['overwrite_tfrm'] is False
+    assert parser.fio['name_attr_config'] == 'xssatf_attr_config.yaml'
+    assert len(parser.tfrm_cfg) == 2
+    assert parser.overwrite_tfrm is True, "overwrite_tfrm attribute should be set correctly"
+
 def run_tests():
     try:
         run_tests_std_attrs()
     except:
         print("Some problems in std_attrs testing")
-
     try:
         test_gentformdf()
     except:
@@ -281,7 +263,9 @@ def run_tests():
     test_case_with_custom_funcs_only()
     test_no_custom_vars_or_funcs()
     test_multiple_featureIDs()
-    print("All Tests Passed if it made it this far")
+    test_read_tfrm_config_parses_yaml_correctly()
+    print("All test_tfrm_attr.py tests passed if it made it this far")
+
 if __name__ == "__main__":
     unittest.main(argv=[''],exit=False)
     run_tests()
