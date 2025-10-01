@@ -248,6 +248,13 @@ def test_read_tfrm_config_parses_yaml_correctly():
     assert len(parser.tfrm_cfg) == 2
     assert parser.overwrite_tfrm is True, "overwrite_tfrm attribute should be set correctly"
 
+def test_read_tfrm_bad():
+    path_tfrm_test = Path(__file__).parent / "test_data" / "test_xssatf_attrs_tform_bad.yaml"
+    parser_bad = fta.TransformConfigParser(path_tfrm_test)
+
+    with unittest.TestCase().assertRaises(ValueError):
+        parser_bad._read_tfrm_config()
+
 def run_tests():
     try:
         run_tests_std_attrs()
@@ -264,6 +271,7 @@ def run_tests():
     test_no_custom_vars_or_funcs()
     test_multiple_featureIDs()
     test_read_tfrm_config_parses_yaml_correctly()
+    test_read_tfrm_bad()
     print("All test_tfrm_attr.py tests passed if it made it this far")
 
 if __name__ == "__main__":
