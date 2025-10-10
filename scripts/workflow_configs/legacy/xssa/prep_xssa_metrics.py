@@ -34,7 +34,7 @@ if __name__ == "__main__":
     home_dir = Path("~/").expanduser()
     dir_save = [x for x in config['file_io'] if 'dir_save' in x.keys()][0]['dir_save'].format(home_dir = home_dir)
 
-    # Gnerate path to the log file & initialize logging
+    # Generate path to the log file & initialize logging
     path_log = pem.std_path_log(dir_input=dir_save, path_config=path_config,
                             script='prep_xssa_metrics')
     logging.basicConfig(level=logging.INFO, filename=path_log, format='%(asctime)s - %(levelname)s - %(message)s')
