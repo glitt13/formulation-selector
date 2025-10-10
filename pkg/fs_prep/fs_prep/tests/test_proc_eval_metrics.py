@@ -45,6 +45,12 @@ with open(schema_dir_test, 'r') as file:
 
 # Reads the testing config dataframe
 exp_config_df = pd.read_csv(Path(parent_dir_test,"test_config_df.csv"), index_col=None)
+home_dir = "~"
+# Transform the home_dir to user dir
+for col in exp_config_df.columns:
+    val = exp_config_df[col].iloc[0]
+    if 'home_dir' in str(val):
+        exp_config_df.loc[0,col] = str(Path(val.format(home_dir=home_dir)).expanduser())
 
 # Load the user-specific metrics dataset from the testing data
 test_df = pd.read_csv(Path(parent_dir_test,"user_metric_data.csv"))

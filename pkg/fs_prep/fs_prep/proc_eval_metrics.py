@@ -93,6 +93,7 @@ def _read_std_config():
         std_config = yaml.safe_load(f)
     return std_config
 
+
 def _conv_ls_dicts_df_long(config: dict):
     """Convert the YAML configuration into a long-format pandas DataFrame.
 
@@ -212,7 +213,7 @@ def read_schm_ls_of_dict(schema_path: str | os.PathLike) -> pd.DataFrame:
     """
     # Changelog/contributions
     #   2024-07-02 Originally created, GL
-
+    #.  2025-10-10 add home_dir handling, GL
     # Load the YAML configuration file
     with open(schema_path, 'r') as file:
         config = yaml.safe_load(file)
@@ -220,11 +221,19 @@ def read_schm_ls_of_dict(schema_path: str | os.PathLike) -> pd.DataFrame:
     # Run check on expected config formats
     _proc_check_input_config(config)
 
+    # Check for home_dir inside file_io & assign '~' if not present
+    home_dir = next((d['home_dir'] for d in config.get('file_io') if 'home_dir' in d), '~')
+    
     # Convert dict of lists into pd.DataFrame
     ls_form = list()
     for k, vv in config.items():
-
         for v in vv:
+            if k == 'file_io':
+                for key, value in v.items():
+                    new_path = value.format(home_dir=home_dir)
+                    if home_dir in new_path:
+                        new_path = str(Path(new_path).expanduser())
+                    v[key] = new_path
             ls_form.append(pd.DataFrame(v, index = [0]))
     df_all = pd.concat(ls_form, axis=1)
 
