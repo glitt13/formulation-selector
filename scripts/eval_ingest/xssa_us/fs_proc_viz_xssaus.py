@@ -2,7 +2,8 @@ import argparse
 import yaml
 import pandas as pd
 from pathlib import Path
-import fs_algo.fs_algo_train_eval as fsate
+import fs_algo.utils as fsutil
+import fs_algo.plots as fsplot
 import ast
 import numpy as np
 import geopandas as gpd
@@ -18,6 +19,7 @@ python fs_proc_viz_xssaus.py "~/git/formulation-selector/scripts/eval_ingest/xss
 
 Changelog/Contributions
 2025-04-07 Originally created, GL
+2025-10-10 refactor to renamed fs_algo modules, GL
 """
 
 if __name__ == "__main__":
@@ -27,15 +29,15 @@ if __name__ == "__main__":
 
     home_dir = Path.home()
     path_pred_config = Path(args.path_pred_config) # path_pred_config=Path(f"{home_dir}/git/formulation-selector/scripts/eval_ingest/xssa_us/xssaus_pred_config.yaml")
-    pred_cfg = fsate.PredConfigParser(path_pred_config)
+    pred_cfg = fsutil.PredConfigParser(path_pred_config)
     pred_cfg._read_pred_config()
 
     response_vars = pred_cfg.pred_cfg_dict.get('algo_response_vars')
 
     #%%  READ CONTENTS FROM THE ATTRIBUTE CONFIG
-    path_attr_config = fsate.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_attr_config',None))
+    path_attr_config = fsutil.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_attr_config',None))
 
-    attr_cfig = fsate.AttrConfigAndVars(path_attr_config)
+    attr_cfig = fsutil.AttrConfigAndVars(path_attr_config)
     attr_cfig._read_attr_config()
 
     dir_base = attr_cfig.attrs_cfg_dict.get('dir_base')
@@ -44,14 +46,14 @@ if __name__ == "__main__":
     datasets = attr_cfig.attrs_cfg_dict.get('datasets') # Identify datasets of interest
 
     #%%  Generate standardized output directories
-    dirs_std_dict = fsate.fs_save_algo_dir_struct(dir_base)
+    dirs_std_dict = fsutil.fs_save_algo_dir_struct(dir_base)
     dir_out = dirs_std_dict.get('dir_out')
     dir_out_alg_base = dirs_std_dict.get('dir_out_alg_base')
     dir_out_anlys_base = dirs_std_dict.get('dir_out_anlys_base')
     dir_out_viz_base = dirs_std_dict.get('dir_out_viz_base')
 
     #%%  Generate standardized output directories
-    dirs_std_dict = fsate.fs_save_algo_dir_struct(dir_base)
+    dirs_std_dict = fsutil.fs_save_algo_dir_struct(dir_base)
     dir_out = dirs_std_dict.get('dir_out')
     dir_out_alg_base = dirs_std_dict.get('dir_out_alg_base')
     dir_out_anlys_base = dirs_std_dict.get('dir_out_anlys_base')
@@ -60,8 +62,8 @@ if __name__ == "__main__":
 
     for ds in datasets:
         # Read in the geospatial data corresponding to training/prediction locations:
-        path_fs_proc = fsate._std_fs_prep_ds_paths(dir_std_base, ds =ds, mtch_str='*.nc')
-        path_gpkg = fsate._std_fs_prep_ds_companion_gpkg_path(path_fs_proc[0])
+        path_fs_proc = fsutil._std_fs_prep_ds_paths(dir_std_base, ds =ds, mtch_str='*.nc')
+        path_gpkg = fsutil._std_fs_prep_ds_companion_gpkg_path(path_fs_proc[0])
         gdf = gpd.read_file(path_gpkg)
 
         # Read in the predicted data
@@ -76,7 +78,7 @@ if __name__ == "__main__":
                 gdf_all = gpd.GeoDataFrame(gdf_all, geometry = 'geometry')
 
                 # Generate map of predicted sensitivity values
-                fsate.plot_map_pred_wrap(test_gdf=gdf_all,dir_out_viz_base=dir_out_viz_base, ds=ds,
+                fsplot.plot_map_pred_wrap(test_gdf=gdf_all,dir_out_viz_base=dir_out_viz_base, ds=ds,
                       metr=resp_var,algo_str=df_resp['algo'].iloc[0],
                       split_type='HUC08',
                       colname_data='prediction')

@@ -8,23 +8,21 @@
 
 Changelog/contributions
     2024-11-22 Originally created, LB
+    2025-10-10 refactor to renamed fs_algo modules, GL
 '''
 import geopandas as gpd
 import os
 import pandas as pd
 from shapely.geometry import Point
 import matplotlib.pyplot as plt
-import matplotlib
-import seaborn as sns
 from sklearn.metrics import r2_score
 from sklearn.metrics import root_mean_squared_error
 import yaml
 from pathlib import Path
 import argparse
-import fs_algo.fs_algo_train_eval as fsate
+import fs_algo.utils as fsutil
+import fs_algo.plots as fsplot
 import xarray as xr
-import urllib.request
-import zipfile
 import pkg_resources
 
 
@@ -56,15 +54,15 @@ if __name__ == "__main__":
     print('')
 
     # Get features from the pred config file --------------------------
-    path_pred_config = fsate.build_cfig_path(path_viz_config,viz_cfg.get('name_pred_config',None)) # currently, this gives the pred config path, not the attr config path
-    pred_cfg = fsate.PredConfigParser(path_pred_config)
+    path_pred_config = fsutil.build_cfig_path(path_viz_config,viz_cfg.get('name_pred_config',None)) # currently, this gives the pred config path, not the attr config path
+    pred_cfg = fsutil.PredConfigParser(path_pred_config)
     pred_cfg._read_pred_config()
-    path_attr_config = fsate.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_attr_config',None)) 
+    path_attr_config = fsutil.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_attr_config',None)) 
     ds_type = pred_cfg.pred_cfg_dict.get('ds_type')
     write_type = pred_cfg.pred_cfg_dict.get('write_type')
 
     # Get features from the attr config file --------------------------
-    attr_cfg = fsate.AttrConfigAndVars(path_attr_config)
+    attr_cfg = fsutil.AttrConfigAndVars(path_attr_config)
     attr_cfg._read_attr_config()
     datasets = attr_cfg.attrs_cfg_dict.get('datasets')
     dir_base = attr_cfg.attrs_cfg_dict.get('dir_base')  
@@ -83,7 +81,7 @@ if __name__ == "__main__":
     else:
         prefix = prefix_viz
 
-    path_main_config = fsate.build_cfig_path(path_viz_config,f'{prefix_viz}_config.yaml')
+    path_main_config = fsutil.build_cfig_path(path_viz_config,f'{prefix_viz}_config.yaml')
     with open(path_main_config, 'r') as file:
         main_cfg = yaml.safe_load(file)
 
@@ -101,7 +99,7 @@ if __name__ == "__main__":
     path_meta_pred = pred_cfg.pred_cfg_dict.get('path_meta')
 
     # Location for accessing existing outputs and saving plots
-    dir_out = fsate.fs_save_algo_dir_struct(dir_base).get('dir_out')
+    dir_out = fsutil.fs_save_algo_dir_struct(dir_base).get('dir_out')
     dir_out_viz_base = Path(dir_out/Path("data_visualizations"))
 
     # Enforce style
@@ -111,7 +109,7 @@ if __name__ == "__main__":
     # Loop through all datasets
     for ds in datasets:
         # path_meta_pred = f'{path_meta_pred}'.format(ds = ds, dir_std_base = dir_std_base, ds_type = ds_type, write_type = write_type)
-        path_meta_pred = fsate.build_pred_locs_path(path_meta_template=path_meta_pred, dir_std_base=dir_std_base, 
+        path_meta_pred = fsutil.build_pred_locs_path(path_meta_template=path_meta_pred, dir_std_base=dir_std_base, 
                                                     ds=ds,ds_type=ds_type, write_type=write_type)
         meta_pred = pd.read_parquet(path_meta_pred)
 
@@ -120,7 +118,7 @@ if __name__ == "__main__":
             # Loop through all metrics
             for metric in metrics:
                 # Pull the predictions
-                path_pred = fsate.std_pred_path(dir_out,algo=algo,metric=metric,dataset_id=ds)
+                path_pred = fsutil.std_pred_path(dir_out,algo=algo,metric=metric,dataset_id=ds)
                 pred = pd.read_parquet(path_pred)
                 data = pd.merge(meta_pred, pred, how = 'inner', on = 'comid')
                 Path(f'{dir_out}/data_visualizations').mkdir(parents=True, exist_ok=True)
@@ -129,7 +127,7 @@ if __name__ == "__main__":
 
                 # Does the user want a scatter plot comparing the observed module performance and the predicted module performance by RaFTS?
                 if 'pred_map' in true_keys:
-                    states = fsate.gen_conus_basemap(f'{dir_out}/data_visualizations/')
+                    states = fsplot.gen_conus_basemap(f'{dir_out}/data_visualizations/')
 
                     # Plot performance on map
                     lat = data['Y']
@@ -139,12 +137,12 @@ if __name__ == "__main__":
                     geo_df['performance'] = data['prediction'].values
                     geo_df.crs = ("EPSG:4326")
 
-                    fsate.plot_map_pred(geo_df=geo_df, states=states, 
+                    fsplot.plot_map_pred(geo_df=geo_df, states=states, 
                                         title=f'RaFTS Predicted Performance Map: {ds}', 
                                         metr=metric, colname_data='performance')
 
                     # Save the plot as a .png file
-                    output_path = fsate.std_map_pred_path(dir_out_viz_base=dir_out_viz_base,
+                    output_path = fsplot.std_map_pred_path(dir_out_viz_base=dir_out_viz_base,
                                                           ds=ds, metr=metric, algo_str=algo,
                                                           split_type='prediction')
                     plt.savefig(output_path, dpi=300, bbox_inches='tight')
@@ -162,7 +160,7 @@ if __name__ == "__main__":
                     path_obs_perf = f'{dir_std_base}/{ds}/{ds}_{formulation_id}.{save_type_obs}'
                     obs = xr.open_dataset(path_obs_perf, engine=engine)
                     # NOTE: Below is one option, but it assumes there is only one possible .nc or .zarr file to read in (it only reads the first one it finds with that file extension)
-                    # obs = fsate._open_response_data_fs(dir_std_base=dir_std_base, ds=ds)
+                    # obs = fsutil._open_response_data_fs(dir_std_base=dir_std_base, ds=ds)
                     obs = obs.to_dataframe()
 
                     # Standardize column names
@@ -179,11 +177,11 @@ if __name__ == "__main__":
                     data = pd.merge(data, obs, how = 'inner', on = 'identifier')
 
                     # Plot the observed vs. predicted module performance
-                    fsate.plot_pred_vs_obs_regr(y_pred=data['prediction'], y_obs=data[metric], 
+                    fsplot.plot_pred_vs_obs_regr(y_pred=data['prediction'], y_obs=data[metric], 
                                                 ds = ds, metr=metric)
 
                     # Save the plot as a .png file
-                    output_path = fsate.std_regr_pred_obs_path(dir_out_viz_base=dir_out_viz_base,
+                    output_path = fsplot.std_regr_pred_obs_path(dir_out_viz_base=dir_out_viz_base,
                                                                ds=ds, metr=metric, algo_str=algo,
                                                             split_type='prediction')
                     plt.savefig(output_path, dpi=300, bbox_inches='tight')

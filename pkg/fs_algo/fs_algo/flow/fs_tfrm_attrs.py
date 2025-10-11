@@ -19,19 +19,18 @@ Changelog/contributions
 2024 originally created, GL
 2025-05-20 refactor: address oconus compatibility, GL
 2025-08-21 add logging, GL
+2025-10-10 refactor to renamed fs_algo modules, GL
 """
 
 import argparse
-import yaml
+
 import pandas as pd
 from pathlib import Path
-import fs_algo.fs_algo_train_eval as fsate
+import fs_algo.utils as fsutil
 import fs_algo.tfrm_attr as fta
-import itertools
-from collections import ChainMap
+
 import subprocess
 import numpy as np
-import os
 import re
 from operator import is_not
 from functools import partial
@@ -62,8 +61,8 @@ if __name__ == "__main__":
     overwrite_tfrm = fio.get('overwrite_tfrm',False)
 
     # Extract desired content from attribute config file
-    path_attr_config=fsate.build_cfig_path(path_tfrm_cfig, Path(fio.get('name_attr_config')))
-    attr_cfig = fsate.AttrConfigAndVars(path_attr_config) 
+    path_attr_config=fsutil.build_cfig_path(path_tfrm_cfig, Path(fio.get('name_attr_config')))
+    attr_cfig = fsutil.AttrConfigAndVars(path_attr_config) 
     attr_cfig._read_attr_config()
 
     # Define all directory paths in case used in f-string evaluation
@@ -135,7 +134,7 @@ if __name__ == "__main__":
     ls_comids_attrs = list()
     if  name_attr_config: 
         # Attribute metadata containing a comid column as standard format 
-        path_attr_config = fsate.build_cfig_path(path_tfrm_cfig, name_attr_config)
+        path_attr_config = fsutil.build_cfig_path(path_tfrm_cfig, name_attr_config)
         try:
             ls_comids_attrs = fta._get_comids_std_attrs(path_attr_config)
         except:
@@ -157,7 +156,7 @@ if __name__ == "__main__":
     
     logging.info("DEBUG: COMIDS ")
     # Read in available comid data of interest (all comids + attributes)
-    df_attr_all = fsate.fs_read_attr_comid(dir_db_attrs=dir_db_attrs,
+    df_attr_all = fsutil.fs_read_attr_comid(dir_db_attrs=dir_db_attrs,
                                               comids_resp=comids,
                                               attrs_sel=all_retr_vars,_s3=None,
                                                storage_options=None,

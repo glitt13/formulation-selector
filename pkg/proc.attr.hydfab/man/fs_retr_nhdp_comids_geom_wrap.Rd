@@ -40,5 +40,5 @@ geopackage file
 
 \link[proc.attr.hydfab]{fs_retr_nhdp_comids_geom}
 
-\code{fs_algo.fs_algo_train_eval.fs_retr_nhdp_comids_geom_wrap}
+\code{fs_algo.utils.fs_retr_nhdp_comids_geom_wrap}
 }

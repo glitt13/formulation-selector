@@ -746,10 +746,10 @@ std_path_retr_gpkg <- function(path_fs_prep){
   #' @title Create the standardized gpkg path for coordinate data & id mapping
   #'. corresponding to the standardized input data
   #' @details The python companion function is
-  #'. `fs_algo.fs_algo_train_eval._std_fs_prep_ds_companion_gpkg_path`
+  #'. `fs_algo.utils._std_fs_prep_ds_companion_gpkg_path`
   #' @param path_fs_prep Path used for the standardized dataset created using
   #' [`fs_prep.proc_eval_metrics.proc_col_schema`]
-  #' @seealso `fs_algo.fs_algo_train_eval._std_fs_prep_ds_companion_gpkg_path`
+  #' @seealso `fs_algo.utils._std_fs_prep_ds_companion_gpkg_path`
   #' @seealso  \link[proc.attr.hydfab]{read_fs_retr_gpkg}
   #' @seealso \link[proc.attr.hydfab]{std_dir_dataset}
   #' @export
@@ -834,7 +834,7 @@ fs_retr_nhdp_comids_geom_wrap <- function(path_save_gpkg,
   #' @param epsg The EPSG code to use for the CRS; nhdplus default is 4326
   #' @seealso \link[proc.attr.hydfab]{proc_attr_read_gage_ids_fs}
   #' @seealso \link[proc.attr.hydfab]{fs_retr_nhdp_comids_geom}
-  #' @seealso `fs_algo.fs_algo_train_eval.fs_retr_nhdp_comids_geom_wrap`
+  #' @seealso `fs_algo.utils.fs_retr_nhdp_comids_geom_wrap`
   #' @export
 
   # Changelog/Contributions
@@ -929,7 +929,7 @@ fs_retr_nhdp_comids_geom <- function(gage_ids,featureSource='nwissite',
   #' @param epsg The EPSG code to use for the CRS; nhdplus defaults 4326
   #' @seealso \link[proc.attr.hydfab]{proc_attr_read_gage_ids_fs}
   #' @seealso \link[proc.attr.hydfab]{fs_retr_nhdp_comids_geom_wrap}
-  #' @seealso `fs_algo.fs_algo_train_eval.fs_retr_nhdp_comids_geom`
+  #' @seealso `fs_algo.utils.fs_retr_nhdp_comids_geom`
   #' @return data.table of comid and geometric point in epsg 4326
   #' @export
   # Changelog/Contributions
@@ -1316,7 +1316,7 @@ std_path_attrs <- function(comid, dir_db_attrs){
   #' @param comid character. USGS COMID/hf_uid/etc. value of interest
   #' @param dir_db_attrs character. Directory where attribute .parquet files live
   #' @seealso \link[proc.attr.hydfab]{proc_attr_wrap}
-  #' @seealso `fs_algo.fs_algo_train_eval.fs_read_attr_comid()` python function
+  #' @seealso `fs_algo.utils.fs_read_attr_comid()` python function
   #' that reads these files
   #' @export
 
@@ -1392,7 +1392,7 @@ io_attr_dat <- function(dt_new_dat,path_attrs,
                     level = "WARN")
     warning(character_msg)
   } else {
-    # Enforcing float64 needed for fs_algo.fs_algo_train_eval.fs_read_attr_comid
+    # Enforcing float64 needed for fs_algo.utils.fs_read_attr_comid
     dt_cmbo$value <- base::as.double(dt_cmbo$value)
   }
 
