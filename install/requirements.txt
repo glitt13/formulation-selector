@@ -19,5 +19,7 @@ seaborn
 shapely
 wheel
 xarray
+sphinx # optional, for documentation
+pydata-sphinx-theme # optional, for documentation
 -e ../pkg/fs_prep
 -e ../pkg/fs_algo
