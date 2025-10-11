@@ -16,18 +16,20 @@ Refer to the example config file, e.g.
 
 Usage:
 python fs_tfrm_attrs.py "/path/to/tfrm_config.yaml"
+
+Changelog / Contributions
+2025-10-10 refactor to renamed fs_algo modules, GL
 """
 
 import argparse
 import yaml
 import pandas as pd
 from pathlib import Path
-import fs_algo.fs_algo_train_eval as fsate
+import fs_algo.utils as fsutil
 import fs_algo.tfrm_attr as fta
 import itertools
 from collections import ChainMap
 import subprocess
-import numpy as np
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = 'process the algorithm config file')
@@ -50,8 +52,8 @@ if __name__ == "__main__":
     overwrite_tfrm = fio.get('overwrite_tfrm',False)
 
     # Extract desired content from attribute config file
-    path_attr_config=fsate.build_cfig_path(path_tfrm_cfig, Path(fio.get('name_attr_config')))
-    attr_cfig = fsate.AttrConfigAndVars(path_attr_config) 
+    path_attr_config=fsutil.build_cfig_path(path_tfrm_cfig, Path(fio.get('name_attr_config')))
+    attr_cfig = fsutil.AttrConfigAndVars(path_attr_config) 
     attr_cfig._read_attr_config()
 
     # Define all directory paths in case used in f-string evaluation
@@ -84,7 +86,7 @@ if __name__ == "__main__":
     ls_comids_attrs = list()
     if  name_attr_config: 
         # Attribute metadata containing a comid column as standard format 
-        path_attr_config = fsate.build_cfig_path(path_tfrm_cfig, name_attr_config)
+        path_attr_config = fsutil.build_cfig_path(path_tfrm_cfig, name_attr_config)
         try:
             ls_comids_attrs = fta._get_comids_std_attrs(path_attr_config)
         except:
@@ -145,7 +147,7 @@ if __name__ == "__main__":
 
 
             # Retrieve the variables of interest for the function
-            df_attr_sub = fsate.fs_read_attr_comid(dir_db_attrs, comids_resp=[str(comid)], attrs_sel=attrs_retr_sub,
+            df_attr_sub = fsutil.fs_read_attr_comid(dir_db_attrs, comids_resp=[str(comid)], attrs_sel=attrs_retr_sub,
                             _s3 = None,storage_options=None,read_type='filename')
 
             # Check if needed attribute data all exist. If not, write to 
@@ -170,7 +172,7 @@ if __name__ == "__main__":
                         print(f"Could not run the Rscript {path_fs_attrs_miss}." +
                               "\nEnsure proc.attr.hydfab R package installed and appropriate path to fs_attrs_miss.R")
                     # Re-run the attribute retrieval in case new ones now available
-                    fsate.fs_read_attr_comid(dir_db_attrs, comids_resp=[str(comid)], attrs_sel=attrs_retr_sub,
+                    fsutil.fs_read_attr_comid(dir_db_attrs, comids_resp=[str(comid)], attrs_sel=attrs_retr_sub,
                                 _s3 = None,storage_options=None,read_type='filename')
                 continue
 

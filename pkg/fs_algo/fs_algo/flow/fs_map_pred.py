@@ -6,11 +6,13 @@ Example:
 
 # Changelog/contributions
     2025-08-21 added logging, GL
+    2025-10-10 refactor to renamed fs_algo modules, GL
 """
 import argparse
 import pandas as pd
 from pathlib import Path
-import fs_algo.fs_algo_train_eval as fsate
+import fs_algo.utils as fsutil
+import fs_algo.plots as fsplot
 import geopandas as gpd
 import logging
 from logging.handlers import MemoryHandler
@@ -37,7 +39,7 @@ if __name__ == "__main__":
     # ---
     analysis_str = args.analysis_str
 
-    pred_cfg = fsate.PredConfigParser(path_pred_config)
+    pred_cfg = fsutil.PredConfigParser(path_pred_config)
     pred_cfg._read_pred_config()
     
     #%% PREDICTION FILE'S COMIDS (IMPLICIT ASSUMPTION: Each dataset processes the same IDS)
@@ -52,11 +54,11 @@ if __name__ == "__main__":
 
     path_meta_pred = pred_cfg.pred_cfg_dict.get('path_meta')
     #%%  READ CONTENTS FROM THE ATTRIBUTE CONFIG
-    path_attr_config = fsate.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_attr_config',None))
-    path_algo_config = fsate.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_algo_config'))
+    path_attr_config = fsutil.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_attr_config',None))
+    path_algo_config = fsutil.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_algo_config'))
 
     # Initialize algo configuration class for extracting attributes
-    algo_cfig = fsate.AlgoConfigParser(path_algo_config)
+    algo_cfig = fsutil.AlgoConfigParser(path_algo_config)
     algo_cfig._read_algo_config()
 
     # Extract variables from dictionary created by AlgoConfigParser
@@ -67,7 +69,7 @@ if __name__ == "__main__":
 
     metrics = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["metrics"]
 
-    attr_cfig = fsate.AttrConfigAndVars(path_attr_config)
+    attr_cfig = fsutil.AttrConfigAndVars(path_attr_config)
     attr_cfig._read_attr_config()
 
     dir_base = attr_cfig.attrs_cfg_dict.get('dir_base')
@@ -75,7 +77,7 @@ if __name__ == "__main__":
     dir_db_attrs = attr_cfig.attrs_cfg_dict.get('dir_db_attrs')
     datasets = attr_cfig.attrs_cfg_dict.get('datasets') # Identify datasets of interest
 
-    dirs_std_dict = fsate.fs_save_algo_dir_struct(dir_base)
+    dirs_std_dict = fsutil.fs_save_algo_dir_struct(dir_base)
     dir_out_viz_base = dirs_std_dict.get('dir_out_viz_base')
     dirs_std_dict.get('dir_out')
     dir_out = dirs_std_dict.get('dir_out')
@@ -102,13 +104,13 @@ if __name__ == "__main__":
     root_logger.removeHandler(memory_handler) # Remove the pre-file logger
     # -------------------------------------------------------------------------
     for ds in datasets: 
-        path_pred_locs = fsate.build_pred_locs_path(path_meta_template=path_meta_pred, dir_std_base=dir_std_base, 
+        path_pred_locs = fsutil.build_pred_locs_path(path_meta_template=path_meta_pred, dir_std_base=dir_std_base, 
                                                     ds=ds,ds_type=ds_type, write_type=write_type)
-        comids_pred = fsate._read_pred_comid(path_pred_locs, comid_pred_col )
+        comids_pred = fsutil._read_pred_comid(path_pred_locs, comid_pred_col )
        
 
-        path_fs_dat_resp =  fsate._std_fs_prep_ds_paths(dir_std_base=dir_std_base,ds=ds,mtch_str='*.nc')
-        path_gpkg_fs_prep = fsate._std_fs_prep_ds_companion_gpkg_path(path_fs_dat_resp[0])
+        path_fs_dat_resp =  fsutil._std_fs_prep_ds_paths(dir_std_base=dir_std_base,ds=ds,mtch_str='*.nc')
+        path_gpkg_fs_prep = fsutil._std_fs_prep_ds_companion_gpkg_path(path_fs_dat_resp[0])
         gdf_all = gpd.read_file(path_gpkg_fs_prep)
         gdf_all = gdf_all.rename(columns={'featureID':'featIDgpkg','featureSource':'featSrcegpkg'})
 
@@ -117,7 +119,7 @@ if __name__ == "__main__":
                 logging.info(f"Generating prediction map for dataset: {ds}\n"
                              f"Algorithm: {algo_str}\nResponse variable: {metr}")
                 # Read in the prediction file for each response variable
-                path_pred_in = fsate.std_pred_path(dir_out=dir_out,algo=algo_str,metric=metr,dataset_id=ds)
+                path_pred_in = fsutil.std_pred_path(dir_out=dir_out,algo=algo_str,metric=metr,dataset_id=ds)
         
                 df_pred = pd.read_parquet(path_pred_in)
 
@@ -125,7 +127,7 @@ if __name__ == "__main__":
 
                 #gdf_pred = gdf_pred.dropna(subset='gage_id')
                 #%% PREDICT                 
-                fsate.plot_map_pred_wrap(gdf_pred,
+                fsplot.plot_map_pred_wrap(gdf_pred,
                                 dir_out_viz_base, ds,
                                     metr,algo_str,
                                     split_type=analysis_str,

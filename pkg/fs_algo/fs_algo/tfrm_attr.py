@@ -1,8 +1,12 @@
-# Attribute Aggregation and Transformation
+"""Attribute Aggregation and Transformation
+
+Changelog/contributions
+2025-10-10 refactor to renamed fs_algo modules, GL
+"""
 import yaml
 import pandas as pd
 from pathlib import Path
-import fs_algo.fs_algo_train_eval as fsate
+import fs_algo.utils as fsutil
 from collections.abc import Iterable
 import subprocess
 from typing import Callable
@@ -36,16 +40,18 @@ class TransformConfigParser:
         # Read from transformation config file:
         catgs_attrs_sel = [x for x in list(itertools.chain(*self.tfrm_cfg)) if x is not None]
         idx_tfrm_attrs = catgs_attrs_sel.index('transform_attrs')
-        if len(idx_tfrm_attrs) == 0:
-            logging.error(f"Problem with parsing the attr tform config file. Index named 'transform_attrs' absent.")
-            raise ValueError(f"Badly formatted {self.tfrm_cfig}")
+        if not type(idx_tfrm_attrs) == int:
+            if len(idx_tfrm_attrs) == 0:
+                logging.error(f"Problem with parsing the attr tform config file. Index named 'transform_attrs' absent.")
+                raise ValueError(f"Badly formatted {self.tfrm_cfig}")
         #%% Parse aggregation/transformations in config file
         self.tfrm_cfg_attrs = self.tfrm_cfg[idx_tfrm_attrs]
         # dict of file input/output, read-only combined view
         idx_file_io = catgs_attrs_sel.index('file_io')
-        if len(idx_file_io) == 0:
-            logging.error(f"Problem with parsing the attr tform config file. Index named 'file_io' absent.")
-            raise ValueError(f"Badly formatted {self.tfrm_cfig}")
+        if not type(idx_file_io) == int:
+            if len(idx_file_io) == 0:
+                logging.error(f"Problem with parsing the attr tform config file. Index named 'file_io' absent.")
+                raise ValueError(f"Badly formatted {self.tfrm_cfig}")
         self.fio = dict(ChainMap(*self.tfrm_cfg[idx_file_io]['file_io'])) 
         self.overwrite_tfrm = self.fio.get('overwrite_tfrm',False)
 
@@ -98,7 +104,7 @@ def _get_comids_std_attrs(path_attr_config: str | os.PathLike,
     :rtype: list
     """
     # Initialize attribute configuration class for extracting attributes
-    attr_cfig = fsate.AttrConfigAndVars(path_attr_config)
+    attr_cfig = fsutil.AttrConfigAndVars(path_attr_config)
     attr_cfig._read_attr_config()
 
     fio_attr = dict(ChainMap(*attr_cfig.attr_config.get('file_io')))
@@ -200,7 +206,7 @@ def io_std_attrs(df_new_vars: pd.DataFrame,
             # Append new variables
             df_new_vars = pd.concat([df_exst_vars_tfrm,df_new_vars])
             # Remove duplicates, keeping the most-recent duplicated rows with ascending = False
-            df_new_vars = fsate._check_attr_rm_dupes(df_new_vars, ascending = False)
+            df_new_vars = fsutil._check_attr_rm_dupes(df_new_vars, ascending = False)
         else:
             logging.info("Writing %s", path_tfrm_comid)
         
@@ -458,7 +464,7 @@ def write_missing_attrs(attrs_retr_sub:list, dir_db_attrs: str | os.PathLike,
     path_need_attrs = std_path_miss_tfrm(dir_db_attrs)
 
     # All the available attributes for a given comid
-    df_all = fsate.fs_read_attr_comid(dir_db_attrs, comids_resp=[str(comid)], attrs_sel='all',
+    df_all = fsutil.fs_read_attr_comid(dir_db_attrs, comids_resp=[str(comid)], attrs_sel='all',
                 _s3 = None,storage_options=None,read_type='filename')
     if df_all.shape[0]>0:
         logging.info("Attribute data exist for comid %s but missing for %s", comid, ', '.join(attrs_retr_sub))
@@ -510,8 +516,8 @@ def tfrm_attr_comids_wrap(comids: Iterable, path_tfrm_cfig: str | os.PathLike):
    
     overwrite_tfrm = fio.get('overwrite_tfrm',False)
     # Extract desired content from attribute config file
-    path_attr_config=fsate.build_cfig_path(path_tfrm_cfig, Path(fio.get('name_attr_config')))
-    attr_cfig = fsate.AttrConfigAndVars(path_attr_config) 
+    path_attr_config=fsutil.build_cfig_path(path_tfrm_cfig, Path(fio.get('name_attr_config')))
+    attr_cfig = fsutil.AttrConfigAndVars(path_attr_config) 
     attr_cfig._read_attr_config()
     dir_db_attrs = attr_cfig.attrs_cfg_dict.get('dir_db_attrs')
     home_dir = attr_cfig.attrs_cfg_dict.get('home_dir',Path.home())
@@ -569,7 +575,7 @@ def tfrm_attr_comids_wrap(comids: Iterable, path_tfrm_cfig: str | os.PathLike):
 
             # Retrieve the variables of interest for the function
             try:
-                df_attr_sub = fsate.fs_read_attr_comid(dir_db_attrs, comids_resp=[str(comid)], attrs_sel=attrs_retr_sub,
+                df_attr_sub = fsutil.fs_read_attr_comid(dir_db_attrs, comids_resp=[str(comid)], attrs_sel=attrs_retr_sub,
                                 _s3 = None,storage_options=None,read_type='all') 
                 # NOTE read_type='filename' best when only retrieving one location at a time
             except:
@@ -596,7 +602,7 @@ def tfrm_attr_comids_wrap(comids: Iterable, path_tfrm_cfig: str | os.PathLike):
                     except:
                         logging.error("Could not run the Rscript %s. Ensure proc.attr.hydfab R package installed and appropriate path to fs_attrs_miss.R", path_fs_attrs_miss)
                     # Re-run the attribute retrieval in case new ones now available
-                    fsate.fs_read_attr_comid(dir_db_attrs, comids_resp=[str(comid)], attrs_sel=attrs_retr_sub,
+                    fsutil.fs_read_attr_comid(dir_db_attrs, comids_resp=[str(comid)], attrs_sel=attrs_retr_sub,
                                 _s3 = None,storage_options=None,read_type='filename')
                 continue
 

@@ -1,0 +1,810 @@
+# fs_algo_train.py
+
+from sklearn.model_selection import train_test_split, GridSearchCV,learning_curve
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.neural_network import MLPRegressor
+from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import make_pipeline, Pipeline
+from collections.abc import Iterable
+from pathlib import Path
+import pandas as pd
+import numpy as np
+import joblib
+import logging
+import matplotlib.pyplot as plt
+import random
+import scipy.stats as st
+import forestci as fci
+from sklearn.utils import resample
+from mapie.regression import MapieRegressor
+
+# Assuming utils.py and plots.py are in the same directory
+import fs_algo.utils as utils
+import fs_algo.plots as plots
+
+# Set up basic logging configuration
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+class AlgoTrainEval:
+    def __init__(self, df: pd.DataFrame, attrs: Iterable[str], algo_config: dict,
+                 uncertainty: dict,
+                 dir_out_alg_ds: str | Path, dataset_id: str,
+                 metr: str, test_size: float = 0.3,rs: int = 32,
+                 test_ids = None,test_id_col:str = 'comid',
+                 verbose: bool = False,
+                 confidence_levels: list[int] = [95],
+                 uncn_bnd_algo: bool = False, min_lim: float = None, max_lim: float = None
+                 ):
+        """The algorithm training and evaluation class.
+
+        :param df: The combined response variable and predictor variables DataFrame.
+        :type df: pd.DataFrame
+        :param attrs: The column names of attributes.
+        :type attrs: Iterable[str]
+        :param algo_config: The algorithm configuration as read from the algo_config yaml where each key is the algorithm that will be run. Presently allowable keys include:
+            - `rf`:  :class:`sklearn.ensemble.RandomForestRegressor` algorithm. Strongly recommended to include.
+            - `mlp`:  :class:`sklearn.neural_network.MLPRegressor` multilayer perceptron algorithm.
+            Each algorithm key contains sub-dict keys for the parameters that may be passed to the corresponding :mod:`sklearn` algorithm. 
+            If no parameters keys are passed, the :mod:`sklearn` algorithm's default arguments are used.
+        :type algo_config: dict
+        :param uncertainty: The uncertainty as read from the uncertainty yaml where each key is the uncertainty that will be run. Presently allowable keys include:
+            - `fci_flag`:  :dict:Forestci uncertainty. Only if 'rf' algorithm is selected.
+            - `bagging`:  :dict:Configuration dictionary for Bagging-based confidence interval uncertainty estimation. Works for both `rf` and `mlp` algorithms.
+            - `mapie`:  :dict:Configuration dictionary for MAPIE prediction interval estimation. Works for both `rf` and `mlp` algorithms.
+            Each method contains sub-dict keys for the parameters that may be passed to the corresponding method.
+        :type algo_config: dict
+        :param dir_out_alg_ds: Directory where algorithm's output stored.
+        :type dir_out_alg_ds: str | os.PathLike
+        :param dataset_id: Unique identifier/descriptor of the dataset of interest, and will be used in file writing.
+        :type dataset_id: str
+        :param metr: Column name in `df`. The metric or hydrologic signature identifier of interest, defaults to None.
+        :type metr: str, optional
+        :param test_size: Parameter for :func:`sklearn.model_selection.train_test_split`, represents proportion of dataset to include in the test split, defaults to 0.3.
+        :type test_size: float, optional
+        :param rs: The random seed, defaults to 32.
+        :type rs: int, optional
+        :param test_ids: The explicit comids of interest for testing. Defaults to None. If None, use the test_size instead for the train/test split 
+        :type test_ids: Iterable or None
+        :param test_id_col: The column name for comid, defaults to 'comid'
+        :type test_id_col: str
+        :param verbose: Should print, defaults to False.
+        :type verbose: bool, optional
+        :param: confidence_levels: confidence levels for ci calculation, defaults to 95
+        :type confidence_levels: int, optional
+        :param mapie_alpha: alpha for MAPIE, defaults to 0.05.
+        :type mapie_alpha: float, optional
+        :param uncn_bnd_algo: Flag to apply min/max bounds to predictions, defaults to False.
+        :type uncn_bnd_algo: bool, optional
+        :param min_lim: The minimum bound for the metric, defaults to None.
+        :type min_lim: float, optional
+        :param max_lim: The maximum bound for the metric, defaults to None.
+        :type max_lim: float, optional
+        """
+        # class args
+        self.df = df # NOTE: df MUST NEVER CHANGE!! df represents the original data, and is used as an index reference in the algo-train script (e.g. fs_proc_algo_viz.py)
+        self.attrs = attrs
+        self.algo_config = algo_config
+        self.uncertainty = uncertainty
+        self.dir_out_alg_ds = dir_out_alg_ds
+        self.metric = metr
+        self.test_size = test_size
+        self.test_ids = test_ids # No guarantee these remain in the appropriate order
+        self.test_id_col = test_id_col
+        self.rs = rs
+        self.dataset_id = dataset_id
+        self.verbose = verbose
+        self.confidence_levels = confidence_levels
+        self.uncn_bnd_algo = uncn_bnd_algo
+        self.min_lim = min_lim
+        self.max_lim = max_lim
+
+        # train/test split
+        self.X_train = pd.DataFrame()
+        self.X_test = pd.DataFrame()
+        self.y_train = pd.Series()
+        self.y_test = pd.Series()
+        
+        # grid search
+        self.algo_config_grid = dict()
+        self.grid_search_algs = list()
+
+        # train/pred/eval metadata
+        self.algs_dict = {}
+        self.preds_dict = {}
+        self.eval_dict = {}
+
+        # The evaluation summary result
+        self.eval_df = pd.DataFrame()
+
+    def split_data(self):
+        """Split dataframe into training and testing predictors (X) and response (y)
+          variables using :func:`sklearn.model_selection.train_test_split`
+
+        Changelog:
+        2024-12-02 Add in the explicitly provided comid option
+        """
+        # Check for NA values first
+        self.df_non_na = self.df[self.attrs + [self.metric]].dropna()
+        if self.df_non_na.shape[0] < self.df.shape[0]:
+            logging.warning(f"\
+                \n   !!!!!!!!!!!!!!!!!!!\
+                \n   NA VALUES FOUND IN INPUT DATASET!! \
+                \n   DROPPING {self.df.shape[0] - self.df_non_na.shape[0]} ROWS OF DATA. \
+                \n   !!!!!!!!!!!!!!!!!!!")
+                
+        if self.test_ids is not None:
+            # The Truth is in the indices: e.g. `self.df` shares the same indicise as `self.test_ids`` 
+            # Use the manually provided comids for testing, then the remaining data for training
+            logging.info("Using the custom test comids, and letting all remaining comids be used for training.")
+            df_sub_test = self.df.loc[self.test_ids.index]#self.df[self.df[self.test_id_col].isin(self.test_ids)].dropna(subset=self.attrs + [self.metric])
+            df_sub_train = self.df.loc[~self.df.index.isin(df_sub_test.index)]#self.df[~self.df[self.test_id_col].isin(self.test_ids)].dropna(subset=self.attrs + [self.metric])
+            # Assign class objects
+            self.y_test = df_sub_test[self.metric]
+            self.y_train = df_sub_train[self.metric]
+            self.X_test = df_sub_test[self.attrs]
+            self.X_train = df_sub_train[self.attrs]
+        else: # The standard train_test_split (Caution when processing multiple datasets, if total dims differ, then basin splits may differ)
+            if self.verbose:
+                logging.info(f"      Performing train/test split as {round(1-self.test_size,2)}/{self.test_size}")
+            X = self.df_non_na[self.attrs]
+            y = self.df_non_na[self.metric]
+            self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(X,y, test_size=self.test_size, random_state=self.rs)
+
+    def all_X_all_y(self):
+        """ Combine the train/test splits into a single dataframe/array. 
+            This method may be called after calling AlgoTrainEval.split_data() 
+            to concatenate the training and testing datasets into single DataFrames
+            for features (X) and response variable (y). 
+
+        :return: A tuple containing concatenated df for features (X) and response variable (y). 
+        :rtype: tuple(pandas.DataFrame, pandas.Series) 
+        """
+        # Combine the train/test splits into a single dataframe/array
+        # This may be called after calling AlgoTrainEval.split_data()
+        X = pd.concat([self.X_train,  self.X_test])
+        y = pd.concat([self.y_test, self.y_train])
+        return X, y
+
+    def convert_to_list(self,d:dict) ->dict:
+        """Runcheck: In situations where self.algo_config_grid is used, all objects must be iterables 
+
+        :param d: A dict containing sub-dicts with key-value pairs
+        :type d: dict
+        :return: The dict where any non-iterable values have been converted into a list
+        :rtype: dict
+        """
+        for key, value in d.items():
+            if isinstance(value, dict):
+                self.convert_to_list(value)
+            elif not isinstance(value, (list, tuple)):
+                d[key] = [value]
+        return(d)
+
+    def list_to_dict(self, config_ls):
+        """Convert to dict if a config object is inconveniently
+          formatted as a list of multiple dicts
+
+        :param config_ls: possibly a list of objects
+        :type config_ls: list
+        :return: dict of objects
+        :rtype: dict
+        """
+        # 
+        if isinstance(config_ls,list):
+            config_dict = {}
+            for d in config_ls:
+                config_dict.update(d)
+        else:
+            config_dict = config_ls
+        return config_dict
+    
+    def select_algs_grid_search(self):
+        """Determines which algorithms' params involve hyperparameter tuning
+            based on if multiple parameters designated for consideration
+        """
+        ls_move_to_srch_cfig = list()
+        for k, alg_ls in self.algo_config.items():
+            sub_dict = {k: alg_dict[k] for alg_dict in alg_ls for k in alg_dict.keys()}
+            totl_opts_per_param = list()
+            for kk, v in sub_dict.items():
+                if isinstance(v,Iterable) and len(v)>1:
+                    totl_opts_per_param.append(len(v))
+                else:
+                    totl_opts_per_param.append(1)
+            if any([x > 1 for x in totl_opts_per_param]):
+                if self.verbose:
+                    logging.info(f"Performing grid search CV for {k}")
+                self.grid_search_algs.append(k)
+                ls_move_to_srch_cfig.append(k)
+
+        # Move hyperparams from basic algo params into grid search params
+        for k in ls_move_to_srch_cfig:
+            self.algo_config_grid[k] = self.algo_config.pop(k)
+        
+        # Convert lists inside algo_config_grid['algo_name_here'] to a dict:
+        dict_acg = {}
+        for key, val in self.algo_config_grid.items():
+            dict_acg[key] = self.list_to_dict(val)
+        self.algo_config_grid = dict_acg
+
+        # Convert lists inside algo_config['algo_name_here'] to a dict:    
+        dict_ac = {}
+        for key, val in self.algo_config.items():
+            dict_ac[key] = self.list_to_dict(val)
+        self.algo_config = dict_ac
+
+        if self.algo_config_grid: # If there are non iterable values, convert them to lists to aid the algo training
+            # e.g. {'activation':'relu'} becomes {'activation':['relu']}
+            self.algo_config_grid  = self.convert_to_list(self.algo_config_grid)
+
+    def calculate_forestci_uncertainty(self, forest, X_train, X_test):
+        """
+        Calculate uncertainty using forestci for a Random Forest model.
+    
+        :param forest: Trained Random Forest model.
+        :type forest: RandomForestRegressor
+        :param X_train: Training data.
+        :type X_train: ndarray
+        :param X_test: Test data.
+        :type X_test: ndarray
+        :return: Confidence intervals for each prediction.
+        :rtype: ndarray
+        """
+        # Compute standard deviation of prediction errors
+
+        confidence_levels = self.confidence_levels
+        ci_std = np.sqrt(fci.random_forest_error(
+            forest=forest,
+            X_train_shape=X_train.shape,
+            X_test=np.array(X_test),
+            inbag=None, 
+            calibrate=True, 
+            memory_constrained=False, 
+            memory_limit=None, 
+            y_output=0  
+        ))        
+    
+        # Compute confidence intervals for each level
+        ci_dict = {}
+        for alpha in confidence_levels:
+            z_value = st.norm.ppf(1 - (1 - alpha/100) / 2)  # Get z-score for two-tailed CI
+            ci_lower = -z_value * ci_std
+            ci_upper = z_value * ci_std
+            ci_dict[f'ci_{int(alpha)}'] = {
+                "lower_bound": ci_lower,
+                "upper_bound": ci_upper
+            }
+    
+        return ci_dict
+
+    def calculate_bagging_ci(self, algo_str,best_algo):
+        """
+        Generalized function to calculate Bagging confidence intervals for any model.
+        """
+        # algo_cfg = self.algo_config[algo_str]
+        algo_cfg = self.algo_config.get(algo_str, self.algo_config_grid.get(algo_str))
+        if algo_cfg is None:
+            logging.error(f"Algorithm {algo_str} not found in configurations.")
+            raise KeyError(f"Algorithm {algo_str} not found in configurations.")
+
+        # n_algos = self.bagging_ci_params['n_algos']
+        n_algos = next(d['n_algos'] for d in self.uncertainty.get('bagging', []))
+        predictions = []
+        # Extract the model if it's inside a pipeline
+        if isinstance(best_algo, Pipeline):
+            # Try to find the model step
+            algo_step = None
+            for name, step in best_algo.named_steps.items():
+                if isinstance(step, (RandomForestRegressor, MLPRegressor)):  # Extend if more models are used
+                    algo_step = step
+                    break
+            if algo_step is None:
+                logging.error(f"Could not find '{algo_str}' in the pipeline steps.")
+                raise ValueError(f"Could not find '{algo_str}' in the pipeline steps.")
+        else:
+            algo_step = best_algo  # Direct model
+    
+        base_algo = algo_step  # Now we have the extracted model
+        
+        random.seed(self.rs)
+        random_states = [random.randint(1, 10000) for _ in range(n_algos)]
+    
+        for rand_state in random_states:
+            # Resample data with a fixed random state for reproducibility
+            X_train_resampled, y_train_resampled = resample(
+                self.X_train, self.y_train, random_state=rand_state
+            )
+    
+            # Create a new model with the same parameters but a different random_state
+            algo_tmp = type(base_algo)(**{**base_algo.get_params(), "random_state": rand_state})
+    
+            algo_tmp.fit(X_train_resampled, y_train_resampled)
+            predictions.append(algo_tmp.predict(self.X_test))        
+
+        predictions = np.array(predictions)
+        mean_pred = predictions.mean(axis=0)
+        std_pred = predictions.std(axis=0)
+        confidence_levels = self.confidence_levels 
+        confidence_intervals = {}
+
+        for cl in confidence_levels:
+            lower_bound, upper_bound = np.percentile(predictions, [(100 - cl) / 2, 100 - (100 - cl) / 2], axis=0)
+            confidence_intervals[f"confidence_level_{cl}"] = {
+                "lower_bound": lower_bound,
+                "upper_bound": upper_bound
+            }  
+
+        if 'Uncertainty' not in self.algs_dict[algo_str]:
+            self.algs_dict[algo_str]['Uncertainty'] = {}
+    
+        self.algs_dict[algo_str]['Uncertainty']['bagging_mean_pred'] = mean_pred
+        self.algs_dict[algo_str]['Uncertainty']['bagging_std_pred'] = std_pred
+        self.algs_dict[algo_str]['Uncertainty']['bagging_confidence_intervals'] = confidence_intervals
+    
+    def calculate_mapie(self):
+        """Generalized function to calculate prediction uncertainty using MAPIE."""
+        mapie_method = next((d['method'] for d in self.uncertainty.get('mapie', []) if 'method' in d), None)
+        mapie_cv = next((d['cv'] for d in self.uncertainty.get('mapie', []) if 'cv' in d), None)
+        mapie_agg_function = next((d['agg_function'] for d in self.uncertainty.get('mapie', []) if 'agg_function' in d), None)
+        try:
+            for algo_str, algo_data in self.algs_dict.items():
+                algo = algo_data['algo']
+                mapie = MapieRegressor(
+                    algo,
+                    method=mapie_method,
+                    cv=mapie_cv,
+                    agg_function=mapie_agg_function
+                )
+                mapie.fit(self.X_train, self.y_train)
+                self.algs_dict[algo_str]['mapie'] = mapie
+        except ValueError as e:
+            logging.error(f"Invalid MAPIE method '{mapie_method}'. Please choose either 'plus' or 'minmax'.")
+            raise ValueError(f"Invalid MAPIE method '{mapie_method}'. Please choose either 'plus' or 'minmax'.") from e
+            
+    def train_algos(self):
+        """Train algorithms based on what has been defined in the algo config file
+
+        .. note::
+            Algorithm options include the following:
+                - `rf` for :class:`sklearn.ensemble.RandomForestRegressor`
+                - `mlp` for :class:`sklearn.neural_network.MLPRegressor`
+        """
+        # Train algorithms based on config
+        if 'rf' in self.algo_config:  # RANDOM FOREST
+            if self.verbose:
+                logging.info(f"      Performing Random Forest Training")
+            
+            rf = RandomForestRegressor(n_estimators=self.algo_config['rf'].get('n_estimators',300),
+                                       max_depth = self.algo_config['rf'].get('max_depth', None),
+                                       min_samples_split=self.algo_config['rf'].get('min_samples_split',2),
+                                       min_samples_leaf=self.algo_config['rf'].get('min_samples_leaf',1),
+                                       oob_score=True,
+                                       random_state=self.rs,
+                                       )
+            pipe_rf = make_pipeline(rf)                       
+            pipe_rf.fit(self.X_train, self.y_train)
+            
+            # --- Compare predictions with confidence intervals ---
+            self.algs_dict['rf'] = {'algo': rf,
+                                    'pipeline': pipe_rf,
+                                    'type': 'random forest regressor',
+                                    'metric': self.metric,
+                                    'Uncertainty': {}
+                }
+        if 'mlp' in self.algo_config:  # MULTI-LAYER PERCEPTRON
+            if self.verbose:
+                logging.info(f"      Performing Multilayer Perceptron Training")
+            mlpcfg = self.algo_config['mlp']
+            mlp = MLPRegressor(random_state=self.rs,
+                               hidden_layer_sizes=mlpcfg.get('hidden_layer_sizes', (100,)),
+                               activation=mlpcfg.get('activation', 'relu'),
+                               solver=mlpcfg.get('solver', 'lbfgs'),
+                               alpha=mlpcfg.get('alpha', 0.001),
+                               batch_size=mlpcfg.get('batch_size', 'auto'),
+                               learning_rate=mlpcfg.get('learning_rate', 'constant'),
+                               power_t=mlpcfg.get('power_t', 0.5),
+                               max_iter=mlpcfg.get('max_iter', 200))
+            pipe_mlp = make_pipeline(StandardScaler(),mlp)
+            pipe_mlp.fit(self.X_train, self.y_train)
+
+            self.algs_dict['mlp'] = {'algo': mlp,
+                                     'pipeline': pipe_mlp,
+                                     'type': 'multi-layer perceptron regressor',
+                                     'metric': self.metric,
+                                     'Uncertainty': {}
+                                     }
+
+    def train_algos_grid_search(self):
+        """Train algorithms using GridSearchCV based on the algo config file.
+        
+        .. note::
+            Algorithm options include the following:
+                - `rf` for :class:`sklearn.ensemble.RandomForestRegressor`
+                - `mlp` for :class:`sklearn.neural_network.MLPRegressor`
+        """
+
+        if 'rf' in self.algo_config_grid:  # RANDOM FOREST
+            if self.verbose:
+                logging.info(f"      Performing Random Forest Training with Grid Search")
+            rf = RandomForestRegressor(oob_score=True, random_state=self.rs)
+            # TODO move into main Param dict
+            param_grid_rf = {
+                'randomforestregressor__n_estimators': self.algo_config_grid['rf'].get('n_estimators', [100, 200, 300]),
+                'randomforestregressor__max_depth': self.algo_config_grid['rf'].get('max_depth', [None,10, 20, 30]), 
+                'randomforestregressor__min_samples_leaf': self.algo_config_grid['rf'].get('min_samples_leaf', [1, 2, 4]),
+                'randomforestregressor__min_samples_split': self.algo_config_grid['rf'].get('min_samples_split', [2, 5, 10])
+            }
+            pipe_rf = make_pipeline(rf)
+            grid_rf = GridSearchCV(pipe_rf, param_grid_rf, cv=5, scoring='neg_mean_absolute_error', n_jobs=-1)
+            
+            grid_rf.fit(self.X_train, self.y_train)
+
+            self.algs_dict['rf'] = {'algo': grid_rf.best_estimator_.named_steps['randomforestregressor'],
+                                    'pipeline': grid_rf.best_estimator_,
+                                    'gridsearchcv': grid_rf,
+                                    'type': 'random forest regressor',
+                                    'metric': self.metric,
+                                    'Uncertainty': {}
+                                    }
+        
+        if 'mlp' in self.algo_config_grid:  # MULTI-LAYER PERCEPTRON
+            if self.verbose:
+                logging.info(f"      Performing Multilayer Perceptron Training with Grid Search")
+            mlpcfg = self.algo_config_grid['mlp']
+            mlp = MLPRegressor(random_state=self.rs)
+            param_grid_mlp = {
+                'mlpregressor__hidden_layer_sizes': mlpcfg.get('hidden_layer_sizes', [(100,), (50, 50)]),
+                'mlpregressor__activation': mlpcfg.get('activation', ['relu', 'tanh']),
+                'mlpregressor__solver': mlpcfg.get('solver', ['lbfgs', 'adam']),
+                'mlpregressor__alpha': mlpcfg.get('alpha', [0.001, 0.01]),
+                'mlpregressor__learning_rate': mlpcfg.get('learning_rate', ['constant', 'adaptive']),
+                'mlpregressor__max_iter': mlpcfg.get('max_iter', [200, 300])
+            }
+            pipe_mlp = make_pipeline(StandardScaler(), mlp)
+            grid_mlp = GridSearchCV(pipe_mlp, param_grid_mlp, cv=5, scoring='neg_mean_absolute_error', n_jobs=-1)
+            grid_mlp.fit(self.X_train, self.y_train)
+            self.algs_dict['mlp'] = {'algo': grid_mlp.best_estimator_,
+                                    'pipeline': grid_mlp,
+                                    'type': 'multi-layer perceptron regressor',
+                                    'metric': self.metric,
+                                     'Uncertainty': {}
+                                     }
+
+    def predict_algos(self) -> dict:
+        """ Make predictions with trained algorithms   
+
+        :return: Evaluation results, with the following keys:
+            - `y_pred`: The predicted values vector
+            - `type`: The type of algorithm used for prediction (e.g. `"random forest"`)
+            - `metric`: The formulation evaluation metric or hydrologic signature represented by `y_pred`
+        :rtype: dict
+        """
+          
+        for k, v in self.algs_dict.items():
+            algo = v['algo']
+            pipe = v['pipeline']
+            type_algo = v['type']
+            if self.verbose:
+                logging.info(f"      Generating predictions for {type_algo} algorithm.")   
+            
+            # Get the feature IDs corresponding to the test set rows from the original dataframe
+            feature_ids = self.df.loc[self.X_test.index, self.test_id_col]
+
+            y_pred = pipe.predict(self.X_test)
+            # --- Unconditionally warn if any predictions fall out of the physical range. ---
+            utils._warn_if_out_of_bounds(
+                predictions=y_pred,
+                feature_ids=feature_ids,
+                min_lim=self.min_lim,
+                max_lim=self.max_lim,
+                resp_var=self.metric,
+                correction_is_active=self.uncn_bnd_algo,
+                prediction_type="values"
+            )
+            # Conditionally apply the correction based on flags.
+            if self.uncn_bnd_algo:
+                y_pred = utils.clip_predictions(y_pred, self.min_lim, self.max_lim)
+
+            if 'mapie' in v:
+                mapie_alpha = next((d['alpha'] for d in self.uncertainty.get('mapie', []) if 'alpha' in d), None)
+                y_test_pred, y_test_pis = v['mapie'].predict(self.X_test, alpha=mapie_alpha)
+                
+                # Apply same warn-then-clip logic for prediction intervals.
+                utils._warn_if_out_of_bounds(
+                    predictions=y_test_pis,
+                    feature_ids=feature_ids,
+                    min_lim=self.min_lim,
+                    max_lim=self.max_lim,
+                    resp_var=self.metric,
+                    correction_is_active=self.uncn_bnd_algo,
+                    prediction_type="intervals"
+                )
+                if self.uncn_bnd_algo:
+                    y_test_pis = utils.clip_pis(y_test_pis, self.min_lim, self.max_lim)
+                    
+                # Rename rows
+                row_labels = ['lower_limit', 'upper_limit']
+                
+                # Rename columns based on mapie_alpha values
+                col_labels = [f'alpha_{alpha:.2f}' for alpha in mapie_alpha]  
+                
+                # Convert to DataFrame
+                y_pis_list = [pd.DataFrame(y_test_pis[i], index=row_labels, columns=col_labels) for i in range(y_test_pis.shape[0])]
+                
+                self.preds_dict[k] = {'y_pred': y_pred,
+                                      'y_pis': y_pis_list,
+                                      'type': v['type'],
+                                      'metric': v['metric']}
+            else:
+                self.preds_dict[k] = {'y_pred': y_pred,
+                                 'type': v['type'],
+                                 'metric': v['metric']}
+                    
+        return self.preds_dict
+
+    def evaluate_algos(self) -> dict:
+        """ Evaluate the predictions
+
+        :return: Evaluation of algorithm performance from the test dataset. The dict keys include the following:
+            - `type`: They type of algorithm, e.g. "random forest"
+            - `metric`: the formulation metric, or hydrologic signature being predicted
+            - `mse`: algorithm's mean squared error from test data
+            - `r2`: algorithm's r-squared from test data
+        :rtype: dict
+        """
+       
+        if self.verbose:
+            logging.info(f"      Evaluating predictions.")   
+        # TODO add more evaluation metrics here
+        for k, v in self.preds_dict.items():
+            y_pred = v['y_pred']
+            self.eval_dict[k] = {'type': v['type'],
+                            'metric': v['metric'],
+                            'mse': mean_squared_error(self.y_test, y_pred),
+                            'r2': r2_score(self.y_test, y_pred)}
+        return self.eval_dict
+
+    def save_algos(self):
+        """ Write pipeline to file & record save path in `algs_dict['file_pipe']`
+
+        """
+        
+        for algo in self.algs_dict.keys():
+            if self.verbose:
+                logging.info(f"      Saving {algo} pipeline for {self.metric} to file")
+
+            path_algo = utils.std_algo_path(self.dir_out_alg_ds, algo, self.metric, self.dataset_id)
+            
+            # write trained algorithm
+            joblib.dump(self.algs_dict[algo]['pipeline'], path_algo)
+            
+            # Save pipeline and metadata in a dictionary
+            pipeline_data = {
+                'pipeline': self.algs_dict[algo]['pipeline'],  # The trained model pipeline
+                'X_train_shape': self.X_train.shape,  # Store the shape of X_train
+                'Uncertainty': self.algs_dict[algo]['Uncertainty']
+            }
+
+            # If mapie_alpha exists and is not empty, save mapie
+            if any('alpha' in d and d['alpha'] for d in self.uncertainty.get('mapie', [])):  #getattr(self, 'mapie_alpha', None):
+                pipeline_data['mapie'] = self.algs_dict[algo].get('mapie', None)
+
+            joblib.dump(pipeline_data, path_algo)  # Save pipeline + X_train shape
+            
+            self.algs_dict[algo]['file_pipe'] = str(path_algo.name)
+   
+    def org_metadata_alg(self):
+        """Must be called after running AlgoTrainEval.save_algos(). Records saved location of trained algorithm
+
+        """
+
+        self.eval_df = pd.DataFrame(self.eval_dict).transpose().rename_axis(index='algorithm')
+
+        self.eval_df['dataset'] = self.dataset_id
+
+        # Assign the locations where algorithms were saved
+        self.eval_df['file_pipe'] = [self.algs_dict[alg]['file_pipe'] for alg in self.algs_dict.keys()] 
+        self.eval_df['algo'] = self.eval_df.index
+        self.eval_df = self.eval_df.reset_index()
+
+    def train_eval(self):
+        """ The overarching train, test, evaluation wrapper that also saves algorithms and evaluation results
+
+        """
+
+        # Run the train/test split
+        self.split_data()
+
+        # Check whether supplied params designed for grid search:
+        self.select_algs_grid_search()
+
+        # Train algorithms; returns self.algs_dict 
+        if self.grid_search_algs: # Perform hyperparameterization grid search for these algos
+            self.train_algos_grid_search()
+
+        if self.algo_config: # Just run a single simulation for these algos
+            self.train_algos()
+
+        # Calculate forestci uncertainty if enabled
+        # Determine the best Random Forest model
+        if 'rf' in self.algs_dict:  # Ensure 'rf' is in selected algorithms
+            if self.grid_search_algs and 'gridsearchcv' in self.algs_dict['rf']:
+                best_rf_algo = self.algs_dict['rf']['gridsearchcv'].best_estimator_.named_steps['randomforestregressor']
+            else:
+                best_rf_algo = self.algs_dict['rf']['algo']
+                
+            # Check if forestci is enabled in self.uncertainty
+            forestci_enabled = any(
+                d.get('fci_flag', False) for d in self.uncertainty.get('forestfci', [])
+            )
+            # Compute forestci uncertainty with the best RF model
+            if forestci_enabled:
+                self.algs_dict['rf']['Uncertainty']['forestci'] = self.calculate_forestci_uncertainty(
+                    best_rf_algo, np.array(self.X_train), np.array(self.X_test)
+                )
+
+        # Calculate Bagging uncertainty if enabled
+        if any('n_algos' in d and d['n_algos'] for d in self.uncertainty.get('bagging', [])):
+            for algo_dict in [self.algo_config, self.algo_config_grid]:  # Iterate over both configurations
+                for algo_str in algo_dict.keys():  # algo_str is the correct algorithm name
+                    # Select the best model if Grid Search was performed
+                    best_algo = (
+                        self.algs_dict[algo_str]['gridsearchcv'].best_estimator_
+                        if self.grid_search_algs and 'gridsearchcv' in self.algs_dict[algo_str]
+                        else self.algs_dict[algo_str]['algo']
+                    )
+    
+                    # Compute Bagging CI (pass correct algorithm name + best model)
+                    self.calculate_bagging_ci(algo_str, best_algo)
+                
+        # --- Calculate prediction intervals using MAPIE if enabled ---
+        if any('alpha' in d and d['alpha'] for d in self.uncertainty.get('mapie', [])): #getattr(self, 'mapie_alpha', None):
+            self.calculate_mapie()
+
+        # Make predictions  (aka validation) 
+        self.predict_algos()
+
+        # Evaluate predictions; returns self.eval_dict
+        self.evaluate_algos()
+
+        # Write algorithms to file; returns self.algs_dict_paths
+        self.save_algos()
+
+        # Generate metadata dataframe
+        self.org_metadata_alg() # Must be called after save_algos()
+
+def _extr_rf_algo(train_eval:AlgoTrainEval)->RandomForestRegressor:
+    """Extract random forest from the algs_dict created by AlgoTrainEval class
+
+    :param train_eval: The instantiated & processed AlgoTrainEval object
+    :type train_eval: AlgoTrainEval
+    :return: The trained random forest algorithm
+    :rtype: RandomForestRegressor
+    """
+    if 'rf' in train_eval.algs_dict.keys():
+        rfr = train_eval.algs_dict['rf']['algo']
+    else:
+        logging.info("Trained random forest object 'rf' non-existent in the provided AlgoTrainEval class object.",
+              "Check to make sure the algo processing config file creates a random forest. Then make sure the ")
+        rfr = None
+    return rfr
+
+class AlgoEvalPlotLC:
+    def __init__(self,X,y):
+        # The entire dataset of predictors/response    
+        self.X = X
+        self.y = y
+
+        # Initialize Learning curve objects
+        self.train_sizes_lc = np.empty(1)
+        self.train_scores_lc = np.empty(1)
+        self.valid_scores_lc = np.empty(1)
+
+
+    def gen_learning_curve(self,model, cv = 5,n_jobs=-1,
+                            train_sizes =np.linspace(0.1, 1.0, 10),
+                            scoring = 'neg_mean_squared_error'
+                            ):
+        
+        # Generate learning curve data
+        self.train_sizes_lc, self.train_scores_lc, self.valid_scores_lc = learning_curve(
+            model, self.X, self.y, cv=cv, n_jobs=n_jobs, train_sizes=train_sizes, 
+            scoring=scoring
+        )
+
+        # Calculate mean and standard deviation
+        self.train_mean_lc = np.mean(-self.train_scores_lc, axis=1)  # Negate to get positive MSE
+        self.train_std_lc = np.std(-self.train_scores_lc, axis=1)
+        self.valid_mean_lc = np.mean(-self.valid_scores_lc, axis=1)
+        self.valid_std_lc = np.std(-self.valid_scores_lc, axis=1)
+
+    def plot_learning_curve(self,ylabel_scoring:str = "Mean Squared Error (MSE)",
+                            title:str='Learning Curve',
+                            training_uncn:bool = False):
+        # GENERATE LEARNING CURVE FIGURE 
+        plt.figure(figsize=(10, 6))
+        plt.plot(self.train_sizes_lc, self.train_mean_lc, 'o-', label='Training error')
+        plt.plot(self.train_sizes_lc, self.valid_mean_lc, 'o-', label='Cross-validation error')
+        if training_uncn:
+            plt.fill_between(self.train_sizes_lc, self.train_mean_lc - self.train_std_lc, self.train_mean_lc + self.train_std_lc, alpha=0.1, color="r", label='Training uncertainty')
+        plt.fill_between(self.train_sizes_lc, self.valid_mean_lc - self.valid_std_lc, self.valid_mean_lc + self.valid_std_lc, alpha=0.1, color="g", label='Cross-validation uncertainty')
+        plt.xlabel('Training Size', fontsize = 18)
+        plt.ylabel(ylabel_scoring, fontsize = 18)
+        plt.title(title)
+        plt.legend(loc='best',fontsize=15)
+        plt.grid(True)
+
+        # Adjust tick parameters for larger font size 
+        plt.tick_params(axis='both', which='major', labelsize=15)
+        plt.tick_params(axis='both', which='minor', labelsize=15)
+
+        fig = plt.gcf()
+        return fig
+    
+    def extr_modl_algo_train(self, train_eval:AlgoTrainEval):
+        modls = list(train_eval.algs_dict.keys())
+
+        for k, v in train_eval.algs_dict.items():
+            v['algo']
+
+def plot_learning_curve_save_wrap(algo_plot:AlgoEvalPlotLC, train_eval:AlgoTrainEval, 
+                            dir_out_viz_base:str|Path,
+                            ds:str,
+                            cv:int = 5,n_jobs:int=-1,
+                            train_sizes = np.linspace(0.1, 1.0, 10),
+                            scoring:str = 'neg_mean_squared_error',
+                            ylabel_scoring:str = "Mean Squared Error (MSE)",
+                            training_uncn:bool = False
+                            ):
+    """Wrapper to generate & write learning curve plots forsklearn ML algorithms
+
+    :param algo_plot: The initialized AlgoEvalPlotLC object with the full predictor matrix and response variable values
+    :type algo_plot: AlgoEvalPlotLC
+    :param train_eval: The initialized AlgoTrainEval class object
+    :type train_eval: AlgoTrainEval
+    :param dir_out_viz_base: The base directory for saving plots
+    :type dir_out_viz_base: str | os.PathLike
+    :param ds: The unique dataset name
+    :type ds: str
+    :param cv: The number of folds in a K-fold cross validation, defaults to 5
+    :type cv: int, optional
+    :param n_jobs: The number of parallel jobs, defaults to -1 for using all available cores
+    :type n_jobs: int, optional
+    :param train_sizes: Relative or absolute numbers of training examples that will be used 
+      to generate the learning curve, defaults to np.linspace(0.1, 1.0, 10)
+    :type train_sizes: array-like, optional
+    :param scoring: A str or a scorrer collable object/function, defaults to 'neg_mean_squared_error'
+    :type scoring: str, optional
+    :param ylabel_scoring: Learning curve plot's y-axis label representing scoring metric, defaults to "Mean Squared Error (MSE)"
+    :type ylabel_scoring: str, optional
+    :param training_uncn: Should training uncertainty be represented as a shaded object?, defaults to False
+    :type training_uncn: bool, optional
+
+    """
+    algs_dict = train_eval.algs_dict
+    eval_dict = train_eval.eval_dict
+
+    # Looping over e/ algo inside algs_dict from AlgoTrainEval.train_eval
+    for algo_str, val in algs_dict.items():
+        best_algo = val['pipeline']
+        metr = eval_dict[algo_str]['metric']
+        full_algo_str = eval_dict[algo_str]['type'].title()
+
+        # Generate custom plot title
+        cstm_title = f'{full_algo_str} Learning Curve: {metr} - {ds}'
+        algo_str_file = f'{algo_str}' # Custom filepath string (e.g. 'rf', 'mlp')
+        
+        # Generate learning curve data
+        algo_plot.gen_learning_curve(model=best_algo, cv=cv,n_jobs=n_jobs,
+                            train_sizes =train_sizes,scoring=scoring)
+        # Create learning curve figure
+        fig_lc = algo_plot.plot_learning_curve(ylabel_scoring=ylabel_scoring,
+                            title=cstm_title,training_uncn=training_uncn)
+        # Standardize filepath to learning curve
+        path_plot_lc = plots.std_lc_plot_path(dir_out_viz_base, ds, metr, algo_str = algo_str_file)
+    
+        fig_lc.savefig(path_plot_lc)
+
+        plt.clf()
+        plt.close()

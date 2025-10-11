@@ -12,22 +12,16 @@ instead.
 Changelog / Contributions
 2024 Originally created, GL
 2025-09-30 add attr tform yaml parser testing, GL
-
+2025-10-10 refactor to renamed fs_algo modules, GL
 '''
 
 import pandas as pd
 from pathlib import Path
-from unittest.mock import patch, mock_open, MagicMock
-import fs_algo.fs_algo_train_eval as fsate
+from unittest.mock import patch, mock_open
 import fs_algo.tfrm_attr as fta
 import unittest
 import dask.dataframe as dd
-import os
 from fs_algo.tfrm_attr import _id_need_tfrm_attrs, _gen_tform_df
-import tempfile
-import itertools
-from collections import ChainMap
-import yaml
 
 
 def test_read_df_ext_csv():

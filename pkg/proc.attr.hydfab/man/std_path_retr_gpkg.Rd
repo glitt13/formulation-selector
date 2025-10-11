@@ -17,10 +17,10 @@ Create the standardized gpkg path for coordinate data & id mapping
 }
 \details{
 The python companion function is
-. \code{fs_algo.fs_algo_train_eval._std_fs_prep_ds_companion_gpkg_path}
+. \code{fs_algo.utils._std_fs_prep_ds_companion_gpkg_path}
 }
 \seealso{
-\code{fs_algo.fs_algo_train_eval._std_fs_prep_ds_companion_gpkg_path}
+\code{fs_algo.utils._std_fs_prep_ds_companion_gpkg_path}
 
 \link[proc.attr.hydfab]{read_fs_retr_gpkg}
 

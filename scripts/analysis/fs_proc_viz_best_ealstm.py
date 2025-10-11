@@ -2,7 +2,8 @@ import argparse
 import yaml
 import pandas as pd
 from pathlib import Path
-import fs_algo.fs_algo_train_eval as fsate
+import fs_algo.utils as fsutil
+import fs_algo.plots as fsplot
 import ast
 import numpy as np
 import geopandas as gpd
@@ -17,6 +18,9 @@ fs_proc_algo_viz.py must be run first for this to work
 Usage:
 python fs_proc_viz_best_ealstm.py "~/git/formulation-selector/scripts/workflow_configs/legacy/ealstm/ealstm_algo_config.yaml"
 
+Changelog/contributions
+2024 Originally created, GL
+2025-10-10 refactor to renamed fs_algo modules, GL
 """
 
 if __name__ == "__main__":
@@ -26,9 +30,10 @@ if __name__ == "__main__":
 
     path_algo_config = Path(args.path_algo_config) #Path(f'~/git/formulation-selector/scripts/workflow_configs/legacy/xssa/xssa_algo_config.yaml') 
 
-    attr_cfig = fsate.AttrConfigAndVars(path_attr_config)
+    attr_cfig = fsutil.AttrConfigAndVars(path_attr_config)
     attr_cfig._read_attr_config()
 
+    algo_cfig = fsutil.AlgoConfigParser(path_algo_config)
     # Extract variables from dictionary created by AlgoConfigParser
     algo_config = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["algo_config"]
     
@@ -51,14 +56,14 @@ if __name__ == "__main__":
     print("BEGINNING metric intercomparison among locations.")
 
     # Initialize attribute configuration class for extracting attributes
-    attr_cfig = fsate.AttrConfigAndVars(path_attr_config)
+    attr_cfig = fsutil.AttrConfigAndVars(path_attr_config)
     attr_cfig._read_attr_config()
 
     # Grab the attributes of interest from the attribute config file,
     #  OR a .csv file if specified in the algo config file.
     name_attr_csv = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["name_attr_csv"]
     colname_attr_csv = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["colname_attr_csv"]
-    attrs_sel = fsate._id_attrs_sel_wrap(attr_cfig=attr_cfig,
+    attrs_sel = fsutil._id_attrs_sel_wrap(attr_cfig=attr_cfig,
                     path_cfig=path_attr_config,
                     name_attr_csv = name_attr_csv,
                     colname_attr_csv = colname_attr_csv)
@@ -70,7 +75,7 @@ if __name__ == "__main__":
     datasets = attr_cfig.attrs_cfg_dict.get('datasets') # Identify datasets of interest
 
     #%%  Generate standardized output directories
-    dirs_std_dict = fsate.fs_save_algo_dir_struct(dir_base)
+    dirs_std_dict = fsutil.fs_save_algo_dir_struct(dir_base)
     dir_out = dirs_std_dict.get('dir_out')
     dir_out_alg_base = dirs_std_dict.get('dir_out_alg_base')
     dir_out_anlys_base = dirs_std_dict.get('dir_out_anlys_base')
@@ -78,7 +83,7 @@ if __name__ == "__main__":
 
     if same_test_ids:
         # Must first establish which comids to use in the train-test split
-        split_dict = fsate.split_train_test_comid_wrap(dir_std_base=dir_std_base, 
+        split_dict = fsutil.split_train_test_comid_wrap(dir_std_base=dir_std_base, 
                     datasets=datasets, path_attr_config=path_attr_config,
                     comid_col='comid', test_size=test_size,
                     random_state=seed)
@@ -96,7 +101,7 @@ if __name__ == "__main__":
     dict_pred_obs_ds = dict()
     for ds in datasets:
         for metr in metrics:
-            path_pred_obs = fsate.std_test_pred_obs_path(dir_out_anlys_base,ds, metr)
+            path_pred_obs = fsutil.std_test_pred_obs_path(dir_out_anlys_base,ds, metr)
             ds_metr_str = f"{ds}_{metr}"
             try:
                 df = pd.read_csv(path_pred_obs, dtype=dtype_dict)
@@ -129,17 +134,17 @@ if __name__ == "__main__":
         best_df = df_pred_obs_metr.loc[df_pred_obs_metr.groupby(['comid'])['performance'].idxmax()]
         for ds in datasets:
             # Save the same plot in every dataset subdirectory
-            fsate.plot_best_algo_wrap(best_df, dir_out_viz_base,
+            fsplot.plot_best_algo_wrap(best_df, dir_out_viz_base,
                         subdir_anlys=ds, metr=metr,comparison_col = 'dataset')
 
 
 
         #%% 2024 AGU-specific plot
 
-        path_best_map_plot = fsate.std_map_best_path(dir_out_viz_base,metr,'agu2024')
-        states = fsate.gen_conus_basemap(dir_out_basemap = dir_out_viz_base)
+        path_best_map_plot = fsplot.std_map_best_path(dir_out_viz_base,metr,'agu2024')
+        states = fsplot.gen_conus_basemap(dir_out_basemap = dir_out_viz_base)
         title = f"Best predicted performance: {metr}"
 
-        plot_best_perf = plot_best_perf_map(best_df, states,title, comparison_col)
+        plot_best_perf = fsplot.plot_best_perf_map(best_df, states,title, comparison_col = 'dataset')
         plot_best_perf.savefig(path_best_map_plot, dpi=300, bbox_inches='tight')
         print(f"Wrote best performance map to \n{path_best_map_plot}")
