@@ -15,18 +15,26 @@ setup(
     packages=find_packages(),
     install_requires=[ 
         'pandas',
+        'numpy',
+        'pyarrow',
         'pyyaml',
+        'joblib',
+        'logging',
         'wheel',
-        'xarray',
-        'zarr',
         'scikit-learn',
         'pynhd',
         'dask',
-        'dask_expr'
+        'dask_expr',
+        'pathlib',
     ],
+    extras_require={  # optional dependencies
+        'fs_algo_train' : ['forestci','mapie'],
+        'utils' : ['geopandas','xarray','dask','zarr'],
+        'plots' : ['matplotlib','seaborn','requests','geopandas','zipfile']
+    },
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
-    ],
+    ]
 )
