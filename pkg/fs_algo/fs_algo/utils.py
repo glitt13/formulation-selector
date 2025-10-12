@@ -95,9 +95,9 @@ class AlgoConfigParser:
 
         # Changelog/contributions
         #  2025-07-29 - Converted fs_proc_algo_viz.py config file read section to function, Justin Clark
+        #. 2025-10-11 add AlgoTrainEval import & default seed, GL
         """
-        # Need to import here to avoid circular dependency
-        from fs_algo.fs_algo_train import AlgoTrainEval
+        
         if not Path(self.path_algo_config).exists():
             logging.error("Ensure that algo config file is defined")
             raise ValueError(f"Ensure that algo config file is defined" )
@@ -115,13 +115,27 @@ class AlgoConfigParser:
         if algo_config.get('mlp',None):
             if algo_config['mlp'][0].get('hidden_layer_sizes',None): # purpose: evaluate string literal to a tuple
                 algo_config['mlp'][0]['hidden_layer_sizes'] = ast.literal_eval(algo_config['mlp'][0]['hidden_layer_sizes'])
-
-        # Use the signature of AlgoTrainEval for default values
-        sig = inspect.signature(AlgoTrainEval.__init__)   
+       
+        # In some situations, we only care about parsing config files, not running algorithms
+        #. The following helps avoid import the algo module
+        if not algo_cfg.get('seed') or not algo_cfg.get('test_size'):
+            # Need to import here to avoid circular dependency
+            try:
+                from fs_algo.fs_algo_train import AlgoTrainEval
+                # Use the signature of AlgoTrainEval for default values
+                sig = inspect.signature(AlgoTrainEval.__init__)  
+                seed = sig.parameters['rs'].default
+                test_size = sig.parameters['test_size'].default
+            except:
+                seed = 32
+                test_size = 0.3
+        else:
+            seed = 32
+            test_size = 0.3
         # Generate dictionary "algo_cfg_dict" with primary training parameters
         algo_cfg_dict = {'algo_config' : algo_config,
-                            'test_size': algo_cfg.get('test_size', sig.parameters['test_size'].default),        # Must be between 0 and 1
-                            'seed': algo_cfg.get('seed', sig.parameters['rs'].default),
+                            'test_size': algo_cfg.get('test_size', test_size), # Must be between 0 and 1
+                            'seed': algo_cfg.get('seed',seed ),
                             'read_type': algo_cfg.get('read_type', 'filename'), #DEFAULT to 'filename'
                             'metrics': algo_cfg.get('metrics', None),
                             'make_plots': algo_cfg.get('make_plots', False),
@@ -173,7 +187,6 @@ class AlgoConfigParser:
             logging.error("The 'uncertainty' block must be a dictionary")
             raise TypeError("The 'uncertainty' block must be a dictionary")
 
-
         # Generate dictionary with combined training and uncertainty parameters
         self.algo_cfg_unc_dict = {
             'algo_cfg_dict': algo_cfg_dict,
@@ -183,7 +196,17 @@ class AlgoConfigParser:
         uncertainty_cfg = self.algo_cfg_unc_dict["algo_unc_dict"]["uncertainty_cfg"]
 
         # Error check for confidence levels data type, and use function default if not provided
-        confidence_levels = uncertainty_cfg.get("confidence_levels", sig.parameters['confidence_levels'].default)
+        if not algo_unc_dict == {}:
+            try:
+                from fs_algo.fs_algo_train import AlgoTrainEval
+                # Use the signature of AlgoTrainEval for default values
+                sig = inspect.signature(AlgoTrainEval.__init__)
+                confidence_levels = uncertainty_cfg.get("confidence_levels", sig.parameters['confidence_levels'].default)
+            except:
+                confidence_levels = [95]
+        else:
+            confidence_levels = [95]
+
         # Update the algo_cfg & class object just-in-case
         self.algo_cfg_unc_dict["algo_unc_dict"]["uncertainty_cfg"]['confidence_levels'] = confidence_levels
         if not isinstance(confidence_levels, list):
