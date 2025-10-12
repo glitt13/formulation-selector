@@ -1,5 +1,5 @@
 # fs_algo_train.py
-
+from __future__ import annotations # enables the | operator for function typehints back to python 3.7
 from sklearn.model_selection import train_test_split, GridSearchCV,learning_curve
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.neural_network import MLPRegressor
@@ -18,8 +18,6 @@ import scipy.stats as st
 import forestci as fci
 from sklearn.utils import resample
 from mapie.regression import MapieRegressor
-
-# Assuming utils.py and plots.py are in the same directory
 import fs_algo.utils as utils
 import fs_algo.plots as plots
 

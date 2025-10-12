@@ -1,5 +1,5 @@
 # plots.py
-
+from __future__ import annotations # enables the | operator for function typehints back to python 3.7
 import pandas as pd
 import numpy as np
 import logging
