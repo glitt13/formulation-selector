@@ -1,5 +1,5 @@
 # utils.py
-
+from __future__ import annotations # enables the | operator for function typehints back to python 3.7
 import inspect
 import numpy as np
 import pandas as pd
