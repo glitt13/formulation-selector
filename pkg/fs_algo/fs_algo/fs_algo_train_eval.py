@@ -1475,7 +1475,7 @@ class AlgoTrainEval:
                  uncertainty: dict,
                  dir_out_alg_ds: str | os.PathLike, dataset_id: str,
                  metr: str, test_size: float = 0.3,rs: int = 32,
-                 test_ids = None,test_id_col:str = 'comid',
+                 test_ids = None,test_id_col:str = 'featureID',
                  verbose: bool = False,
                  confidence_levels: list[int] = [95],
                  uncn_bnd_algo: bool = False, min_lim: float = None, max_lim: float = None
@@ -1510,7 +1510,7 @@ class AlgoTrainEval:
         :type rs: int, optional
         :param test_ids: The explicit comids of interest for testing. Defaults to None. If None, use the test_size instead for the train/test split 
         :type test_ids: Iterable or None
-        :param test_id_col: The column name for comid, defaults to 'comid'
+        :param test_id_col: The column name for comid or other location identifier, defaults to 'featureID'
         :type test_id_col: str
         :param verbose: Should print, defaults to False.
         :type verbose: bool, optional
