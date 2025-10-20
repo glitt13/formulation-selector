@@ -1,5 +1,8 @@
 '''
-Unit testing for AlgoTrainEval class in the fs_algo package
+Unit testing for the fs_algo functions split across the following files:
+ - fs_algo_train.py
+ - plots.py
+ - tfrm_attr.py
 
 example
 > cd /path/to/fs_algo/fs_algo/tests/
