@@ -57,7 +57,7 @@ __pycache__/
 .env
 .python-version
 .venv
-
+.envrc
 build/
 develop-eggs/
 dist/

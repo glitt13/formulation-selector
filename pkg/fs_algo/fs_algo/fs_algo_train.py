@@ -29,7 +29,7 @@ class AlgoTrainEval:
                  uncertainty: dict,
                  dir_out_alg_ds: str | Path, dataset_id: str,
                  metr: str, test_size: float = 0.3,rs: int = 32,
-                 test_ids = None,test_id_col:str = 'comid',
+                 test_ids = None,test_id_col:str = 'featureID',
                  verbose: bool = False,
                  confidence_levels: list[int] = [95],
                  uncn_bnd_algo: bool = False, min_lim: float = None, max_lim: float = None
