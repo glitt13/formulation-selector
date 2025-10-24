@@ -110,6 +110,28 @@ metric_mappings_single_timeseries: # Refer to CIROH-funded TEEHR Metric List: ht
     Q_lims:
       min_lim: -1 # As a relative error, the lower limit is -1. # Yilmaz, et al. (2008). https://doi.org/10.1029/2007WR006716
       max_lim: None # The bias is unbounded in the positive direction. # Yilmaz, et al. (2008).
+  - resp_var: 'Rsq'
+    description: 'Coefficient of Determination'
+    Q_lims:
+      min_lim: 0
+      max_lim: 1
+  - resp_var: 'RSR'
+    description: 'Root mean standard deviation ratio'
+      min_lim: 0
+      max_lim: None
+  - resp_var: 'MVD'
+    description: 'Max value delta'
+      min_lim: None
+      max_lim: None
+  - resp_var: 'MVTD'
+    description: 'Max value time delta' # intended to be units of seconds in TEEHR
+      min_lim: None
+      max_lim: None
+  - resp_var: 'APRB'
+    description: 'Annual Peak Relative Bias'
+      min_lim: 0
+      max_lim: None
+
 metric_mappings_hydrotools: #  consider the metrics provided via hydrotools https://github.com/NOAA-OWP/hydrotools/tree/main/python/metrics/src/hydrotools/metrics/metrics.py
   - resp_var: 'MESS'
     description: 'mean error skill score'
@@ -172,8 +194,8 @@ metric_mappings_signatures:
     Q_lims: # Defined as a relative error.
       min_lim: -1
       max_lim: None
-  - resp_var: 'APFRE'
-    description: 'annual peak flow relative error'
+  - resp_var: 'APFRB'
+    description: 'annual peak flow relative bias'
     Q_lims: # Defined as a relative error.
       min_lim: -1
       max_lim: None
@@ -187,8 +209,8 @@ metric_mappings_signatures:
     Q_lims: 
       min_lim: None
       max_lim: None
-  - resp_var: 'EPFRE'
-    description: 'event peak flow relative error'
+  - resp_var: 'EPFRB'
+    description: 'event peak flow relative bias'
     Q_lims: # Defined as a relative error.
       min_lim: -1
       max_lim: None
