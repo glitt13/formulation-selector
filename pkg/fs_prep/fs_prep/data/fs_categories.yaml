@@ -117,21 +117,24 @@ metric_mappings_single_timeseries: # Refer to CIROH-funded TEEHR Metric List: ht
       max_lim: 1
   - resp_var: 'RSR'
     description: 'Root mean standard deviation ratio'
+    Q_lims:
       min_lim: 0
       max_lim: None
   - resp_var: 'MVD'
     description: 'Max value delta'
+    Q_lims:
       min_lim: None
       max_lim: None
   - resp_var: 'MVTD'
     description: 'Max value time delta' # intended to be units of seconds in TEEHR
+    Q_lims:
       min_lim: None
       max_lim: None
   - resp_var: 'APRB'
     description: 'Annual Peak Relative Bias'
+    Q_lims:
       min_lim: 0
       max_lim: None
-
 metric_mappings_hydrotools: #  consider the metrics provided via hydrotools https://github.com/NOAA-OWP/hydrotools/tree/main/python/metrics/src/hydrotools/metrics/metrics.py
   - resp_var: 'MESS'
     description: 'mean error skill score'

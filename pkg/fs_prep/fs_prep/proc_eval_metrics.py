@@ -88,13 +88,13 @@ def _read_std_config():
     :return: YAML configuration file mappings as a dictionary.
     :rtype: dict
     """
-    catg_file = impresources.files(data) / 'fs_categories.yaml'
+    catg_file = impresources.files('fs_prep').joinpath('data', 'fs_categories.yaml')
     with catg_file.open("rt") as f:
         std_config = yaml.safe_load(f)
     return std_config
 
 
-def _conv_ls_dicts_df_long(config: dict):
+def _conv_ls_dicts_df_long():
     """Convert the YAML configuration into a long-format pandas DataFrame.
 
     This function has been updated to parse the nested dictionary structure
@@ -107,6 +107,7 @@ def _conv_ls_dicts_df_long(config: dict):
     :return: A long-format DataFrame with the configuration schema.
     :rtype: pd.DataFrame
     """
+    config = _read_std_config()
     data_list = []
     for category, items in config.items():
         if category == 'target_var_mappings':
@@ -347,40 +348,39 @@ def _save_dir_struct(dir_save: str | os.PathLike,
 
     return save_dir_base, other_save_dirs
 # --------------------------------------------------------------------------- #
-def _proc_check_std_fs_ids(vars: list, category=['metric','target_var'][0]):
+def _proc_check_std_fs_ids(vars_map: list, category=['metric','target_var'][0]):
     """
     Run check to ensure that variables are listed in the standardized 
         fs_categories.yaml
 
-    :param vars: user-defined variable listing of the anticipated mapped
+    :param vars_map: user-defined variable listing of the anticipated mapped
         variables (e.g. ['NSE','RMSE'])
-    :type vars: list
+    :type vars_map: list
     :param category: choose the category of 'metric' or 'target_var' desired
         from the formulation-selector standardized categories file. Defaults to 'metric'
     :type category: list, optional
-    :raises ValueError: If at least one of the provided vars is not standard,
+    :raises ValueError: If at least one of the provided vars_map is not standard,
         raises error. 
     """
 
     # perform check on input data and convert to list if needed:
-    if isinstance(vars,str):
-        vars = [vars]
+    if isinstance(vars_map,str):
+        vars_map = [vars_map]
         
     if isinstance(category,list) and len(category)>1:
         logging.error(f'Expect {category} to be a single value, not list')
         raise ValueError(f'Expect {category} to be a single value, not list')
 
     # Read in the standardized names
-    std_config = _read_std_config()
-    df_std_config = _conv_ls_dicts_df_long(std_config )
+    df_std_config = _conv_ls_dicts_df_long()
     # Subset the categories (e.g. target_variables or metrics)
     sub_std_config = df_std_config[df_std_config['category'].str.contains(category)]
 
     # Check to make sure that each metric is inside the standardized names
-    bool_chck = [any(sub_std_config['var'] == x) for x in vars]
+    bool_chck = [any(sub_std_config['var'] == x) for x in vars_map]
     
     if not all(bool_chck):
-        bad_vars = list(compress(vars,[not x for x in bool_chck]))
+        bad_vars = list(compress(vars_map,[not x for x in bool_chck]))
         allowable_vars = ",".join(sub_std_config['var'])
         logging.error(f'The following {category} mappings defined in the'
                             ' dataset schema do not correspond to the'
