@@ -49,8 +49,8 @@ if __name__ == "__main__":
     # READ fs_categories.yaml if uncn_bnd_pred is True
     uncn_bnd_pred = pred_cfg.pred_cfg_dict.get('uncn_bnd_pred')
     logging.info("Reading uncertainty bounds from fs_categories.yaml...")
-    uncn_config = pem._read_std_config()
-    fs_catg_uncn = pem._conv_ls_dicts_df_long(uncn_config)
+
+    fs_catg_uncn = pem._conv_ls_dicts_df_long()
     logging.info("Successfully loaded uncertainty bounds.")
 
     #%%  READ CONTENTS FROM THE ATTRIBUTE CONFIG
