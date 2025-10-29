@@ -568,7 +568,8 @@ def proc_col_schema(df: pd.DataFrame,
             raise ValueError(
                 'Expected _save_dir_struct to generate values in _other_save_dirs'
                 )
-
+        logging.warning("PROBLEM when saving fs_prep data as .csv or .parquet is that " \
+                "fs_algo.utils assumes netcdf and some refactoring may be needed there.")
         # TODO allow output write to a variety of locations (e.g. local/cloud)
         # Write data in long format
         save_path_eval_metr = path_std_eval_metr(dir_save,dataset_name,formulation_id)
@@ -576,9 +577,9 @@ def proc_col_schema(df: pd.DataFrame,
         if save_type == 'csv':
             df.to_csv(save_path_eval_metr)
         else:
-            df.to_parquet(
-                Path(str(save_path_eval_metr).replace('.csv','.parquet'))
-                )
+            save_path_eval_metr = Path(str(save_path_eval_metr).replace('.csv','.parquet'))
+            df.to_parquet(save_path_eval_metr)
+        logging.info(f"Wrote simple standardized dataset to {save_path_eval_metr}")
         # Write metadata table corresponding to these metric data table(s) 
         # (e.g. startDate, endDate)
         
@@ -589,7 +590,7 @@ def proc_col_schema(df: pd.DataFrame,
             save_path_meta = path_std_meta_raw(dir_save, dataset_name, formulation_id,fmt='parquet') 
             col_schema_df.to_parquet(save_path_meta)
         logging.info(f"Saved files within a sub-directory structure inside {dir_save}")
-    elif save_type == 'netcdf':
+    elif save_type == 'netcdf': # This is preferred!!
         save_path_nc = path_std_dataset(dir_save, dataset_name,
                 formulation_id, fmt = 'nc')
         if Path(save_path_nc).exists():
@@ -597,14 +598,6 @@ def proc_col_schema(df: pd.DataFrame,
             Path(save_path_nc).unlink() # Delete the pre-existing file
         ds.to_netcdf(save_path_nc,mode='w',format='NETCDF4') # mode='w' overwrites
         logging.info(f"Saved netcdf file as {save_path_nc}")
-    elif save_type == 'zarr':
-        save_path_zarr = path_std_dataset(dir_save, dataset_name,
-                formulation_id, fmt = 'zarr')
-        if os.path.exists(save_path_zarr):
-            shutil.rmtree(save_path_zarr) # Delete any pre-existing zarr data with the same name
-                                            # (BChoat-THIS MAY BE RISKY)
-        ds.to_zarr(save_path_zarr)   # Re-write to directory
-        logging.info(f"Saved zarr files inside {save_path_zarr}")
     return ds # Returning not intended use case, but it's an option
 
 def check_fix_nwissite_gageids(df:pd.DataFrame, gage_id_col:str,

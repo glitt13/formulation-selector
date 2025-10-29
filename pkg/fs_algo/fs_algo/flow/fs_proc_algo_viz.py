@@ -70,8 +70,8 @@ if __name__ == "__main__":
 
     # READ fs_categories.yaml
     logging.info("Reading uncertainty bounds from fs_categories.yaml...")
-    uncn_config = pem._read_std_config() 
-    fs_catg_uncn = pem._conv_ls_dicts_df_long(uncn_config)
+
+    fs_catg_uncn = pem._conv_ls_dicts_df_long()
     logging.info("Successfully loaded uncertainty bounds.")
 
     # Grab the attributes of interest from the attribute config file,

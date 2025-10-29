@@ -30,7 +30,6 @@ import numpy as np
 from unittest.mock import patch, mock_open
 import tempfile
 import logging
-import os
 
 # Define the unit test directory for fs_prep
 parent_dir_test = Path(__file__).parent
@@ -74,19 +73,8 @@ def read_log_file():
     return ""
 
 class TestStdConfigFunctions(unittest.TestCase):
-    
-    @patch('fs_prep.proc_eval_metrics.impresources.files')
-    def test_read_std_config(self, mock_files):
-        """Test reading the standard config file."""
-        m = mock_open(read_data="metric_mappings:\n  - {'resp_var': 'NSE'}")
-        mock_files.return_value.__truediv__.return_value.open = m
-        
-        config = _read_std_config()
-        
-        mock_files.return_value.__truediv__.assert_called_with('fs_categories.yaml')
-        self.assertIn('metric_mappings', config)
-
-    def test_conv_ls_dicts_df_long(self):
+    @patch('fs_prep.proc_eval_metrics._read_std_config')
+    def test_conv_ls_dicts_df_long(self, mock_read_config):
         """Test converting the uncertainty config structure."""
         uncn_config = {
             'metric_mappings': [
@@ -94,7 +82,8 @@ class TestStdConfigFunctions(unittest.TestCase):
             ],
             'target_var_mappings': [{'streamflow': 'Streamflow'}]
         }
-        df = _conv_ls_dicts_df_long(uncn_config)
+        mock_read_config.return_value = uncn_config
+        df = _conv_ls_dicts_df_long()
         self.assertIsInstance(df, pd.DataFrame)
         self.assertEqual(list(df.columns), ['var', 'description', 'category', 'min_lim', 'max_lim'])
         self.assertEqual(len(df), 2)
@@ -150,23 +139,13 @@ class TestProcColSchemaHier(unittest.TestCase):
         nc_config_df['save_type'] = 'netcdf'
         cls.dsnc = proc_col_schema(raw_test_df,nc_config_df, dir_save)
 
-        # specifiy zarr config
-        zarr_config_df = exp_config_df.copy()
-        zarr_config_df['save_type'] = 'zarr'
-        cls.dsz = proc_col_schema(raw_test_df,zarr_config_df, dir_save)
-
     def test_hier_nc_exists(self):
         self.assertTrue(list(Path(dir_save, 'user_data_std/juliemai-xSSA/').glob('*.nc'))[0].is_file())
-
-    def test_hier_zarr_exists(self):
-         self.assertTrue(Path(dir_save, 'user_data_std/juliemai-xSSA/juliemai-xSSA_Raven_blended_zarr/KGE').exists())
 
 class TestProcCheckInputDf(unittest.TestCase):
     def setUp(self):
         logging.info("----- Setting up TestProcCheckInputDf")
         # Runs before each test
-        # if os.path.exists(log_path):
-        #     os.remove(log_path)
         global raw_test_df
         global exp_config_df
         self.raw_test_df = raw_test_df.copy()
@@ -198,15 +177,13 @@ class TestProcCheckInputDf(unittest.TestCase):
 class TestProcCheckStdFsIds(unittest.TestCase):
     def setUp(self):
         logging.info("----- Setting up TestProcCheckStdFsIds")
-        # if os.path.exists(log_path):
-        #     os.remove(log_path)
 
     def test_notavar_error(self):
         with self.assertRaises(ValueError):
-            _proc_check_std_fs_ids(vars=['notavar'], category='metric')
+            _proc_check_std_fs_ids(vars_map=['notavar'], category='metric')
     
     def test_atomic_var(self):
-        _proc_check_std_fs_ids(vars='NSE', category='metric')
+        _proc_check_std_fs_ids(vars_map='NSE', category='metric')
         log_content = read_log_file()
         self.assertIn('The metric mappings from the dataset schema match expected format.', log_content)
     
@@ -245,8 +222,6 @@ class TestProcFlattenLsOfDictKeys(unittest.TestCase):
 class TestProcColSchemaNwisCheck(unittest.TestCase):
     def setUp(self):
         logging.info("----- Setting up TestProcColSchemaNwisCheck")
-        # if os.path.exists(log_path):
-        #     os.remove(log_path)
         global exp_config_df
         global raw_test_df
         global log_path
@@ -282,8 +257,6 @@ class TestProcColSchemaNwisCheck(unittest.TestCase):
 class TestCheckFixNwissiteGageIds(unittest.TestCase):
     def setUp(self):
         logging.info("----- Setting up TestCheckFixNwissiteGageIds")
-        # if os.path.exists(log_path):
-        #     os.remove(log_path)
 
     @patch('pynhd.NLDI.navigate_byid')
     def test_valid_gage_ids(self, mock_navigate_byid):
