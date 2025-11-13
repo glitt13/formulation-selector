@@ -23,6 +23,9 @@ import fs_algo.fs_algo_train as fsalgt
 import fs_algo.utils as fsutil
 import fs_algo.plots as fsplot
 import numpy as np
+import os
+import matplotlib
+matplotlib.use(os.environ.get("MPLBACKEND", "Agg"))
 import matplotlib.pyplot as plt
 import xarray as xr
 import fs_prep.proc_eval_metrics as pem
