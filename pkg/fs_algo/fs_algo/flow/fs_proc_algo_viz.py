@@ -340,6 +340,18 @@ if __name__ == "__main__":
                 # See if random forest was trained in the AlgoTrainEval class object:
                 rfr = fsalgt._extr_rf_algo(train_eval)
                 if rfr: # Generate & save the feature importance plot
+                    out_dir = Path(dir_out_viz_base) / ds
+
+                    # Save features importances from the trained RF to csv files
+                    imp = getattr(rfr, "feature_importances_", None)
+                    if imp is not None:
+                        fi_df = pd.DataFrame({"feature": df_X.columns, "importance": imp})
+                        fi_df = fi_df.sort_values("importance", ascending=False)
+                        out_csv = out_dir / f"rf_feature_importance_{ds}_{metr}.csv"
+                        fi_df.to_csv(out_csv, index=False)
+                        logging.info(f"Wrote RF feature importances to {out_csv}")
+
+                    # Plot PNG of Feature Importance
                     fsplot.save_feat_imp_fig_wrap(rfr=rfr,
                             attrs=df_X.columns,
                             dir_out_viz_base=dir_out_viz_base,
