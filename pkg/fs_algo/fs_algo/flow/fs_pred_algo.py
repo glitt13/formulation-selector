@@ -198,6 +198,15 @@ if __name__ == "__main__":
                 # --- Pipeline loading and validation ---
                 pipeline_data = fsutil.load_validated_pipeline(path_algo, arg_val=arg_val)
                 
+                # --- VALIDATION: Loaded Pipeline ---
+                if arg_val:
+                    try:
+                        ModelMetadata(**pipeline_data)
+                        logging.info("✅ Loaded Algorithm Pipeline validated successfully (Pydantic).")
+                    except Exception as e:
+                        logging.error(f"❌ Validation failed for Loaded Pipeline ({path_algo.name}): {e}")
+                        sys.exit(1)
+                
                 pipe = pipeline_data['pipeline']
                 X_train_shape = pipeline_data['X_train_shape']  # Retrieve X_train.shape
 
