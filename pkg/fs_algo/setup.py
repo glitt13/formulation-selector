@@ -19,7 +19,7 @@ setup(
         'pyarrow',
         'pyyaml',
         'joblib',
-        'logging',
+        #'logging',
         'wheel',
         'scikit-learn',
         'pynhd',
