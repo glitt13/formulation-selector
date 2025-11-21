@@ -432,16 +432,23 @@ def _make_home_dir(home_dir_read:str|os.PathLike=[])-> os.PathLike:
     :return: home directory path
     :rtype: os.PathLike
     """
+    home_dir = str(Path.home()) # Initialize home_dir to a default value (system home)
     if len(home_dir_read) == 0:
-        home_dir = str(Path.home())
+        # home_dir is already set to Path.home()
+        pass
     elif home_dir_read[0] is None:
-        home_dir = str(Path.home())
+        # home_dir is already set to Path.home()
+        pass
     elif "~" in str(home_dir_read):
+        if isinstance(home_dir_read, list) and home_dir_read and isinstance(home_dir_read[0], (str, Path)):
+             # Assuming we mean to expand the passed value if it contains '~'
+             home_dir = home_dir_read[0]
         home_dir = Path(home_dir).expanduser()
     elif not Path(home_dir_read[0]).exists():
         logging.warning(f"The user-defined home directory path {home_dir_read[0]} " \
             f"inside attribute config file does not exist. Using system default {Path.home()}")
-        home_dir = str(Path.home())
+        # home_dir remains set to the system default
+        pass
     else:
         home_dir = home_dir_read[0]
     home_dir = Path(home_dir).expanduser()
