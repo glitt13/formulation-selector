@@ -10,6 +10,7 @@ Usage:
 2024 Originally created, GL
 2025-06-10 Generalize to specify featureID and featureSource columns in the prediction output, GL
 2025-10-10 refactor to renamed fs_algo modules, GL
+2025-11-20 Integrated validation using schemas.py and pydantic_schemas.py, Soroush Sorourian with the help of AI.
 """
 
 import argparse
@@ -24,6 +25,17 @@ import logging
 import fs_prep.proc_eval_metrics as pem
 import numpy as np
 
+# Imports for validation
+import importlib.util
+import sys
+
+from fs_algo.pydantic_schemas import ModelMetadata # Used to validate loaded pipeline
+
+# import warnings
+# import pandera as pa
+# from pandera import Column, DataFrameSchema, Index, Check
+# from typing import List, Dict
+    
 # Predict values and evaluate predictions
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = 'process the prediction config file')
@@ -32,7 +44,11 @@ if __name__ == "__main__":
     # NOTE pred_config should contain the path for path_algo_config
     args = parser.parse_args()
 
-    path_pred_config = Path(args.path_pred_config).expanduser() # Path(f'~/git/formulation-selector/scripts/eval_ingest/xssa/xssa_pred_config.yaml') 
+    path_pred_config = Path(args.path_pred_config).expanduser() # Path(f'~/git/formulation-selector/scripts/eval_ingest/xssa/xssa_pred_config.yaml').expanduser()     
+    
+    config_dir = path_pred_config.parent    
+    arg_val = False # Default validation flag
+    
     # --- Commence logging before creating the log file
     memory_handler = MemoryHandler(capacity=30)
     # Get the root logger and add the memory handler to it
@@ -43,6 +59,25 @@ if __name__ == "__main__":
     logging.info(f"Running fs_pred_algo.py with \
                 {path_pred_config.parent / path_pred_config.name} config file")
     # ---
+    
+    # --- Conditionally load schemas ---
+    if args.validate:
+        arg_val = True
+        schema_file = config_dir / "schemas.py"
+    
+        if not schema_file.exists():
+            # Fallback logic for schema file not found
+            logging.error(f"No schema file found at expected location: {schema_file}")
+            raise FileNotFoundError(f"No schema file found at expected location: {schema_file}")
+    
+        # Dynamically import schemas.py
+        logging.info(f"Loading schemas from {schema_file}")
+        spec = importlib.util.spec_from_file_location("schemas", str(schema_file))
+        schemas = importlib.util.module_from_spec(spec)
+        sys.modules["schemas"] = schemas
+        spec.loader.exec_module(schemas)
+        logging.info("✅ Schemas loaded successfully.")
+        
     pred_cfg = fsutil.PredConfigParser(path_pred_config)
     pred_cfg._read_pred_config()
     
@@ -132,6 +167,17 @@ if __name__ == "__main__":
         df_attr = fsutil.fs_read_attr_comid(dir_db_attrs, comids_pred, attrs_sel = attrs_sel,
                                            read_type = 'filename', # 'filename' tends to be the fastest (2025-06-01)
                                         _s3 = None,storage_options=None)
+        
+        # --- VALIDATION: Input Attribute Data (df_attr) ---
+        if arg_val:
+            try:
+                schema_df_attr = schemas.schema_df_attr
+                validated_df_attr = schema_df_attr.validate(df_attr)
+                logging.info("✅ Input Attribute DataFrame validated successfully.")
+            except Exception as e:
+                logging.error(f"❌ Validation failed for Input Attribute Data: {e}")
+                sys.exit(1)
+        
         df_attr = df_attr.drop(columns='dl_timestamp')
         # Constrain the values in the value column to two digits after the decimal point (to help ID duplicates)
         df_attr['value'] = df_attr['value'].apply(lambda x: round(x, 2))
@@ -174,6 +220,15 @@ if __name__ == "__main__":
 
                 # Read in the algorithm's pipelin
                 pipeline_data = joblib.load(path_algo)
+                
+                # --- VALIDATION: Loaded Pipeline ---
+                if arg_val:
+                    try:
+                        ModelMetadata(**pipeline_data)
+                        logging.info("✅ Loaded Algorithm Pipeline validated successfully (Pydantic).")
+                    except Exception as e:
+                        logging.error(f"❌ Validation failed for Loaded Pipeline ({path_algo.name}): {e}")
+                        sys.exit(1)
                 
                 pipe = pipeline_data['pipeline']
                 X_train_shape = pipeline_data['X_train_shape']  # Retrieve X_train.shape
@@ -259,7 +314,7 @@ if __name__ == "__main__":
                 # Find and sort any uncertainty columns that were added to the dataframe
                 uncertainty_cols = sorted([
                     col for col in df_pred_mrge.columns 
-                    if col.startswith('forest_ci') or col.startswith('mapie_')
+                    if col.startswith('forestci') or col.startswith('mapie_')
                 ])
                 
                 # Define the trailing metadata columns
@@ -269,7 +324,23 @@ if __name__ == "__main__":
                 final_col_order = col_order + uncertainty_cols + meta_cols
                 
                 # Reorder the dataframe
-                df_pred_mrge = df_pred_mrge[final_col_order]                
+                df_pred_mrge = df_pred_mrge[final_col_order]
+
+                # --- VALIDATION: Output Prediction DataFrame (df_pred_mrge) ---
+                if arg_val:
+                    try:
+                        # Use the schema builder function defined in schemas.py
+                        schema_df_pred = schemas.build_schema_df_pred(
+                            uncertainty_cols=[col for col in df_pred_mrge.columns if col.startswith('forestci')],
+                            mapie_alphas=mapie_alpha
+                        )
+                        
+                        # Note: df_pred_mrge contains all needed columns for validation
+                        validated_df_pred = schema_df_pred.validate(df_pred_mrge)
+                        logging.info("✅ Prediction Output DataFrame validated successfully.")
+                    except Exception as e:
+                        logging.error(f"❌ Prediction Output validation failed: {e}")
+                        sys.exit(1)
 
                 # Write prediction results
                 df_pred_mrge.to_parquet(path_pred_out)
