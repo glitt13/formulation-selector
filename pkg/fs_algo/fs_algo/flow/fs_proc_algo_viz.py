@@ -9,6 +9,7 @@ Changelog/Contributions
 2025-05-19 oconus refactor using hard-coded default col_locid = 'featureID'
  in lieu of 'comid; add try/except based on read_type, GL
 2025-08-21 implement logging, GL
+2025-11-19 Integrated pandera schema validation, [Soroush Sorourian/AI]
 """
 import argparse
 import pandas as pd
@@ -22,14 +23,21 @@ import xarray as xr
 import fs_prep.proc_eval_metrics as pem
 from logging.handlers import MemoryHandler
 import logging
+import importlib.util
+import sys
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = 'process the algorithm config file')
     parser.add_argument('path_algo_config', type=str,
                         help='Path to the YAML configuration file specific for algorithm training')
+    parser.add_argument('--validate', action='store_true', help='Enable schema loading for data validation')
     args = parser.parse_args()
 
     path_algo_config = Path(args.path_algo_config).expanduser() #Path(f'~/git/formulation-selector/scripts/eval_ingest/xssa/xssa_algo_config.yaml').expanduser()
+    config_dir = path_algo_config.parent
+    
+    arg_val = False # Default validation flag
+    
     # --- Commence logging before creating the log file
     memory_handler = MemoryHandler(capacity=30)
     # Get the root logger and add the memory handler to it
@@ -39,6 +47,26 @@ if __name__ == "__main__":
     root_logger.setLevel(logging.INFO) # Set the level to capture INFO messages
     logging.info(f"Running fs_proc_algo_viz.py with \
                 {path_algo_config.parent / path_algo_config.name} config file")
+    
+    # --- Conditionally load schemas
+    if args.validate:
+        arg_val = True
+        schema_file = config_dir / "schemas.py"
+    
+        if not schema_file.exists():
+            # Fallback to looking in the local directory if config_dir resolution fails
+            schema_file = Path("schemas.py")
+            if not schema_file.exists():
+                logging.error(f"No schema file found at expected locations.")
+                raise FileNotFoundError(f"No schema file found at expected location: {config_dir / 'schemas.py'}")
+    
+        # Dynamically import schemas.py
+        logging.info(f"Loading schemas from {schema_file}")
+        spec = importlib.util.spec_from_file_location("schemas", str(schema_file))
+        schemas = importlib.util.module_from_spec(spec)
+        sys.modules["schemas"] = schemas
+        spec.loader.exec_module(schemas)
+        
     # ---
     logging.info("BEGINNING algorithm training, testing, & evaluation.")
     # Initialize algo configuration class for extracting attributes
@@ -82,6 +110,16 @@ if __name__ == "__main__":
                     path_cfig=path_attr_config,
                     name_attr_csv = name_attr_csv,
                     colname_attr_csv = colname_attr_csv)
+
+    # --- VALIDATION: Selected Attributes ---
+    if arg_val:
+        try:
+            schema_attrs_sel = schemas.schema_attrs_sel 
+            validated_attrs_sel = schema_attrs_sel.validate(pd.DataFrame(attrs_sel))
+            logging.info("✅ Attributes Selection DataFrame validated successfully.")
+        except Exception as e:
+            logging.error(f"❌ Validation failed for Attributes Selection: {e}")
+            sys.exit(1)
     
     # Define directories/datasets from the attribute config file
     dir_db_attrs = attr_cfig.attrs_cfg_dict.get('dir_db_attrs')
@@ -148,6 +186,7 @@ if __name__ == "__main__":
 
         vals = {'ds_type':ds_type,'write_type':write_type, 'dir_std_base':dir_std_base,'ds':ds}
         path_meta = path_meta_fstr.format(**vals)
+        
         if Path(path_meta).exists() and False:
             # TODO allow secondary option where dat_resp and metrics read in from elsewhere. 
             # NOTE dataset metadata handling will also need to be considered
@@ -176,11 +215,59 @@ if __name__ == "__main__":
             gdf_comid = dict_resp_gdf['gdf_comid']
             # Subset to the gage ids only selected for training (just in case some predictions make it into dat_resp)
             gdf_comid = gdf_comid[gdf_comid['gage_id'].astype(str).isin(dat_resp['gage_id'].values)]
+            
+            # --- VALIDATION: GDF Comid ---
+            if arg_val:
+                try:
+                    schema_gdf_comid = schemas.schema_gdf_comid
+                    # Ensure geometry is validated correctly (Pandera often checks string WKT in schemas)
+                    # If gdf is a GeoDataFrame, you might need to convert geometry to WKT for string regex validation
+                    validated_gdf_comid = schema_gdf_comid.validate(gdf_comid)
+                    logging.info("✅ GDF Comid DataFrame validated successfully.")
+                except Exception as e:
+                    logging.error(f"❌ Validation failed for GDF Comid: {e}")
+                    sys.exit(1)
+                    
             locids_resp = gdf_comid[col_locid].tolist()
+            
+            # --- VALIDATION: Response Data (dat_resp) ---
+            # We must extract Xarray data to a pandas DataFrame to validate with Pandera
+            if arg_val:
+                try:
+                    # Construct temporary DF matching schema logic (Metric extraction)
+                    temp_cols = {
+                        "basin_name": dat_resp.get("basin_name", xr.DataArray(np.nan)).values if "basin_name" in dat_resp else None,
+                        "gage_id": dat_resp["gage_id"].values,
+                        # Use col_locid (e.g., 'featureID') usually mapped to 'comid' in schemas
+                        "comid": dat_resp[col_locid].values if col_locid in dat_resp else dat_resp["comid"].values, 
+                    }
+                    
+                    # Extract metrics dynamically defined in config or attribute
+                    if not metrics:
+                        current_metrics = dat_resp.attrs.get('metric_mappings', '').split('|')
+                    else:
+                        current_metrics = metrics
+
+                    for metr in current_metrics:
+                        if metr in dat_resp:
+                            temp_cols[metr] = dat_resp[metr].values
+                    
+                    # Filter out None columns
+                    temp_cols = {k: v for k, v in temp_cols.items() if v is not None}
+                    tempDF_dat_resp = pd.DataFrame(temp_cols)
+
+                    schema_dat_resp = schemas.schema_dat_resp
+                    validated_dat_resp = schema_dat_resp.validate(tempDF_dat_resp)
+                    logging.info("✅ Response Data DataFrame validated successfully.")
+                except Exception as e:
+                    logging.error(f"❌ Validation failed for Response Data: {e}")
+                    sys.exit(1)
+                    
         if not metrics:
             # The metrics approach. These are all xarray data variables of the response(s)
             metrics = dat_resp.attrs['metric_mappings'].split('|')
         
+
         #%%  Read in predictor variable data (aka basin attributes) & NA removal
         # Read the predictor variable data (basin attributes) generated by proc.attr.hydfab
         # NOTE some gage_ids lost inside fs_read_attr_comid. 
@@ -190,6 +277,17 @@ if __name__ == "__main__":
         except: # The read_type='filename' approach may not work
             df_attr = fsutil.fs_read_attr_comid(dir_db_attrs, locids_resp, attrs_sel = attrs_sel,
                                 _s3 = None,storage_options=None,read_type='all')
+        
+        # --- VALIDATION: Attribute Data (df_attr) ---
+        if arg_val:
+            try:
+                schema_df_attr = schemas.schema_df_attr
+                # Depending on schema strictness, we might need to ensure columns match exactly
+                validated_df_attr = schema_df_attr.validate(df_attr)
+                logging.info("✅ Attribute DataFrame validated successfully.")
+            except Exception as e:
+                logging.error(f"❌ Validation failed for Attribute Data: {e}")
+                sys.exit(1)
             
         # Convert into wide format for model training
         df_attr_wide = df_attr.pivot(index=col_locid, columns = 'attribute', values = 'value')
@@ -414,6 +512,17 @@ if __name__ == "__main__":
             del train_eval
         # Compile results and write to file
         rslt_eval_df = pd.concat(rslt_eval).reset_index(drop=True)
+        
+        # --- VALIDATION: Result Eval DF ---
+        if arg_val:
+            try:
+                schema_rslt_eval_df = schemas.schema_rslt_eval_df 
+                validated_rslt_eval_df = schema_rslt_eval_df.validate(rslt_eval_df)
+                logging.info("✅ Results Evaluation DataFrame validated successfully.")
+            except Exception as e:
+                logging.error(f"❌ Validation failed for Results Evaluation: {e}")
+                sys.exit(1)
+                
         rslt_eval_df['dataset'] = ds
         rslt_eval_df.to_parquet(Path(dir_out_alg_ds)/Path('algo_eval_'+ds+'.parquet'))
         logging.info(f'... Wrote training and testing evaluation to file for {ds}')
