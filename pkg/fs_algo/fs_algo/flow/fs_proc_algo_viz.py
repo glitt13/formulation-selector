@@ -10,6 +10,7 @@ Changelog/Contributions
  in lieu of 'comid; add try/except based on read_type, GL
 2025-08-21 implement logging, GL
 2025-11-19 Integrated pandera schema validation, [Soroush Sorourian/AI]
+2025-11-25 refactor: move schemas to package structure and adjust import logic, [Soroush Sorourian/AI]
 """
 import argparse
 import pandas as pd
@@ -25,6 +26,7 @@ from logging.handlers import MemoryHandler
 import logging
 import importlib.util
 import sys
+import fs_algo.schemas.schemas as schemas
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = 'process the algorithm config file')
@@ -51,21 +53,22 @@ if __name__ == "__main__":
     # --- Conditionally load schemas
     if args.validate:
         arg_val = True
-        schema_file = config_dir / "schemas.py"
+        # schema_file = config_dir / "schemas.py"
     
-        if not schema_file.exists():
-            # Fallback to looking in the local directory if config_dir resolution fails
-            schema_file = Path("schemas.py")
-            if not schema_file.exists():
-                logging.error(f"No schema file found at expected locations.")
-                raise FileNotFoundError(f"No schema file found at expected location: {config_dir / 'schemas.py'}")
+        # if not schema_file.exists():
+        #     # Fallback to looking in the local directory if config_dir resolution fails
+        #     schema_file = Path("schemas.py")
+        #     if not schema_file.exists():
+        #         logging.error(f"No schema file found at expected locations.")
+        #         raise FileNotFoundError(f"No schema file found at expected location: {config_dir / 'schemas.py'}")
     
-        # Dynamically import schemas.py
-        logging.info(f"Loading schemas from {schema_file}")
-        spec = importlib.util.spec_from_file_location("schemas", str(schema_file))
-        schemas = importlib.util.module_from_spec(spec)
-        sys.modules["schemas"] = schemas
-        spec.loader.exec_module(schemas)
+        # # Dynamically import schemas.py
+        # logging.info(f"Loading schemas from {schema_file}")
+        # spec = importlib.util.spec_from_file_location("schemas", str(schema_file))
+        # schemas = importlib.util.module_from_spec(spec)
+        # sys.modules["schemas"] = schemas
+        # spec.loader.exec_module(schemas)
+        logging.info("Schema validation enabled. Using statically imported schemas from fs_algo.schemas.")
         
     # ---
     logging.info("BEGINNING algorithm training, testing, & evaluation.")
@@ -240,6 +243,7 @@ if __name__ == "__main__":
                         "gage_id": dat_resp["gage_id"].values,
                         # Use col_locid (e.g., 'featureID') usually mapped to 'comid' in schemas
                         "comid": dat_resp[col_locid].values if col_locid in dat_resp else dat_resp["comid"].values, 
+                        "featureID": dat_resp[col_locid].values if col_locid in dat_resp else None,
                     }
                     
                     # Extract metrics dynamically defined in config or attribute

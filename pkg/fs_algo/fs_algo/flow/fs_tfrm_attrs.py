@@ -20,6 +20,7 @@ Changelog/contributions
 2025-05-20 refactor: address oconus compatibility, GL
 2025-08-21 add logging, GL
 2025-10-10 refactor to renamed fs_algo modules, GL
+2025-11-25 refactor: move schemas to package structure and adjust import logic, [Soroush Sorourian/AI]
 """
 
 import argparse
@@ -40,6 +41,7 @@ from logging.handlers import MemoryHandler
 import datetime
 import importlib.util
 import sys
+import fs_algo.schemas.schemas as schemas 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = 'process the algorithm config file')
@@ -50,20 +52,23 @@ if __name__ == "__main__":
     config_dir = path_tfrm_cfig.parent
 
     # Conditionally load schemas
+    arg_val = False
     if args.validate:
         arg_val = True
-        schema_file = config_dir / "schemas.py"
+        # schema_file = config_dir / "schemas.py"
     
-        if not schema_file.exists():
-            raise FileNotFoundError(f"No schema file found at expected location: {schema_file}")
+        # if not schema_file.exists():
+        #     raise FileNotFoundError(f"No schema file found at expected location: {schema_file}")
 
-        # Dynamically import schemas.py
-        logging.info(f"Loading schemas from {schema_file}")
-        spec = importlib.util.spec_from_file_location("schemas", str(schema_file))
-        schemas = importlib.util.module_from_spec(spec)
-        sys.modules["schemas"] = schemas
-        spec.loader.exec_module(schemas)
-        logging.info("✅ Schemas loaded successfully.")
+        # # Dynamically import schemas.py
+        # logging.info(f"Loading schemas from {schema_file}")
+        # spec = importlib.util.spec_from_file_location("schemas", str(schema_file))
+        # schemas = importlib.util.module_from_spec(spec)
+        # sys.modules["schemas"] = schemas
+        # spec.loader.exec_module(schemas)
+        # logging.info("✅ Schemas loaded successfully.")
+        logging.info("Schema validation enabled. Using statically imported schemas from fs_algo.schemas.")
+
 
     # --- 
     memory_handler = MemoryHandler(capacity=100)
