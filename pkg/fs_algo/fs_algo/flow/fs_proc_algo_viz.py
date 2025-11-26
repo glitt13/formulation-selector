@@ -46,7 +46,7 @@ if __name__ == "__main__":
 
     path_algo_config = Path(args.path_algo_config).expanduser() #Path(f'~/git/formulation-selector/scripts/workflow_configs/legacy/xssa/xssa_algo_config.yaml').expanduser()
     config_dir = path_algo_config.parent
-    
+
     # --- Conditionally load schemas
     arg_val = args.validate 
     if arg_val:
@@ -465,7 +465,7 @@ if __name__ == "__main__":
             del train_eval
         # Compile results and write to file
         rslt_eval_df = pd.concat(rslt_eval).reset_index(drop=True)
-        
+
         # --- VALIDATION and file writing: Result Eval DF ---
         fsutil.write_validated_evaluation_output(
             rslt_eval_df=rslt_eval_df, 
