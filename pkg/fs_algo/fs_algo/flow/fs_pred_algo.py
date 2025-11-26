@@ -11,6 +11,7 @@ Usage:
 2025-06-10 Generalize to specify featureID and featureSource columns in the prediction output, GL
 2025-10-10 refactor to renamed fs_algo modules, GL
 2025-11-20 Integrated validation using schemas.py and pydantic_schemas.py, Soroush Sorourian with the help of AI.
+2025-11-25 refactor: move schemas to package structure and adjust import logic, [Soroush Sorourian/AI]
 """
 
 import argparse
@@ -29,7 +30,8 @@ import numpy as np
 import importlib.util
 import sys
 
-from fs_algo.pydantic_schemas import ModelMetadata # Used to validate loaded pipeline
+from fs_algo.schemas.pydantic_schemas import ModelMetadata # Used to validate loaded pipeline
+import fs_algo.schemas.schemas as schemas 
 
 # import warnings
 # import pandera as pa
@@ -63,20 +65,21 @@ if __name__ == "__main__":
     # --- Conditionally load schemas ---
     if args.validate:
         arg_val = True
-        schema_file = config_dir / "schemas.py"
+        # schema_file = config_dir / "schemas.py"
     
-        if not schema_file.exists():
-            # Fallback logic for schema file not found
-            logging.error(f"No schema file found at expected location: {schema_file}")
-            raise FileNotFoundError(f"No schema file found at expected location: {schema_file}")
+        # if not schema_file.exists():
+        #     # Fallback logic for schema file not found
+        #     logging.error(f"No schema file found at expected location: {schema_file}")
+        #     raise FileNotFoundError(f"No schema file found at expected location: {schema_file}")
     
-        # Dynamically import schemas.py
-        logging.info(f"Loading schemas from {schema_file}")
-        spec = importlib.util.spec_from_file_location("schemas", str(schema_file))
-        schemas = importlib.util.module_from_spec(spec)
-        sys.modules["schemas"] = schemas
-        spec.loader.exec_module(schemas)
-        logging.info("✅ Schemas loaded successfully.")
+        # # Dynamically import schemas.py
+        # logging.info(f"Loading schemas from {schema_file}")
+        # spec = importlib.util.spec_from_file_location("schemas", str(schema_file))
+        # schemas = importlib.util.module_from_spec(spec)
+        # sys.modules["schemas"] = schemas
+        # spec.loader.exec_module(schemas)
+        # logging.info("✅ Schemas loaded successfully.")
+        logging.info("Schema validation enabled. Using statically imported schemas from fs_algo.schemas.")
         
     pred_cfg = fsutil.PredConfigParser(path_pred_config)
     pred_cfg._read_pred_config()
