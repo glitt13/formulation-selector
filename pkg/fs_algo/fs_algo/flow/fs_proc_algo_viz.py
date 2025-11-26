@@ -11,6 +11,8 @@ Changelog/Contributions
 2025-08-21 implement logging, GL
 2025-11-19 Integrated pandera schema validation, [Soroush Sorourian/AI]
 2025-11-25 refactor: move schemas to package structure and adjust import logic, [Soroush Sorourian/AI]
+2025-11-26 feat: Dynamically load valid metrics from associated prep config file, [Soroush Sorourian/AI]
+2025-11-26 refactor: Moved dynamic metric loading logic to fs_algo.utils.get_valid_metrics, [Soroush Sorourian/AI]
 """
 import argparse
 import pandas as pd
@@ -39,6 +41,9 @@ if __name__ == "__main__":
     config_dir = path_algo_config.parent
     
     arg_val = False # Default validation flag
+    
+    # load metrics based on the algo config path
+    valid_metrics = fsutil.get_valid_metrics(path_algo_config)
     
     # --- Commence logging before creating the log file
     memory_handler = MemoryHandler(capacity=30)
@@ -260,7 +265,7 @@ if __name__ == "__main__":
                     temp_cols = {k: v for k, v in temp_cols.items() if v is not None}
                     tempDF_dat_resp = pd.DataFrame(temp_cols)
 
-                    schema_dat_resp = schemas.schema_dat_resp
+                    schema_dat_resp = schemas.build_schema_dat_resp(valid_metrics)
                     validated_dat_resp = schema_dat_resp.validate(tempDF_dat_resp)
                     logging.info("✅ Response Data DataFrame validated successfully.")
                 except Exception as e:
@@ -520,7 +525,7 @@ if __name__ == "__main__":
         # --- VALIDATION: Result Eval DF ---
         if arg_val:
             try:
-                schema_rslt_eval_df = schemas.schema_rslt_eval_df 
+                schema_rslt_eval_df = schemas.build_schema_rslt_eval_df(valid_metrics) 
                 validated_rslt_eval_df = schema_rslt_eval_df.validate(rslt_eval_df)
                 logging.info("✅ Results Evaluation DataFrame validated successfully.")
             except Exception as e:
