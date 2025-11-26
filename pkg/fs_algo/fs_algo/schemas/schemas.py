@@ -138,7 +138,8 @@ schema_gdf_comid = DataFrameSchema({
 )
 
 # --- C. Training Evaluation Results ---
-schema_rslt_eval_df = pa.DataFrameSchema({
+def build_schema_rslt_eval_df(valid_metrics: List[str]) -> pa.DataFrameSchema:
+    return pa.DataFrameSchema({
         "algorithm": Column(pa.String,checks=Check.isin(["rf", "mlp"]),nullable=False),
         "type": Column(pa.String,checks=Check.isin(["random forest regressor", "multi-layer perceptron regressor"]),nullable=False),
         "metric": Column(pa.String, checks=Check.isin(valid_metrics), nullable=False),
@@ -160,15 +161,16 @@ schema_attrs_sel = DataFrameSchema({
 
 # --- E. Response Data (Targets) ---
 # Creating schema for dat_resp
-schema_columns_dat_resp = {
-    "basin_name": Column(str, nullable=False),
-    "gage_id": Column(pa.Object, nullable=False),
-    "comid": Column(pa.Object, nullable=False),
-    "featureID": Column(pa.Object, nullable=False), 
-}
-for metric in valid_metrics:
-    schema_columns_dat_resp[metric] = Column(float, nullable=True) 
-schema_dat_resp = pa.DataFrameSchema(schema_columns_dat_resp, coerce=True, strict=False)
+def build_schema_dat_resp(valid_metrics: List[str]) -> pa.DataFrameSchema:
+    schema_columns_dat_resp = {
+        "basin_name": Column(str, nullable=False), 
+        "gage_id": Column(pa.Object, nullable=False),
+        "comid": Column(pa.Object, nullable=False), 
+        "featureID": Column(pa.Object, nullable=False), 
+    }
+    for metric in valid_metrics:
+        schema_columns_dat_resp[metric] = Column(float, nullable=True) 
+    return pa.DataFrameSchema(schema_columns_dat_resp, coerce=True, strict=False, name="DatResp")
 
 # --- F. Prediction Output Schema ---
 # def build_schema_df_pred(schema_df_pred_dict):
@@ -180,12 +182,12 @@ schema_dat_resp = pa.DataFrameSchema(schema_columns_dat_resp, coerce=True, stric
 #         name="DFPred"
 #     )
 def build_schema_df_pred(
+    valid_metrics: List[str],
     uncertainty_cols: List[str] = [], 
     mapie_alphas: List[float] = []
 ) -> pa.DataFrameSchema:
     """
     Constructs the schema for the final prediction output parquet.
-    matches column order: ['featureID', 'featureSource', 'prediction', ... uncertainty ..., 'resp_var', 'dataset', 'algo', 'name_algo']
     """
     
     schema_dict = {
@@ -205,16 +207,15 @@ def build_schema_df_pred(
     # Add MAPIE columns dynamically
     if mapie_alphas:
         for alpha in mapie_alphas:
-            # Logic matching the script's f-string formatting
-            alpha_str = f"{alpha:.2f}" # fs_pred_algo_new.py uses .2f
+            alpha_str = f"{alpha:.2f}" 
             schema_dict[f'mapie_lower_{alpha_str}'] = Column(float, nullable=True)
             schema_dict[f'mapie_upper_{alpha_str}'] = Column(float, nullable=True)
 
     return pa.DataFrameSchema(
         schema_dict,
-        index=pa.Index(pa.Int), # Parquet might reset index
+        index=pa.Index(pa.Int), 
         coerce=True,
-        strict=False, # Allow extra columns if strictly necessary, but try to catch typos
+        strict=False,
         name="DFPred"
     )
 
