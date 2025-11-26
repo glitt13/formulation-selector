@@ -12,6 +12,8 @@ Usage:
 2025-10-10 refactor to renamed fs_algo modules, GL
 2025-11-20 Integrated validation using schemas.py and pydantic_schemas.py, Soroush Sorourian with the help of AI.
 2025-11-25 refactor: move schemas to package structure and adjust import logic, [Soroush Sorourian/AI]
+2025-11-26 feat: Dynamically load valid metrics for schema validation, Soroush Sorourian
+2025-11-26 refactor: Replaced dynamic metric loading logic with fs_algo.utils.get_valid_metrics, Soroush Sorourian
 """
 
 import argparse
@@ -50,6 +52,9 @@ if __name__ == "__main__":
     
     config_dir = path_pred_config.parent    
     arg_val = False # Default validation flag
+
+    # Call the new utility function to load metrics based on the pred config path
+    valid_metrics = fsutil.get_valid_metrics(path_pred_config)
     
     # --- Commence logging before creating the log file
     memory_handler = MemoryHandler(capacity=30)
@@ -334,6 +339,7 @@ if __name__ == "__main__":
                     try:
                         # Use the schema builder function defined in schemas.py
                         schema_df_pred = schemas.build_schema_df_pred(
+                            valid_metrics=valid_metrics,
                             uncertainty_cols=[col for col in df_pred_mrge.columns if col.startswith('forestci')],
                             mapie_alphas=mapie_alpha
                         )
