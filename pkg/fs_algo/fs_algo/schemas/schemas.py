@@ -6,21 +6,33 @@ import re
 import yaml
 from pathlib import Path
 import sys
+import os
+import fs_algo.utils as fsutil
 
 # %% 1. Dynamic Configuration Loading
-# We define paths relative to this schema file to find the YAML configs in the package
-# Assumption: schemas.py is at scripts/eval_ingest/xssa/
-# Repository Root is 3 levels up.
+# When schemas.py is inside the package at pkg/fs_algo/fs_algo/schemas/
+# REPO_ROOT is 4 levels up from schemas/
 
-REPO_ROOT = Path(__file__).resolve().parents[3] 
+REPO_ROOT = Path(__file__).resolve().parents[4] 
+# PKG_DATA_DIR: Path to attribute YAML files (e.g., attr_source_types.yml, fs_attr_menu.yaml)
+# Assuming they reside in pkg/proc.attr.hydfab/inst/extdata, relative to REPO_ROOT
 PKG_DATA_DIR = REPO_ROOT / "pkg" / "proc.attr.hydfab" / "inst" / "extdata"
-PREP_CONFIG_DIR = Path(__file__).resolve().parent
+# PREP_CONFIG_DIR = Path(__file__).resolve().parent
 
 # Path to YAML files
 ATTR_SOURCE_YML = PKG_DATA_DIR / "attr_source_types.yml"
 ATTR_MENU_YML = PKG_DATA_DIR / "fs_attr_menu.yaml"
-PREP_CONFIG_YML = PREP_CONFIG_DIR / "xssa_prep_config.yaml"
 
+# # PREP_CONFIG_YML = PREP_CONFIG_DIR / "xssa_prep_config.yaml"
+# prep_config_files = list(PREP_CONFIG_DIR.glob('*_prep_config.yaml'))
+# if not prep_config_files:
+#     print("Warning: Could not find any *_prep_config.yaml file in the current directory.")
+#     PREP_CONFIG_YML = None # Use None if not found
+# else:
+#     # Use the first matching file found
+#     PREP_CONFIG_YML = prep_config_files[0]
+#     print(f"Info: Dynamically loaded preparation config from: {PREP_CONFIG_YML.name}")
+    
 def load_yaml(path: Path) -> Dict[str, Any]:
     if not path.exists():
         # Fallback or warning if paths are slightly different in dev environment
@@ -32,7 +44,7 @@ def load_yaml(path: Path) -> Dict[str, Any]:
 # Load contents
 raw_sources = load_yaml(ATTR_SOURCE_YML)
 attr_menu = load_yaml(ATTR_MENU_YML)
-prep_config = load_yaml(PREP_CONFIG_YML)
+# prep_config = load_yaml(PREP_CONFIG_YML)
 
 # A. Extract Valid Data Sources
 data_source_values = []
@@ -53,14 +65,15 @@ if attr_menu:
 
 
 # C. Extract Valid Metrics (from xssa_prep_config.yaml)
-valid_metrics = []
-if prep_config:
-    col_schema_list = prep_config.get("col_schema", [])
-    for item in col_schema_list:
-        if isinstance(item, dict) and "metric_mappings" in item:
-            # Split 'NSE|RMSE|KGE' into list
-            valid_metrics = item["metric_mappings"].split("|")
-            break
+# valid_metrics = []
+# if prep_config:
+#     col_schema_list = prep_config.get("col_schema", [])
+#     for item in col_schema_list:
+#         if isinstance(item, dict) and "metric_mappings" in item:
+#             # Split 'NSE|RMSE|KGE' into list
+#             valid_metrics = item["metric_mappings"].split("|")
+#             break
+valid_metrics = ["NSE", "RMSE", "KGE"]
 # # Fallback if config not found
 # if not valid_metrics:
 #     valid_metrics = ["NSE", "RMSE", "KGE", "MSE", "R2"]
@@ -151,10 +164,11 @@ schema_columns_dat_resp = {
     "basin_name": Column(str, nullable=False),
     "gage_id": Column(pa.Object, nullable=False),
     "comid": Column(pa.Object, nullable=False),
+    "featureID": Column(pa.Object, nullable=False), 
 }
 for metric in valid_metrics:
-    schema_columns_dat_resp[metric] = Column(float, nullable=False)
-schema_dat_resp = pa.DataFrameSchema(schema_columns_dat_resp)
+    schema_columns_dat_resp[metric] = Column(float, nullable=True) 
+schema_dat_resp = pa.DataFrameSchema(schema_columns_dat_resp, coerce=True, strict=False)
 
 # --- F. Prediction Output Schema ---
 # def build_schema_df_pred(schema_df_pred_dict):
