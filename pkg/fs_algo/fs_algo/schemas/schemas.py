@@ -73,7 +73,7 @@ if attr_menu:
 #             # Split 'NSE|RMSE|KGE' into list
 #             valid_metrics = item["metric_mappings"].split("|")
 #             break
-valid_metrics = ["NSE", "RMSE", "KGE"]
+# valid_metrics = ["NSE", "RMSE", "KGE"]
 # # Fallback if config not found
 # if not valid_metrics:
 #     valid_metrics = ["NSE", "RMSE", "KGE", "MSE", "R2"]
@@ -102,7 +102,8 @@ schema_df_attr = DataFrameSchema({
 
 
 # --- B. Spatial/Geometry Data ---
-wkt_point_pattern = r"^POINT\s*\(\-?\d+(\.\d+)?\s+\-?\d+(\.\d+)?\)$"    
+coordinate_regex = r"[\+\-]?\d+(\.\d*)?([eE][\+\-]?\d+)?"
+wkt_point_pattern = rf"^POINT\s*\({coordinate_regex}\s+{coordinate_regex}\)$" 
 
 # The old minimal schema (kept for reference, using the new strict=False setting)
 # schema_gdf_comid = DataFrameSchema({
