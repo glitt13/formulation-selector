@@ -8,7 +8,7 @@ import pynhd as nhd
 import dask.dataframe as dd
 import os
 from collections.abc import Iterable
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Any
 from pathlib import Path
 import itertools
 import yaml
@@ -20,9 +20,18 @@ import pyarrow as pa
 import pyarrow.dataset as ds
 import ast
 from sklearn.model_selection import train_test_split
+import joblib
+import sys 
 
 # Set up basic logging configuration
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Import schemas here to avoid circular dependency, they are separate modules
+try:
+    import fs_algo.schemas.schemas as schemas
+    from fs_algo.schemas.pydantic_schemas import ModelMetadata
+except ImportError:
+    logging.warning("Cannot import schemas: fs_algo/schemas/schemas.py and pydantic_schemas.py are required for validation utilities.")
 
 # %% ALGO CONFIG FILE PARSER
 class AlgoConfigParser:
@@ -1534,3 +1543,136 @@ def get_valid_metrics(path_known_config: str | os.PathLike) -> List[str]:
          logging.info(f"Using fallback metrics for schema validation: {valid_metrics}")
          
     return valid_metrics
+
+# %% PRED ALGO UTILITIES
+
+def load_validated_pipeline(path_algo: Path, arg_val: bool = False) -> Dict[str, Any]:
+    """
+    Loads a joblib-serialized ML pipeline and validates its contents using Pydantic.
+
+    :param path_algo: Path to the .joblib file containing the trained model pipeline.
+    :type path_algo: Path
+    :param arg_val: Flag to enable Pydantic validation.
+    :type arg_val: bool
+    :raises FileNotFoundError: If the path does not exist.
+    :raises ValueError: If Pydantic validation fails.
+    :return: The loaded dictionary containing the pipeline and metadata.
+    :rtype: Dict[str, Any]
+    """
+    if not path_algo.exists():
+        msg_nonexst = f"The following algorithm path does not exist: \n{path_algo}"
+        logging.error(msg_nonexst)
+        raise FileNotFoundError(msg_nonexst)
+
+    pipeline_data = joblib.load(path_algo)
+
+    # --- VALIDATION: Loaded Pipeline ---
+    if arg_val:
+        try:
+            ModelMetadata(**pipeline_data)
+            logging.info("✅ Loaded Algorithm Pipeline validated successfully (Pydantic).")
+        except Exception as e:
+            logging.error(f"❌ Validation failed for Loaded Pipeline ({path_algo.name}): {e}")
+            # Exit here as pipeline corruption is a critical failure
+            sys.exit(1)
+            
+    return pipeline_data
+
+def read_validated_input_attributes(
+    dir_db_attrs: str | os.PathLike, 
+    comids_pred: list, 
+    attrs_sel: Iterable,
+    read_type: str,
+    arg_val: bool = False
+) -> pd.DataFrame:
+    """
+    Reads attribute data, performs basic cleaning, and validates schema if requested.
+
+    :param dir_db_attrs: Directory where attribute .parquet files live.
+    :param comids_pred: List of feature IDs (COMIDs) for prediction.
+    :param attrs_sel: Attributes to select.
+    :param read_type: Data reading strategy ('all' or 'filename').
+    :param arg_val: Flag to enable Pandera schema validation.
+    :return: Processed and validated DataFrame of attributes.
+    :rtype: pd.DataFrame
+    """
+    # Read the predictor variable data
+    df_attr = fs_read_attr_comid(
+        dir_db_attrs, comids_pred, attrs_sel=attrs_sel,
+        read_type=read_type, _s3=None, storage_options=None
+    )
+
+    # --- VALIDATION: Input Attribute Data (df_attr) ---
+    if arg_val:
+        try:
+            schema_df_attr = schemas.schema_df_attr
+            schema_df_attr.validate(df_attr)
+            logging.info("✅ Input Attribute DataFrame validated successfully.")
+        except Exception as e:
+            logging.error(f"❌ Validation failed for Input Attribute Data: {e}")
+            # Exit here as input data schema failure is critical
+            sys.exit(1)
+
+    # Core data processing steps
+    df_attr = df_attr.drop(columns='dl_timestamp')
+        
+    # Constrain the values in the value column to two digits after the decimal point (to help ID duplicates)
+    df_attr['value'] = df_attr['value'].apply(lambda x: round(x, 2))
+
+    # Drop any duplicate rows
+    df_attr.drop_duplicates(inplace=True)
+
+    # Reset the index the dataframe
+    df_attr.reset_index(inplace=True)
+
+    # Remove the old index column
+    df_attr.drop(columns=['index'], inplace=True)
+    
+    return df_attr
+
+def write_validated_prediction_output(
+    df_pred_mrge: pd.DataFrame, 
+    path_pred_out: Path, 
+    arg_val: bool, 
+    valid_metrics: List[str],
+    mapie_alpha: List[float] = None
+):
+    """
+    Validates the final prediction output schema and writes the result to a Parquet file.
+
+    :param df_pred_mrge: The merged DataFrame containing predictions, metadata, and uncertainty bounds.
+    :type df_pred_mrge: pd.DataFrame
+    :param path_pred_out: The destination path for the Parquet file.
+    :type path_pred_out: Path
+    :param arg_val: Flag to enable Pandera schema validation.
+    :type arg_val: bool
+    :param valid_metrics: List of metrics to use for schema validation checks.
+    :type valid_metrics: List[str]
+    :param mapie_alpha: List of alpha values used for MAPIE uncertainty columns.
+    :type mapie_alpha: List[float], optional
+    """
+    if arg_val:
+        try:
+            # Identify uncertainty columns for schema builder
+            uncertainty_cols = [
+                col for col in df_pred_mrge.columns 
+                if col.startswith('forestci') or col.startswith('mapie_')
+            ]
+            
+            # Use the schema builder function defined in schemas.py
+            schema_df_pred = schemas.build_schema_df_pred(
+                valid_metrics=valid_metrics,
+                uncertainty_cols=uncertainty_cols,
+                mapie_alphas=mapie_alpha
+            )
+            
+            # Perform validation
+            schema_df_pred.validate(df_pred_mrge)
+            logging.info("✅ Prediction Output DataFrame validated successfully.")
+        except Exception as e:
+            logging.error(f"❌ Prediction Output validation failed: {e}")
+            sys.exit(1)
+
+    # Write prediction results
+    df_pred_mrge.to_parquet(path_pred_out)
+    logging.info(f"Wrote prediction output to: {path_pred_out}")
