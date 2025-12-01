@@ -1788,3 +1788,29 @@ def write_validated_prediction_output(
     # Write prediction results
     df_pred_mrge.to_parquet(path_pred_out)
     logging.info(f"Wrote prediction output to: {path_pred_out}")
+
+# %% fs_tfrm_attr UTILITIES
+def validate_df_comids(
+    df_comids: pd.DataFrame, 
+    arg_val: bool = False):
+    
+    """
+    Reads attribute data, performs basic cleaning, and validates schema if requested.
+
+    :param df_comids: Initial unvalidated DataFrame of attributes.
+    :type df_comids: pd.DataFrame
+    :param arg_val: Flag to enable Pandera schema validation.
+    :type arg_val: bool
+    """
+
+    # --- VALIDATION: Attribute Data (df_comids) ---
+    if arg_val:
+        try:
+            schema_df_comids = schemas.schema_df_comids  # Load schema from schemas.py
+            validated_df_comids = schema_df_comids.validate(df_comids)
+            print("✅ DataFrame validated successfully.")
+        except Exception as e:
+            print(f"❌ Validation failed: {e}")
+            sys.exit(1)
+    
+    return df_comids
