@@ -142,14 +142,8 @@ if __name__ == "__main__":
         colname_comid = fio.get('colname_comid') 
         df_comids = fta.read_df_ext(path_comid) # Simply read in a file
 
-        if arg_val:
-            try:
-                schema_df_comids = schemas.schema_df_comids  # Load schema from schemas.py
-                validated_df_comids = schema_df_comids.validate(df_comids)
-                print("✅ DataFrame validated successfully.")
-            except Exception as e:
-                print(f"❌ Validation failed: {e}")
-                sys.exit(1)
+        # --- VALIDATION: df_comids ---
+        fsutil.validate_df_comids(df_comids, arg_val=arg_val)
         
         # Now we need to make sure we select the comids!
         all_uniq_comids = df_comids[colname_comid].unique()
