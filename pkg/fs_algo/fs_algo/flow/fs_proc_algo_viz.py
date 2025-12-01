@@ -60,21 +60,6 @@ if __name__ == "__main__":
     # --- Conditionally load schemas
     if args.validate:
         arg_val = True
-        # schema_file = config_dir / "schemas.py"
-    
-        # if not schema_file.exists():
-        #     # Fallback to looking in the local directory if config_dir resolution fails
-        #     schema_file = Path("schemas.py")
-        #     if not schema_file.exists():
-        #         logging.error(f"No schema file found at expected locations.")
-        #         raise FileNotFoundError(f"No schema file found at expected location: {config_dir / 'schemas.py'}")
-    
-        # # Dynamically import schemas.py
-        # logging.info(f"Loading schemas from {schema_file}")
-        # spec = importlib.util.spec_from_file_location("schemas", str(schema_file))
-        # schemas = importlib.util.module_from_spec(spec)
-        # sys.modules["schemas"] = schemas
-        # spec.loader.exec_module(schemas)
         logging.info("Schema validation enabled. Using statically imported schemas from fs_algo.schemas.")
         
     # ---
