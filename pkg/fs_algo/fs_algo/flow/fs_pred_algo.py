@@ -32,14 +32,6 @@ import numpy as np
 # Imports for validation
 import importlib.util
 import sys
-
-# from fs_algo.schemas.pydantic_schemas import ModelMetadata # Used to validate loaded pipeline
-# import fs_algo.schemas.schemas as schemas 
-
-# import warnings
-# import pandera as pa
-# from pandera import Column, DataFrameSchema, Index, Check
-# from typing import List, Dict
     
 # Predict values and evaluate predictions
 if __name__ == "__main__":
@@ -71,20 +63,6 @@ if __name__ == "__main__":
     # --- Conditionally load schemas ---
     if args.validate:
         arg_val = True
-        # schema_file = config_dir / "schemas.py"
-    
-        # if not schema_file.exists():
-        #     # Fallback logic for schema file not found
-        #     logging.error(f"No schema file found at expected location: {schema_file}")
-        #     raise FileNotFoundError(f"No schema file found at expected location: {schema_file}")
-    
-        # # Dynamically import schemas.py
-        # logging.info(f"Loading schemas from {schema_file}")
-        # spec = importlib.util.spec_from_file_location("schemas", str(schema_file))
-        # schemas = importlib.util.module_from_spec(spec)
-        # sys.modules["schemas"] = schemas
-        # spec.loader.exec_module(schemas)
-        # logging.info("✅ Schemas loaded successfully.")
         logging.info("Schema validation enabled. Using statically imported schemas from fs_algo.schemas.")
         
     pred_cfg = fsutil.PredConfigParser(path_pred_config)
