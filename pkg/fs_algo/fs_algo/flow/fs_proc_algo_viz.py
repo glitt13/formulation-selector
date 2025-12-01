@@ -13,6 +13,7 @@ Changelog/Contributions
 2025-11-25 refactor: move schemas to package structure and adjust import logic, [Soroush Sorourian/AI]
 2025-11-26 feat: Dynamically load valid metrics from associated prep config file, [Soroush Sorourian/AI]
 2025-11-26 refactor: Moved dynamic metric loading logic to fs_algo.utils.get_valid_metrics, [Soroush Sorourian/AI]
+2025-12-01 refactor: Consolidated all validation and I/O into fs_algo.utils functions, [Soroush Sorourian/AI]
 """
 import argparse
 import pandas as pd
@@ -29,6 +30,7 @@ import logging
 import importlib.util
 import sys
 import fs_algo.schemas.schemas as schemas
+import yaml 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = 'process the algorithm config file')
@@ -114,20 +116,13 @@ if __name__ == "__main__":
     #  OR a .csv file if specified in the algo config file.
     name_attr_csv = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["name_attr_csv"]
     colname_attr_csv = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["colname_attr_csv"]
-    attrs_sel = fsutil._id_attrs_sel_wrap(attr_cfig=attr_cfig,
-                    path_cfig=path_attr_config,
-                    name_attr_csv = name_attr_csv,
-                    colname_attr_csv = colname_attr_csv)
-
-    # --- VALIDATION: Selected Attributes ---
-    if arg_val:
-        try:
-            schema_attrs_sel = schemas.schema_attrs_sel 
-            validated_attrs_sel = schema_attrs_sel.validate(pd.DataFrame(attrs_sel))
-            logging.info("✅ Attributes Selection DataFrame validated successfully.")
-        except Exception as e:
-            logging.error(f"❌ Validation failed for Attributes Selection: {e}")
-            sys.exit(1)
+    attrs_sel = fsutil.read_validated_attribute_selection(
+        attr_cfig=attr_cfig,
+        path_cfig=path_algo_config, 
+        name_attr_csv=name_attr_csv,
+        colname_attr_csv=colname_attr_csv,
+        arg_val=arg_val
+    )
     
     # Define directories/datasets from the attribute config file
     dir_db_attrs = attr_cfig.attrs_cfg_dict.get('dir_db_attrs')
@@ -223,54 +218,15 @@ if __name__ == "__main__":
             gdf_comid = dict_resp_gdf['gdf_comid']
             # Subset to the gage ids only selected for training (just in case some predictions make it into dat_resp)
             gdf_comid = gdf_comid[gdf_comid['gage_id'].astype(str).isin(dat_resp['gage_id'].values)]
+            dat_resp["comid"] = (("gage_id"), gdf_comid["comid"].astype(str).values)
             
             # --- VALIDATION: GDF Comid ---
-            if arg_val:
-                try:
-                    schema_gdf_comid = schemas.schema_gdf_comid
-                    # Ensure geometry is validated correctly (Pandera often checks string WKT in schemas)
-                    # If gdf is a GeoDataFrame, you might need to convert geometry to WKT for string regex validation
-                    validated_gdf_comid = schema_gdf_comid.validate(gdf_comid)
-                    logging.info("✅ GDF Comid DataFrame validated successfully.")
-                except Exception as e:
-                    logging.error(f"❌ Validation failed for GDF Comid: {e}")
-                    sys.exit(1)
+            fsutil.validate_gdf_comid_schema(gdf_comid, arg_val=arg_val)
                     
             locids_resp = gdf_comid[col_locid].tolist()
             
             # --- VALIDATION: Response Data (dat_resp) ---
-            # We must extract Xarray data to a pandas DataFrame to validate with Pandera
-            if arg_val:
-                try:
-                    # Construct temporary DF matching schema logic (Metric extraction)
-                    temp_cols = {
-                        "basin_name": dat_resp.get("basin_name", xr.DataArray(np.nan)).values if "basin_name" in dat_resp else None,
-                        "gage_id": dat_resp["gage_id"].values,
-                        # Use col_locid (e.g., 'featureID') usually mapped to 'comid' in schemas
-                        "comid": dat_resp[col_locid].values if col_locid in dat_resp else dat_resp["comid"].values, 
-                        "featureID": dat_resp[col_locid].values if col_locid in dat_resp else None,
-                    }
-                    
-                    # Extract metrics dynamically defined in config or attribute
-                    if not metrics:
-                        current_metrics = dat_resp.attrs.get('metric_mappings', '').split('|')
-                    else:
-                        current_metrics = metrics
-
-                    for metr in current_metrics:
-                        if metr in dat_resp:
-                            temp_cols[metr] = dat_resp[metr].values
-                    
-                    # Filter out None columns
-                    temp_cols = {k: v for k, v in temp_cols.items() if v is not None}
-                    tempDF_dat_resp = pd.DataFrame(temp_cols)
-
-                    schema_dat_resp = schemas.build_schema_dat_resp(valid_metrics)
-                    validated_dat_resp = schema_dat_resp.validate(tempDF_dat_resp)
-                    logging.info("✅ Response Data DataFrame validated successfully.")
-                except Exception as e:
-                    logging.error(f"❌ Validation failed for Response Data: {e}")
-                    sys.exit(1)
+            fsutil.validate_dat_resp_schema(dat_resp, valid_metrics, col_locid, arg_val)
                     
         if not metrics:
             # The metrics approach. These are all xarray data variables of the response(s)
@@ -288,15 +244,7 @@ if __name__ == "__main__":
                                 _s3 = None,storage_options=None,read_type='all')
         
         # --- VALIDATION: Attribute Data (df_attr) ---
-        if arg_val:
-            try:
-                schema_df_attr = schemas.schema_df_attr
-                # Depending on schema strictness, we might need to ensure columns match exactly
-                validated_df_attr = schema_df_attr.validate(df_attr)
-                logging.info("✅ Attribute DataFrame validated successfully.")
-            except Exception as e:
-                logging.error(f"❌ Validation failed for Attribute Data: {e}")
-                sys.exit(1)
+        df_attr = fsutil.read_validated_input_attributes(df_attr,arg_val=arg_val)
             
         # Convert into wide format for model training
         df_attr_wide = df_attr.pivot(index=col_locid, columns = 'attribute', values = 'value')
@@ -522,20 +470,15 @@ if __name__ == "__main__":
         # Compile results and write to file
         rslt_eval_df = pd.concat(rslt_eval).reset_index(drop=True)
         
-        # --- VALIDATION: Result Eval DF ---
-        if arg_val:
-            try:
-                schema_rslt_eval_df = schemas.build_schema_rslt_eval_df(valid_metrics) 
-                validated_rslt_eval_df = schema_rslt_eval_df.validate(rslt_eval_df)
-                logging.info("✅ Results Evaluation DataFrame validated successfully.")
-            except Exception as e:
-                logging.error(f"❌ Validation failed for Results Evaluation: {e}")
-                sys.exit(1)
+        # --- VALIDATION and file writing: Result Eval DF ---
+        fsutil.write_validated_evaluation_output(
+            rslt_eval_df=rslt_eval_df, 
+            dir_out_alg_ds=dir_out_alg_ds, 
+            ds=ds,
+            valid_metrics=valid_metrics,
+            arg_val=arg_val
+        )
                 
-        rslt_eval_df['dataset'] = ds
-        rslt_eval_df.to_parquet(Path(dir_out_alg_ds)/Path('algo_eval_'+ds+'.parquet'))
-        logging.info(f'... Wrote training and testing evaluation to file for {ds}')
-
         dat_resp.close()
     #%% Cross-comparison across all datasets: determining where the best metric lives
     if same_test_ids and len(datasets)>1:

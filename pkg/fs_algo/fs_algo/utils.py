@@ -8,7 +8,7 @@ import pynhd as nhd
 import dask.dataframe as dd
 import os
 from collections.abc import Iterable
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 from pathlib import Path
 import itertools
 import yaml
@@ -1544,6 +1544,145 @@ def get_valid_metrics(path_known_config: str | os.PathLike) -> List[str]:
          
     return valid_metrics
 
+# %% PROC ALGO VIZ UTILITIES
+
+def read_validated_attribute_selection(
+    attr_cfig: Any, # fsutil.AttrConfigAndVars object
+    path_cfig: str | os.PathLike, # path_algo_config
+    name_attr_csv: str | None,
+    colname_attr_csv: str | None,
+    arg_val: bool = False
+) -> List[str]:
+    """
+    Retrieves the list of selected attributes and performs Pandera validation on the list.
+
+    :param attr_cfig: The parsed AttrConfigAndVars object.
+    :param path_cfig: Path of the referring config file (for path resolution).
+    :param name_attr_csv: Name of CSV file containing attributes, if used.
+    :param colname_attr_csv: Column name in the CSV file, if used.
+    :param arg_val: Flag to enable Pandera schema validation.
+    :return: List of selected attributes.
+    :rtype: List[str]
+    """
+    # Grab the attributes of interest from the attribute config file, OR a .csv file.
+    attrs_sel = _id_attrs_sel_wrap(
+        attr_cfig=attr_cfig,
+        path_cfig=path_cfig,
+        name_attr_csv = name_attr_csv,
+        colname_attr_csv = colname_attr_csv
+    )
+    
+    # --- VALIDATION: Selected Attributes ---
+    if arg_val:
+        try:
+            schema_attrs_sel = schemas.schema_attrs_sel 
+            schemas.schema_attrs_sel.validate(pd.DataFrame(attrs_sel))
+            logging.info("✅ Attributes Selection DataFrame validated successfully.")
+        except Exception as e:
+            logging.error(f"❌ Validation failed for Attributes Selection: {e}")
+            sys.exit(1)
+            
+    return attrs_sel
+
+def validate_gdf_comid_schema(gdf_comid: gpd.GeoDataFrame, arg_val: bool):
+    """
+    Validates the structure and geometry format of the GeoDataFrame.
+
+    :param gdf_comid: The GeoDataFrame to validate.
+    :type gdf_comid: gpd.GeoDataFrame
+    :param arg_val: Flag to enable Pandera schema validation.
+    :type arg_val: bool
+    """
+    if arg_val:
+        # --- VALIDATION: GDF Comid ---
+        try:
+            schemas.schema_gdf_comid.validate(gdf_comid)
+            logging.info("✅ GDF Comid DataFrame validated successfully.")
+        except Exception as e:
+            logging.error(f"❌ Validation failed for GDF Comid: {e}")
+            sys.exit(1)
+
+def validate_dat_resp_schema(dat_resp: xr.Dataset, valid_metrics: List[str], col_locid: str, arg_val: bool):
+    """
+    Validates the structure and metric columns of the Xarray Dataset response data.
+
+    :param dat_resp: The Xarray Dataset response data.
+    :type dat_resp: xr.Dataset
+    :param valid_metrics: List of metrics for validation.
+    :type valid_metrics: List[str]
+    :param col_locid: The name of the feature ID column ('featureID').
+    :type col_locid: str
+    :param arg_val: Flag to enable Pandera schema validation.
+    :type arg_val: bool
+    """
+    if arg_val:
+        # --- VALIDATION: Response Data (dat_resp) ---
+        try:
+            # Construct temporary DF matching schema logic (Metric extraction)
+            temp_cols = {
+                "basin_name": dat_resp.get("basin_name", xr.DataArray(np.nan)).values if "basin_name" in dat_resp else None,
+                "gage_id": dat_resp["gage_id"].values,
+                "comid": dat_resp["comid"].values if "comid" in dat_resp else None, #"comid": dat_resp.get("comid", xr.DataArray(np.nan)).values,
+                "featureID": dat_resp.get(col_locid, xr.DataArray(np.nan)).values,
+            }
+            
+            # Use metrics from Xarray attributes if available, otherwise rely on valid_metrics from config
+            current_metrics = dat_resp.attrs.get('metric_mappings', '').split('|')
+            current_metrics = [m for m in current_metrics if m in dat_resp]
+
+            for metr in current_metrics:
+                temp_cols[metr] = dat_resp[metr].values
+            
+            # Filter out None columns and validate
+            temp_cols = {k: v for k, v in temp_cols.items() if v is not None and v.ndim == 1}
+            tempDF_dat_resp = pd.DataFrame(temp_cols)
+
+            schema_dat_resp = schemas.build_schema_dat_resp(valid_metrics)
+            schema_dat_resp.validate(tempDF_dat_resp)
+            logging.info("✅ Response Data DataFrame validated successfully.")
+        except Exception as e:
+            logging.error(f"❌ Validation failed for Response Data: {e}")
+            sys.exit(1)
+
+def write_validated_evaluation_output(
+    rslt_eval_df: pd.DataFrame, 
+    dir_out_alg_ds: Path, 
+    ds: str,
+    valid_metrics: List[str],
+    arg_val: bool = False
+):
+    """
+    Validates the final model evaluation results schema and writes the result to a Parquet file.
+
+    :param rslt_eval_df: The DataFrame containing model performance metrics.
+    :type rslt_eval_df: pd.DataFrame
+    :param dir_out_alg_ds: The directory for algorithm output.
+    :type dir_out_alg_ds: Path
+    :param ds: The dataset ID.
+    :type ds: str
+    :param valid_metrics: List of metrics for validation.
+    :type valid_metrics: List[str]
+    :param arg_val: Flag to enable Pandera schema validation.
+    :type arg_val: bool
+    """
+    
+    if arg_val:
+        try:
+            # Pass the dynamically loaded metrics to the schema builder function
+            schema_rslt_eval_df = schemas.build_schema_rslt_eval_df(valid_metrics) 
+            schema_rslt_eval_df.validate(rslt_eval_df)
+            logging.info("✅ Results Evaluation DataFrame validated successfully.")
+        except Exception as e:
+            logging.error(f"❌ Validation failed for Results Evaluation: {e}")
+            sys.exit(1)
+            
+    rslt_eval_df['dataset'] = ds
+    
+    # Final write to Parquet
+    path_eval_parquet = Path(dir_out_alg_ds)/Path('algo_eval_'+ds+'.parquet')
+    rslt_eval_df.to_parquet(path_eval_parquet)
+    logging.info(f'... Wrote training and testing evaluation to file for {ds} at {path_eval_parquet}')
+
 # %% PRED ALGO UTILITIES
 
 def load_validated_pipeline(path_algo: Path, arg_val: bool = False) -> Dict[str, Any]:
@@ -1579,28 +1718,17 @@ def load_validated_pipeline(path_algo: Path, arg_val: bool = False) -> Dict[str,
     return pipeline_data
 
 def read_validated_input_attributes(
-    dir_db_attrs: str | os.PathLike, 
-    comids_pred: list, 
-    attrs_sel: Iterable,
-    read_type: str,
-    arg_val: bool = False
-) -> pd.DataFrame:
+    df_attr: pd.DataFrame, 
+    arg_val: bool = False):
+    
     """
     Reads attribute data, performs basic cleaning, and validates schema if requested.
 
-    :param dir_db_attrs: Directory where attribute .parquet files live.
-    :param comids_pred: List of feature IDs (COMIDs) for prediction.
-    :param attrs_sel: Attributes to select.
-    :param read_type: Data reading strategy ('all' or 'filename').
+    :param df_attr: Initial unvalidated DataFrame of attributes.
+    :type df_attr: pd.DataFrame
     :param arg_val: Flag to enable Pandera schema validation.
-    :return: Processed and validated DataFrame of attributes.
-    :rtype: pd.DataFrame
+    :type arg_val: bool
     """
-    # Read the predictor variable data
-    df_attr = fs_read_attr_comid(
-        dir_db_attrs, comids_pred, attrs_sel=attrs_sel,
-        read_type=read_type, _s3=None, storage_options=None
-    )
 
     # --- VALIDATION: Input Attribute Data (df_attr) ---
     if arg_val:
@@ -1612,22 +1740,6 @@ def read_validated_input_attributes(
             logging.error(f"❌ Validation failed for Input Attribute Data: {e}")
             # Exit here as input data schema failure is critical
             sys.exit(1)
-
-    # Core data processing steps
-    df_attr = df_attr.drop(columns='dl_timestamp')
-        
-    # Constrain the values in the value column to two digits after the decimal point (to help ID duplicates)
-    df_attr['value'] = df_attr['value'].apply(lambda x: round(x, 2))
-
-    # Drop any duplicate rows
-    df_attr.drop_duplicates(inplace=True)
-
-    # Reset the index the dataframe
-    df_attr.reset_index(inplace=True)
-
-    # Remove the old index column
-    df_attr.drop(columns=['index'], inplace=True)
-    
     return df_attr
 
 def write_validated_prediction_output(
