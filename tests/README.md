@@ -13,7 +13,7 @@ the `formulation-selector/tests/config/xssa/xssa_prep_config.yaml` file_io secti
 
 3) Finally, run the integration test:
 ```
-python path/to/git/formulation-selector/tests/test_rafts_prep_to_pred.py
+python -m unittest path/to/git/formulation-selector/tests/test_rafts_prep_to_pred.py
 ```
 
 Four tests will run, corresponding to each basic step in the core RaFTS workflow.
