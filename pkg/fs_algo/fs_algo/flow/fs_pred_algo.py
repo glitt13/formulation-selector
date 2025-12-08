@@ -39,13 +39,19 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = 'process the prediction config file')
     parser.add_argument('path_pred_config', type=str, help='Path to the YAML configuration file specific for prediction.')
     #parser.add_argument('path_algo_config', type=str, help='Path to the YAML configuration file specific for algorithm training')
+    parser.add_argument('--validate', action='store_true', default=False, 
+                        help='If present, enables schema validation for all input and output data. Defaults to False.')
     # NOTE pred_config should contain the path for path_algo_config
     args = parser.parse_args()
 
     path_pred_config = Path(args.path_pred_config).expanduser() # Path(f'~/git/formulation-selector/scripts/workflow_configs/legacy/xssa/xssa_pred_config.yaml').expanduser()     
     
     config_dir = path_pred_config.parent    
-    arg_val = False # Default validation flag
+
+    # --- Conditionally load schemas ---
+    arg_val = args.validate 
+    if arg_val:
+        logging.info("Schema validation enabled. Using statically imported schemas from fs_algo.schemas.")
 
     # --- Commence logging before creating the log file
     memory_handler = MemoryHandler(capacity=30)
@@ -56,12 +62,7 @@ if __name__ == "__main__":
     root_logger.setLevel(logging.INFO) # Set the level to capture INFO messages
     logging.info(f"Running fs_pred_algo.py with \
                 {path_pred_config.parent / path_pred_config.name} config file")
-    # ---
-    
-    # --- Conditionally load schemas ---
-    if args.validate:
-        arg_val = True
-        logging.info("Schema validation enabled. Using statically imported schemas from fs_algo.schemas.")
+    # ---   
         
     pred_cfg = fsutil.PredConfigParser(path_pred_config)
     pred_cfg._read_pred_config()
