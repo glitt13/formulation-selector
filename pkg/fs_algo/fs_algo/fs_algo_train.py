@@ -545,22 +545,40 @@ class AlgoTrainEval:
         """ Evaluate the predictions
 
         :return: Evaluation of algorithm performance from the test dataset. The dict keys include the following:
-            - `type`: They type of algorithm, e.g. "random forest"
+            - `type`: the type of algorithm, e.g. "random forest"
             - `metric`: the formulation metric, or hydrologic signature being predicted
             - `mse`: algorithm's mean squared error from test data
             - `r2`: algorithm's r-squared from test data
+            - 'MinResid': minimum residual. min(sim - obs)
+            - 'MaxResid': minimum residual. max(sim - obs)
+            - 'AvgResid': average residual. mean(sim - obs)
+            - 'SDResid': standard deviation of residuals. std(sim - obs)
+            - 'RMSE': square root of algorithm's mean squared error. sqrt(mean((sim - obs)^2))
+            - 'NRMSE':  normalized RMSE, RMSE divided by obs range. (max(obs)-min(obs)); NaN if range==0
         :rtype: dict
         """
        
         if self.verbose:
             logging.info(f"      Evaluating predictions.")   
-        # TODO add more evaluation metrics here
+
         for k, v in self.preds_dict.items():
             y_pred = v['y_pred']
+            resid = y_pred - self.y_test
+            rmse = float(np.sqrt(np.mean(resid**2)))
+            obs_range = float(np.max(self.y_test) - np.min(self.y_test))
+            rmse_obs = float(rmse / obs_range) if obs_range > 0.0 else np.nan
+
             self.eval_dict[k] = {'type': v['type'],
                             'metric': v['metric'],
                             'mse': mean_squared_error(self.y_test, y_pred),
-                            'r2': r2_score(self.y_test, y_pred)}
+                            'r2': r2_score(self.y_test, y_pred),
+                            'MinResid': float(np.min(resid)),
+                            'MaxResid': float(np.max(resid)),
+                            'AvgResid': float(np.mean(resid)),
+                            'SDResid': float(np.std(resid)),
+                            'RMSE': rmse,
+                            'NRMSE': rmse_obs}
+
         return self.eval_dict
 
     def save_algos(self):
