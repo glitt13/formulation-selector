@@ -164,10 +164,11 @@ schema_attrs_sel = DataFrameSchema({
 # Creating schema for dat_resp
 def build_schema_dat_resp(valid_metrics: List[str]) -> pa.DataFrameSchema:
     schema_columns_dat_resp = {
-        "basin_name": Column(str, nullable=False), 
+        #"basin_name": Column(str, nullable=False), 
         "gage_id": Column(pa.Object, nullable=False),
-        "comid": Column(pa.Object, nullable=False), 
-        "featureID": Column(pa.Object, nullable=False), 
+        #"comid": Column(pa.Object, nullable=False), 
+        "featureID": Column(pa.Object, nullable=False),
+        "featureSource": Column(str, nullable=False),
     }
     for metric in valid_metrics:
         schema_columns_dat_resp[metric] = Column(float, nullable=True) 
