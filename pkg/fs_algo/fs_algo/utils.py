@@ -1567,10 +1567,11 @@ def validate_dat_resp_schema(dat_resp: xr.Dataset, valid_metrics: List[str], col
         try:
             # Construct temporary DF matching schema logic (Metric extraction)
             temp_cols = {
-                "basin_name": dat_resp.get("basin_name", xr.DataArray(np.nan)).values if "basin_name" in dat_resp else None,
+                # "basin_name": dat_resp.get("basin_name", xr.DataArray(np.nan)).values if "basin_name" in dat_resp else None,
                 "gage_id": dat_resp["gage_id"].values,
-                "comid": dat_resp["comid"].values if "comid" in dat_resp else None, #"comid": dat_resp.get("comid", xr.DataArray(np.nan)).values,
+                # "comid": dat_resp["comid"].values if "comid" in dat_resp else None, #"comid": dat_resp.get("comid", xr.DataArray(np.nan)).values,
                 "featureID": dat_resp.get(col_locid, xr.DataArray(np.nan)).values,
+                "featureSource": dat_resp["featureSource"].values,
             }
             
             # Use metrics from Xarray attributes if available, otherwise rely on valid_metrics from config
