@@ -1491,59 +1491,6 @@ def clip_pis(y_pis: np.ndarray, min_lim: float, max_lim: float) -> np.ndarray:
     clip_max = max_lim if max_lim is not None else np.inf
     return np.clip(y_pis, clip_min, clip_max)
 
-# %% DYNAMIC CONFIG UTILITY
-def get_valid_metrics(path_known_config: str | os.PathLike) -> List[str]:
-    """
-    Dynamically derives the path to the associated preparation config file 
-    (by replacing 'algo' or 'pred' with 'prep' in the filename), loads it, 
-    and extracts the list of valid metrics from the 'metric_mappings' field.
-
-    A default list of metrics is returned if the file cannot be found or loaded,
-    or if the 'metric_mappings' field is empty.
-
-    :param path_known_config: The path to the currently known config file (e.g., algo_config.yaml or pred_config.yaml).
-    :type path_known_config: str | os.PathLike
-    :return: A list of valid metric strings (e.g., ['NSE', 'KGE', 'RMSE']).
-    :rtype: List[str]
-    """
-    path_known_config = Path(path_known_config)
-    
-    # 1. Determine the name of the associated preparation config file.
-    # Assumes filename structure like 'dataset_algo_config.yaml' or 'dataset_pred_config.yaml'
-    # and replaces 'algo'/'pred' with 'prep'.
-    path_prep_config_name = path_known_config.name.replace('algo', 'prep').replace('pred', 'prep')
-    
-    # 2. Use build_cfig_path to resolve the path relative to the known config.
-    path_prep_config = build_cfig_path(path_known_config, path_prep_config_name)
-    
-    valid_metrics = []
-    
-    if path_prep_config and path_prep_config.exists():
-        try:
-            # 3. Load the prep config file
-            with open(path_prep_config, 'r') as file:
-                prep_config = yaml.safe_load(file)
-            
-            # 4. Extract valid_metrics dynamically
-            col_schema_list = prep_config.get("col_schema", [])
-            for item in col_schema_list:
-                if isinstance(item, dict) and "metric_mappings" in item:
-                    # Split 'NSE|RMSE|KGE' into list
-                    valid_metrics = item["metric_mappings"].split("|")
-                    break
-            
-            if not valid_metrics:
-                logging.warning(f"Found {path_prep_config.name}, but 'metric_mappings' list was empty.")
-        except Exception as e:
-            logging.error(f"Error loading valid metrics from {path_prep_config.name}: {e}")
-
-    if not valid_metrics:
-         # Fallback to a predefined list if dynamic loading fails
-         valid_metrics = ["NSE", "RMSE", "KGE", "MSE", "R2", "bias", "r_pearson"]
-         logging.info(f"Using fallback metrics for schema validation: {valid_metrics}")
-         
-    return valid_metrics
-
 # %% PROC ALGO VIZ UTILITIES
 
 def read_validated_attribute_selection(

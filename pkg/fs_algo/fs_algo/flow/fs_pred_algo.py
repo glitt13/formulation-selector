@@ -15,6 +15,7 @@ Usage:
 2025-11-26 feat: Dynamically load valid metrics for schema validation, Soroush Sorourian
 2025-11-26 refactor: Replaced dynamic metric loading logic with fs_algo.utils.get_valid_metrics, Soroush Sorourian
 2025-12-01 refactor: Formalized loading, processing, and writing into utility functions, Soroush Sorourian with the help of AI.
+2025-12-08 refactor: Updated dynamic metric loading logic to be retrieved from the prediction config, Soroush Sorourian
 """
 
 import argparse
@@ -46,9 +47,6 @@ if __name__ == "__main__":
     config_dir = path_pred_config.parent    
     arg_val = False # Default validation flag
 
-    # Call the new utility function to load metrics based on the pred config path
-    valid_metrics = fsutil.get_valid_metrics(path_pred_config)
-    
     # --- Commence logging before creating the log file
     memory_handler = MemoryHandler(capacity=30)
     # Get the root logger and add the memory handler to it
@@ -300,7 +298,7 @@ if __name__ == "__main__":
                     df_pred_mrge=df_pred_mrge, 
                     path_pred_out=path_pred_out, 
                     arg_val=arg_val, 
-                    valid_metrics=valid_metrics, 
+                    valid_metrics=resp_vars,  
                     mapie_alpha=mapie_alpha
                 )
                 
