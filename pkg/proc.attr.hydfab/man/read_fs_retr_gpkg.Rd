@@ -16,7 +16,7 @@ and created by \link[proc.attr.hydfab]{fs_retr_nhdp_comids_geom_wrap}
 }
 \details{
 The renaming may be a temporary solution just-in case file
-originated in python fs_algo
+originated in python \code{fs_algo}
 }
 \seealso{
 \link[proc.attr.hydfab]{fs_retr_nhdp_comids_geom_wrap}

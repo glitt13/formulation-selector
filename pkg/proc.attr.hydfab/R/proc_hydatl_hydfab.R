@@ -1,3 +1,8 @@
+
+library(sf)
+library(logr)
+library(ggplot2)
+
 #' @title Collection of functions for processing hydrofabric data with HydroATLAS data
 #' @description These are not fully formalized functions! Serving a quick-and-dirty
 #' geospatial processing need that maps HydroATLAS attributes to OCONUS
@@ -10,10 +15,6 @@
 # Changelog / Contributions
 # 2025 Spring originally created, GL
 # 2025-08-14 Added logr, GL
-
-library(sf)
-library(logr)
-library(ggplot2)
 
 read_hydatl_by_vpu_val <- function(vpu,dir_base_hydatl){
   #' @title Read the HydroATLAS by vpu value

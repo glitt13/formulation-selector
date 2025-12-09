@@ -29,7 +29,8 @@ attributes of interest.
 }
 \details{
 Only considers data already generated inside dir_db_attrs. If
-more data are needed, acquire attribute data acquisition using proc_attr_wrap().
+more data are needed, acquire attribute data acquisition using
+\link[proc.attr.hydfab]{proc_attr_wrap}.
 Runs checks on input arguments and retrieved contents, generating warnings
 if requested comids and/or variables were completely absent from the dataset
 

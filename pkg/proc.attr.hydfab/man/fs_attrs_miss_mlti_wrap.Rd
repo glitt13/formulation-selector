@@ -20,5 +20,5 @@ from fs_tfrm_attrs.py, and generated as a file by python function
 \seealso{
 \code{fs_algo.tfrm_attr.write_missing_attrs} python
 
-\link{fs_attrs_miss.R} Rscript that calls this wrapper
+\code{fs_attrs_miss.R} Rscript that calls this wrapper
 }

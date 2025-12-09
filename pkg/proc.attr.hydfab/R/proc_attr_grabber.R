@@ -242,7 +242,7 @@ build_cfig_path <- function(path_known_config, path_or_name_cfig) {
   #' @param path_known_config The full filepath of a known configuration file
   #' @param path_or_name_cfig Path or name of configuration file. If only name provided, it's assumed it resides in same directory as `path_known_config`
   #' @details Ensure the 'path_known_config' exists
-  #' @seealso `fs_algo.build_cfig_path` The python equivalent of this function
+  #' @seealso \code{fs_algo.build_cfig_path} The python equivalent of this function
   #' @export
   if (!base::file.exists(path_known_config)) {
     logr::log_print(glue("The provided 'known' configuration file does not exist: \n
@@ -394,7 +394,8 @@ retrieve_attr_exst <- function(comids, vars, dir_db_attrs, bucket_conn=NA){
   #' dir_db_attrs directory as .parquet files & return tbl of all comids and
   #' attributes of interest.
   #' @details Only considers data already generated inside dir_db_attrs. If
-  #' more data are needed, acquire attribute data acquisition using proc_attr_wrap().
+  #' more data are needed, acquire attribute data acquisition using
+  #' \link[proc.attr.hydfab]{proc_attr_wrap}.
   #' Runs checks on input arguments and retrieved contents, generating warnings
   #' if requested comids and/or variables were completely absent from the dataset
   #' @param comids character class. The comids of interest.
@@ -746,10 +747,10 @@ std_path_retr_gpkg <- function(path_fs_prep){
   #' @title Create the standardized gpkg path for coordinate data & id mapping
   #'. corresponding to the standardized input data
   #' @details The python companion function is
-  #'. `fs_algo.utils._std_fs_prep_ds_companion_gpkg_path`
+  #'. \code{fs_algo.utils._std_fs_prep_ds_companion_gpkg_path}
   #' @param path_fs_prep Path used for the standardized dataset created using
-  #' [`fs_prep.proc_eval_metrics.proc_col_schema`]
-  #' @seealso `fs_algo.utils._std_fs_prep_ds_companion_gpkg_path`
+  #' \code{fs_prep.proc_eval_metrics.proc_col_schema}
+  #' @seealso \code{fs_algo.utils._std_fs_prep_ds_companion_gpkg_path}
   #' @seealso  \link[proc.attr.hydfab]{read_fs_retr_gpkg}
   #' @seealso \link[proc.attr.hydfab]{std_dir_dataset}
   #' @export
@@ -786,7 +787,7 @@ read_fs_retr_gpkg <- function(path_save_gpkg, verbose = FALSE){
   #'  standardized by \link[proc.attr.hydfab]{std_path_retr_gpkg}
   #'  and created by \link[proc.attr.hydfab]{fs_retr_nhdp_comids_geom_wrap}
   #' @details The renaming may be a temporary solution just-in case file
-  #' originated in python fs_algo
+  #' originated in python \code{fs_algo}
   #' @param path_save_gpkg filepath to the geopackage
   #' @seealso \link[proc.attr.hydfab]{fs_retr_nhdp_comids_geom_wrap}
   #' @seealso \link[proc.attr.hydfab]{std_path_retr_gpkg}
@@ -834,7 +835,7 @@ fs_retr_nhdp_comids_geom_wrap <- function(path_save_gpkg,
   #' @param epsg The EPSG code to use for the CRS; nhdplus default is 4326
   #' @seealso \link[proc.attr.hydfab]{proc_attr_read_gage_ids_fs}
   #' @seealso \link[proc.attr.hydfab]{fs_retr_nhdp_comids_geom}
-  #' @seealso `fs_algo.utils.fs_retr_nhdp_comids_geom_wrap`
+  #' @seealso \code{fs_algo.utils.fs_retr_nhdp_comids_geom_wrap}
   #' @export
 
   # Changelog/Contributions
@@ -929,7 +930,7 @@ fs_retr_nhdp_comids_geom <- function(gage_ids,featureSource='nwissite',
   #' @param epsg The EPSG code to use for the CRS; nhdplus defaults 4326
   #' @seealso \link[proc.attr.hydfab]{proc_attr_read_gage_ids_fs}
   #' @seealso \link[proc.attr.hydfab]{fs_retr_nhdp_comids_geom_wrap}
-  #' @seealso `fs_algo.utils.fs_retr_nhdp_comids_geom`
+  #' @seealso \code{fs_algo.utils.fs_retr_nhdp_comids_geom}
   #' @return data.table of comid and geometric point in epsg 4326
   #' @export
   # Changelog/Contributions
@@ -1316,7 +1317,7 @@ std_path_attrs <- function(comid, dir_db_attrs){
   #' @param comid character. USGS COMID/hf_uid/etc. value of interest
   #' @param dir_db_attrs character. Directory where attribute .parquet files live
   #' @seealso \link[proc.attr.hydfab]{proc_attr_wrap}
-  #' @seealso `fs_algo.utils.fs_read_attr_comid()` python function
+  #' @seealso \code{fs_algo.utils.fs_read_attr_comid()} python function
   #' that reads these files
   #' @export
 
@@ -1926,7 +1927,7 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
   #' Prepares inputs for main processing step. Iterates over each location
   #' for grabbing catchment attribute data corresponding to the gage_id
   #' location. Acquires user-requested variables from multiple catchment
-  #' attribute sources. Calls [proc_attr_wrap] which writes all
+  #' attribute sources. Calls \link[proc.attr.hydfab]{proc_attr_wrap} which writes all
   #' acquired variables to a parquet file as a standard data.table format.
   #' Returns a data.table of all data returned from \code{nhdplusTools::get_nldi_feature}
   #' that corresponded to the gage_ids.
@@ -2722,7 +2723,7 @@ std_path_miss_tfrm <- function(dir_db_attrs){
   #' @title Create a standardized path for storing missing comid-attribute
   #' pairings needed for attribute transformation
   #' @param dir_db_attrs The directory to the attribute database
-  #' @seealso `fs_algo.tfrm_attrs.std_path_miss_tfrm` python package
+  #' @seealso \code{fs_algo.tfrm_attrs.std_path_miss_tfrm} python package
   #' @export
   path_missing_attrs <- file.path(dir_db_attrs,"missing_tform",
                                   "needed_loc_attrs_for_tform.csv")
@@ -2766,10 +2767,10 @@ fs_attrs_miss_mlti_wrap <- function(path_attr_config){
   #' @title Wrapper searching for comid-attribute data identified as missing
   #' @details Given missing comid-attribute pairings previously identified
   #'  from fs_tfrm_attrs.py, and generated as a file by python function
-  #'  `fs_algo.tfrm_attr.write_missing_attrs`
+  #'  \code{fs_algo.tfrm_attr.write_missing_attrs}
   #' @param path_attr_config The file path to the attribute config file
-  #' @seealso `fs_algo.tfrm_attr.write_missing_attrs` python
-  #' @seealso [fs_attrs_miss.R] Rscript that calls this wrapper
+  #' @seealso \code{fs_algo.tfrm_attr.write_missing_attrs} python
+  #' @seealso \code{fs_attrs_miss.R} Rscript that calls this wrapper
   #' @export
   # Changelog / Contributions
   #. 2024-12-31 Originally created, GL
