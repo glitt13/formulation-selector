@@ -9,7 +9,7 @@ std_path_retr_gpkg(path_fs_prep)
 }
 \arguments{
 \item{path_fs_prep}{Path used for the standardized dataset created using
-\code{\link{fs_prep.proc_eval_metrics.proc_col_schema}}}
+\code{fs_prep.proc_eval_metrics.proc_col_schema}}
 }
 \description{
 Create the standardized gpkg path for coordinate data & id mapping
