@@ -46,17 +46,18 @@ import fs_algo.schemas.schemas as schemas
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = 'process the algorithm config file')
     parser.add_argument('path_tfrm_cfig', type=str, help='Path to the YAML configuration file specific for algorithm training')
+    parser.add_argument('--validate', action='store_true', default=False, 
+                        help='If present, enables schema validation for all input and output data. Defaults to False.')
+
     args = parser.parse_args()
     path_tfrm_cfig = Path(args.path_tfrm_cfig).expanduser() # path_tfrm_cfig = Path(f'~/git/formulation-selector/scripts/workflow_configs/legacy/xssa/xssa_attrs_tform.yaml').expanduser() 
 
     config_dir = path_tfrm_cfig.parent
 
-    # Conditionally load schemas
-    arg_val = False
-    if args.validate:
-        arg_val = True
+    # --- Conditionally load schemas ---
+    arg_val = args.validate 
+    if arg_val:
         logging.info("Schema validation enabled. Using statically imported schemas from fs_algo.schemas.")
-
 
     # --- 
     memory_handler = MemoryHandler(capacity=100)
