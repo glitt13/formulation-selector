@@ -37,14 +37,18 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = 'process the algorithm config file')
     parser.add_argument('path_algo_config', type=str,
                         help='Path to the YAML configuration file specific for algorithm training')
-    parser.add_argument('--validate', action='store_true', help='Enable schema loading for data validation')
+    parser.add_argument('--validate', action='store_true', default=False, 
+                        help='If present, enables schema validation for all input and output data. Defaults to False.')
     args = parser.parse_args()
 
     path_algo_config = Path(args.path_algo_config).expanduser() #Path(f'~/git/formulation-selector/scripts/workflow_configs/legacy/xssa/xssa_algo_config.yaml').expanduser()
     config_dir = path_algo_config.parent
     
-    arg_val = False # Default validation flag    
-    
+    # --- Conditionally load schemas
+    arg_val = args.validate 
+    if arg_val:
+        logging.info("Schema validation enabled. Using statically imported schemas from fs_algo.schemas.")
+            
     # --- Commence logging before creating the log file
     memory_handler = MemoryHandler(capacity=30)
     # Get the root logger and add the memory handler to it
@@ -55,11 +59,6 @@ if __name__ == "__main__":
     logging.info(f"Running fs_proc_algo_viz.py with \
                 {path_algo_config.parent / path_algo_config.name} config file")
     
-    # --- Conditionally load schemas
-    if args.validate:
-        arg_val = True
-        logging.info("Schema validation enabled. Using statically imported schemas from fs_algo.schemas.")
-        
     # ---
     logging.info("BEGINNING algorithm training, testing, & evaluation.")
     # Initialize algo configuration class for extracting attributes
