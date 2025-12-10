@@ -1,5 +1,5 @@
-#' Collection of functions for processing hydrofabric in RaFTS, with an emphasis
-#' on creating oCONUS RaFTS compatibility
+# Collection of functions for processing hydrofabric in RaFTS, with an emphasis
+# on creating oCONUS RaFTS compatibility
 # Changelog / Contributions
 # 2025 winter-spring  originally created, GL
 # 2025-08-14 Added logr, GL
