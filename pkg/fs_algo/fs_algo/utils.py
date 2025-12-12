@@ -1522,7 +1522,6 @@ def read_validated_attribute_selection(
     # --- VALIDATION: Selected Attributes ---
     if arg_val:
         try:
-            schema_attrs_sel = schemas.schema_attrs_sel 
             schemas.schema_attrs_sel.validate(pd.DataFrame(attrs_sel))
             logging.info("✅ Attributes Selection DataFrame validated successfully.")
         except Exception as e:
@@ -1531,7 +1530,7 @@ def read_validated_attribute_selection(
             
     return attrs_sel
 
-def validate_gdf_comid_schema(gdf_comid: gpd.GeoDataFrame, arg_val: bool):
+def validate_gdf_comid_schema(gdf_comid: gpd.GeoDataFrame, arg_val: bool=False):
     """
     Validates the structure and geometry format of the GeoDataFrame.
 
@@ -1665,12 +1664,12 @@ def load_validated_pipeline(path_algo: Path, arg_val: bool = False) -> Dict[str,
             
     return pipeline_data
 
-def read_validated_input_attributes(
+def validate_input_attributes(
     df_attr: pd.DataFrame, 
     arg_val: bool = False):
     
     """
-    Reads attribute data, performs basic cleaning, and validates schema if requested.
+    Validates schema if arg_val==True
 
     :param df_attr: Initial unvalidated DataFrame of attributes.
     :type df_attr: pd.DataFrame
@@ -1686,9 +1685,9 @@ def read_validated_input_attributes(
             logging.info("✅ Input Attribute DataFrame validated successfully.")
         except Exception as e:
             logging.error(f"❌ Validation failed for Input Attribute Data: {e}")
+            
             # Exit here as input data schema failure is critical
             sys.exit(1)
-    return df_attr
 
 def write_validated_prediction_output(
     df_pred_mrge: pd.DataFrame, 

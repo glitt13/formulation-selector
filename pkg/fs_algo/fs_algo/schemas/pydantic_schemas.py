@@ -3,8 +3,7 @@ from typing import Any, Dict, Optional, Tuple, List, Union
 from pydantic import BaseModel, field_validator, model_validator
 import numpy as np
 import re
-
-    # %% Pydantic model pipeline validation 
+# %% Pydantic model pipeline validation 
 
 class UncertaintyConfig(BaseModel):
     """
@@ -25,9 +24,9 @@ class ModelMetadata(BaseModel):
     Validates the top-level dictionary loaded from the .joblib file
     in fs_pred_algo_new.py.
     """
-    pipeline: Any
+    pipeline: Any #BaseEstimator # Should be a sklearn object (e.g. pipeline, model_selection )
     X_train_shape: Optional[Tuple[int, int]] # Required for ForestCI
-    mapie: Optional[Any] = None # The MAPIE regressor object (not just config)
+    mapie: Optional[Any] = None#Optional[MapieRegressor] = None # The MAPIE regressor object (not just config)
     Uncertainty: Optional[Dict[str, Any]] = None # The uncertainty configuration dict
 
     @field_validator("X_train_shape")
