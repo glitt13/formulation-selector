@@ -225,7 +225,7 @@ if __name__ == "__main__":
                                 _s3 = None,storage_options=None,read_type='all')
         
         # --- VALIDATION: Attribute Data (df_attr) ---
-        df_attr = fsutil.read_validated_input_attributes(df_attr,arg_val=arg_val)
+        fsutil.validate_input_attributes(df_attr,arg_val=arg_val)
             
         # Convert into wide format for model training
         df_attr_wide = df_attr.pivot(index=col_locid, columns = 'attribute', values = 'value')

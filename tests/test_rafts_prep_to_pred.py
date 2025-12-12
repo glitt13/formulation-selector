@@ -214,7 +214,7 @@ class TestFsPrepProcAttrHydfabFsAlgo(unittest.TestCase):
     def test_03_fs_proc_algo_viz(self):
         """Integration test for the fs_proc_algo_viz.py script
         """
-        cmd_algo_train = ["python", str(self.path_fs_proc_algo_viz), str(self.path_algo_cfg)]
+        cmd_algo_train = ["python", str(self.path_fs_proc_algo_viz), str(self.path_algo_cfg), str("--validate")]
         print(f"Running {cmd_algo_train}")
 
         try:
