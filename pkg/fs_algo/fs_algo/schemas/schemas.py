@@ -20,7 +20,6 @@ PKG_DATA_DIR = REPO_ROOT / "pkg" / "proc.attr.hydfab" / "inst" / "extdata"
 # PREP_CONFIG_DIR = Path(__file__).resolve().parent
 
 # Path to YAML files
-ATTR_SOURCE_YML = PKG_DATA_DIR / "attr_source_types.yml"
 ATTR_MENU_YML = PKG_DATA_DIR / "fs_attr_menu.yaml"
 
 # # PREP_CONFIG_YML = PREP_CONFIG_DIR / "xssa_prep_config.yaml"
@@ -42,44 +41,17 @@ def load_yaml(path: Path) -> Dict[str, Any]:
         return yaml.safe_load(f)
 
 # Load contents
-raw_sources = load_yaml(ATTR_SOURCE_YML)
 attr_menu = load_yaml(ATTR_MENU_YML)
 # prep_config = load_yaml(PREP_CONFIG_YML)
 
-# A. Extract Valid Data Sources
-data_source_values = []
-if raw_sources:
-    data_source_values = [
-        d.get("internal_dataset_name")
-        for v in raw_sources.values()
-        for d in v if isinstance(d, dict) and "internal_dataset_name" in d
-    ]
-    data_source_values = [v for v in data_source_values if v]
-
-# B. Extract Valid Attributes
+# Extract Valid Attributes
 valid_attributes = []
 if attr_menu:
     for group in attr_menu.values():
         for item in group:
             valid_attributes.extend(item.keys())
 
-
-# C. Extract Valid Metrics (from xssa_prep_config.yaml)
-# valid_metrics = []
-# if prep_config:
-#     col_schema_list = prep_config.get("col_schema", [])
-#     for item in col_schema_list:
-#         if isinstance(item, dict) and "metric_mappings" in item:
-#             # Split 'NSE|RMSE|KGE' into list
-#             valid_metrics = item["metric_mappings"].split("|")
-#             break
-# valid_metrics = ["NSE", "RMSE", "KGE"]
-# # Fallback if config not found
-# if not valid_metrics:
-#     valid_metrics = ["NSE", "RMSE", "KGE", "MSE", "R2"]
-
 # %% 2. Introducing DataFrameSchema for dataframe objects
-
 
 # --- A. Attribute Data (Input for training/prediction) ---
     # These could be validated further using fs_attr_menu.yaml and attr_source.type.yaml file
@@ -88,9 +60,9 @@ if attr_menu:
 schema_df_attr = DataFrameSchema({
         "featureID": Column(pa.Object, nullable=True),  # featureID can be int (comid) or str (gage_id/custom)
         "featureSource": Column(str,checks=pa.Check.isin(["COMID", "custom_hfuid"]),nullable=True),
-        "data_source": Column(str,checks=pa.Check.isin(data_source_values),nullable=True),
+        "data_source": Column(str,nullable=True), # Do not perform checks on data source because there are infinite possibilities when running custom transforms
         "dl_timestamp": Column(pa.DateTime,nullable=True),
-        "attribute": Column(str, checks=pa.Check.isin(valid_attributes), nullable=True),
+        "attribute": Column(str, nullable=True), # There are infinite possibilities with custom tfrm, so do not perform checks=pa.Check.isin(valid_attributes)
         "value": Column(float,nullable=True),
     },
     # we may refrain from enforcing a specific named index here to allow for flexibility in resetting index.
@@ -104,18 +76,13 @@ schema_df_attr = DataFrameSchema({
 coordinate_regex = r"[\+\-]?\d+(\.\d*)?([eE][\+\-]?\d+)?"
 wkt_point_pattern = rf"^POINT\s*\({coordinate_regex}\s+{coordinate_regex}\)$" 
 
-# The old minimal schema (kept for reference, using the new strict=False setting)
-# schema_gdf_comid = DataFrameSchema({
-#         "comid": Column(int, nullable=False),
-#         "gage_id": Column(pa.Object, nullable=False),
-#         "geometry": Column(str,checks=pa.Check.str_matches(wkt_point_pattern),nullable=False)
-#     },
-#     coerce=True,
-#     strict=False, 
-#     name="GDFComid"
-# )
+# Define a custom check for Shapely Point objects
+def is_point(series):
+    # Check if the geometry type of every item is 'Point'
+    return series.map(lambda geom: geom.geom_type == "Point")
 
-# 
+
+
 schema_gdf_comid = DataFrameSchema({
         'sourceName': Column(str, nullable=True),
         'comid': Column(pa.Object, nullable=True),
@@ -126,9 +93,13 @@ schema_gdf_comid = DataFrameSchema({
         'Y': Column(float, nullable=True),
         'gage_id': Column(pa.Object, nullable=False), # A fundamental location identifier
         'tot_na': Column(int, nullable=False), 
-        'geometry': Column(str, checks=pa.Check.str_matches(wkt_point_pattern), nullable=False), # The point geometry corresponding to the location identifier
+        'geometry': Column(
+            "geometry",  # Do not force to 'str'
+            checks=pa.Check(is_point, error="Geometries must be Points"),
+            nullable=False
+        ),#Column(str, checks=pa.Check.str_matches(wkt_point_pattern), nullable=False), # The point geometry corresponding to the location identifier
         'featureID': Column(pa.Object, nullable=False), # Allows str or int
-        'featureSource': Column(str, checks=pa.Check.isin(["comid", "nwissite"]), nullable=False),
+        'featureSource': Column(str, checks=pa.Check.isin(["COMID", "nwissite","comid"] ), nullable=False),
     },
     # Keep strict=False to allow for any future unlisted columns added by geopandas/fsutil
     coerce=True,
@@ -171,14 +142,6 @@ def build_schema_dat_resp(valid_metrics: List[str]) -> pa.DataFrameSchema:
     return pa.DataFrameSchema(schema_columns_dat_resp, coerce=True, strict=False, name="DatResp")
 
 # --- F. Prediction Output Schema ---
-# def build_schema_df_pred(schema_df_pred_dict):
-#     return pa.DataFrameSchema(
-#         schema_df_pred_dict,
-#         index=pa.Index(pa.Int),
-#         coerce=True,
-#         strict=True,
-#         name="DFPred"
-#     )
 def build_schema_df_pred(
     valid_metrics: List[str],
     uncertainty_cols: List[str] = [], 
@@ -221,12 +184,11 @@ def build_schema_df_pred(
 schema_df_comids = DataFrameSchema({
         "featureID": Column(pa.Object, nullable=False),  # accepts int or str
         "featureSource": Column(str,checks=pa.Check.isin(["COMID", "custom_hfuid"]),nullable=False),
-        "data_source": Column(str,checks=pa.Check.isin(data_source_values),nullable=False),
+        "data_source": Column(str,nullable=False),# Do not perform checks on data source because there are infinite possibilities when running custom transforms
         "dl_timestamp": Column(pa.DateTime,nullable=False),
-        "attribute": Column(str, checks=pa.Check.isin(valid_attributes), nullable=False),
+        "attribute": Column(str, nullable=False), # There are infinite possibilities with custom transforms, so do not perform checks=pa.Check.isin(valid_attributes)
         "value": Column(float,nullable=False),
         "gage_id": Column(pa.Object,nullable=False),
     }
     ,coerce=True,strict=False,name="DFComids"
 )
-

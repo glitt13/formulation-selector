@@ -236,7 +236,7 @@ class TestFsPrepProcAttrHydfabFsAlgo(unittest.TestCase):
     def test_04_fs_proc_algo_viz(self):
         """Integration test for the fs_proc_algo_viz.py script
         """
-        cmd_algo_train = ["python", str(self.path_fs_proc_algo_viz), str(self.path_algo_cfg)]
+        cmd_algo_train = ["python", str(self.path_fs_proc_algo_viz), str(self.path_algo_cfg), "--validate"]
         print(f"Running {cmd_algo_train}")
 
         try:
@@ -300,7 +300,7 @@ class TestFsPrepProcAttrHydfabFsAlgo(unittest.TestCase):
         print("COMPLETED attribute transformations pre-prediction.")
 
         # ------------------------------------------------------------------- #
-        cmd_pred = ["python", str(self.path_fs_pred_algo), str(self.path_pred_cfg)]
+        cmd_pred = ["python", str(self.path_fs_pred_algo), str(self.path_pred_cfg), "--validate"]
         try: 
             subprocess.run(cmd_pred, check=True, capture_output=True, text=True)
             print(f"Completed {cmd_pred}")
