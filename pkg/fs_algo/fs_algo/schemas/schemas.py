@@ -1,5 +1,5 @@
-import pandera as pa
-from pandera import Column, DataFrameSchema, Index, Check
+import pandera.pandas as pa
+from pandera.pandas import Column, DataFrameSchema, Index, Check
 from typing import Any, Dict, Optional, List, Tuple
 import numpy as np
 import re
@@ -84,16 +84,15 @@ if attr_menu:
 # --- A. Attribute Data (Input for training/prediction) ---
     # These could be validated further using fs_attr_menu.yaml and attr_source.type.yaml file
     # Inside the R package, proc.attr.hydfab
+    # i.e. *_training.parquet and *_prediction.parquet files. These shouldn't be nullable, but the code removes missing values.
 schema_df_attr = DataFrameSchema({
-        "featureID": Column(pa.Object, nullable=False),  # featureID can be int (comid) or str (gage_id/custom)
-        "featureSource": Column(str,checks=pa.Check.isin(["COMID", "custom_hfuid"]),nullable=False),
-        "data_source": Column(str,checks=pa.Check.isin(data_source_values),nullable=False),
-        # "data_source": Column(str,checks=pa.Check.isin(["hydroatlas__v1", "usgs_nhdplus__v2"]),nullable=False),
-        "dl_timestamp": Column(pa.DateTime,nullable=False),
-        "attribute": Column(str, checks=pa.Check.isin(valid_attributes), nullable=False),
-        "value": Column(float,nullable=False),
+        "featureID": Column(pa.Object, nullable=True),  # featureID can be int (comid) or str (gage_id/custom)
+        "featureSource": Column(str,checks=pa.Check.isin(["COMID", "custom_hfuid"]),nullable=True),
+        "data_source": Column(str,checks=pa.Check.isin(data_source_values),nullable=True),
+        "dl_timestamp": Column(pa.DateTime,nullable=True),
+        "attribute": Column(str, checks=pa.Check.isin(valid_attributes), nullable=True),
+        "value": Column(float,nullable=True),
     },
-    index=Index(int, name=None), # For now, it is included, but since is usually implied or range index, 
     # we may refrain from enforcing a specific named index here to allow for flexibility in resetting index.
     coerce=True,
     strict=True, # For now, it is True, but set to False to allow extra columns (like internal IDs) if necessary
@@ -116,33 +115,32 @@ wkt_point_pattern = rf"^POINT\s*\({coordinate_regex}\s+{coordinate_regex}\)$"
 #     name="GDFComid"
 # )
 
-# New schema including all specified columns
+# 
 schema_gdf_comid = DataFrameSchema({
-        'sourceName': Column(str, nullable=False),
-        'comid': Column(pa.Object, nullable=False),
-        'measure': Column(float, nullable=False),
-        'reachcode': Column(pa.Object, nullable=False), # Assuming reachcode might be string (like '01010003000003')
-        'name': Column(str, nullable=False),
-        'X': Column(float, nullable=False),
-        'Y': Column(float, nullable=False),
-        'gage_id': Column(pa.Object, nullable=False),
-        'tot_na': Column(int, nullable=True), 
-        'geometry': Column(str, checks=pa.Check.str_matches(wkt_point_pattern), nullable=True),
+        'sourceName': Column(str, nullable=True),
+        'comid': Column(pa.Object, nullable=True),
+        'measure': Column(float, nullable=True),
+        'reachcode': Column(pa.Object, nullable=True), # Assuming reachcode might be string (like '01010003000003')
+        'name': Column(str, nullable=True),
+        'X': Column(float, nullable=True),
+        'Y': Column(float, nullable=True),
+        'gage_id': Column(pa.Object, nullable=False), # A fundamental location identifier
+        'tot_na': Column(int, nullable=False), 
+        'geometry': Column(str, checks=pa.Check.str_matches(wkt_point_pattern), nullable=False), # The point geometry corresponding to the location identifier
         'featureID': Column(pa.Object, nullable=False), # Allows str or int
-        'featureSource': Column(str, checks=pa.Check.isin(["COMID", "nwissite"]), nullable=False),
-        'dataset': Column(str, nullable=False),
+        'featureSource': Column(str, checks=pa.Check.isin(["comid", "nwissite"]), nullable=False),
     },
     # Keep strict=False to allow for any future unlisted columns added by geopandas/fsutil
     coerce=True,
     strict=False, 
-    name="GDFComidFull"
+    name="gageid_location_mapper_gdf"
 )
 
 # --- C. Training Evaluation Results ---
 def build_schema_rslt_eval_df(valid_metrics: List[str]) -> pa.DataFrameSchema:
     return pa.DataFrameSchema({
         "algorithm": Column(pa.String,checks=Check.isin(["rf", "mlp"]),nullable=False),
-        "type": Column(pa.String,checks=Check.isin(["random forest regressor", "multi-layer perceptron regressor"]),nullable=False),
+        "type": Column(pa.String,nullable=False),
         "metric": Column(pa.String, checks=Check.isin(valid_metrics), nullable=False),
         "mse": Column(pa.Float,nullable=False),
         "r2": Column(pa.Float,nullable=False),
@@ -150,23 +148,21 @@ def build_schema_rslt_eval_df(valid_metrics: List[str]) -> pa.DataFrameSchema:
         "file_pipe": Column(pa.String,checks=Check.str_matches(r".+\.joblib$"),nullable=False),
         "algo": Column(pa.String,checks=Check.isin(["rf", "mlp"]),nullable=False),
     },
-    index=pa.Index(pa.Int),coerce=True,strict=True,name="RsltEvalDF"
+    coerce=True,strict=False,name="RsltEvalDF"
 )
 
 # --- F. Selected Attributes Schema ---
 schema_attrs_sel = DataFrameSchema({
         0: Column(pa.String,nullable=False),
         },
-    index=pa.Index(pa.Int),coerce=True,strict=True,name="AttrsSelDF"
+   coerce=True,strict=False,name="AttrsSelDF"
 )
 
 # --- E. Response Data (Targets) ---
 # Creating schema for dat_resp
 def build_schema_dat_resp(valid_metrics: List[str]) -> pa.DataFrameSchema:
     schema_columns_dat_resp = {
-        #"basin_name": Column(str, nullable=False), 
-        "gage_id": Column(pa.Object, nullable=False),
-        #"comid": Column(pa.Object, nullable=False), 
+        "gage_id": Column(pa.Object, nullable=False), 
         "featureID": Column(pa.Object, nullable=False),
         "featureSource": Column(str, nullable=False),
     }
@@ -230,7 +226,7 @@ schema_df_comids = DataFrameSchema({
         "attribute": Column(str, checks=pa.Check.isin(valid_attributes), nullable=False),
         "value": Column(float,nullable=False),
         "gage_id": Column(pa.Object,nullable=False),
-    },
-    index=Index(int, name=None),coerce=True,strict=True,name="DFComids"
+    }
+    ,coerce=True,strict=False,name="DFComids"
 )
 
