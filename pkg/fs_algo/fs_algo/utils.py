@@ -1670,7 +1670,7 @@ def read_validated_attribute_selection(
             
     return attrs_sel
 
-def validate_gdf_comid_schema(gdf_comid: gpd.GeoDataFrame, arg_val: bool):
+def validate_gdf_comid_schema(gdf_comid: gpd.GeoDataFrame, arg_val: bool=False):
     """
     Validates the structure and geometry format of the GeoDataFrame.
 
