@@ -89,10 +89,10 @@ def generate_rmse_plots(df: pd.DataFrame, output_directory: Path):
         plt.plot(subset["run"], subset["RMSE"], 
                  marker='o', linestyle='-', linewidth=2, color='royalblue', label="xSSA/RF")
 
-        plt.title(f"{metric} Model Performance: RMSE by Run", fontsize=14, fontweight='bold')
-        plt.xlabel("Run Number", fontsize=12)
-        plt.ylabel("RMSE (Residuals)", fontsize=12)
-        plt.grid(True, linestyle='--', alpha=0.7)
+        plt.title(f"RF Regression Performance: RMSE of {metric}", fontsize=18, fontweight='bold')
+        plt.xlabel("Run Number", fontsize=16)
+        plt.ylabel(f"RMSE of {metric}", fontsize=16)
+        plt.grid(True, linestyle='-', alpha=0.6)
         plt.xticks(run_labels)
         
         plot_path = output_directory / f"RMSE_Trend_{metric}.png"
@@ -159,10 +159,10 @@ def generate_residual_boxplots(df: pd.DataFrame, output_directory: Path):
                whiskerprops=dict(color='royalblue', linewidth=1.5),
                capprops=dict(color='royalblue', linewidth=1.5))
 
-        ax.set_title(f"{metric}: Mean Residual Distribution (Box = Mean ± 1 Std)", fontsize=14, fontweight='bold')
-        ax.set_xlabel("Run Number", fontsize=12)
-        ax.set_ylabel("Mean Residual", fontsize=12)
-        ax.grid(True, linestyle='--', alpha=0.7)
+        ax.set_title(f"Mean Residual of {metric} (Box = Mean ± 1 Std)", fontsize=18, fontweight='bold')
+        ax.set_xlabel("Run Number", fontsize=16)
+        ax.set_ylabel("Mean Residual", fontsize=16)
+        ax.grid(True, linestyle='-', alpha=0.6)
 
         plot_path = output_directory / f"BoxPlot_Residuals_{metric}.png"
         plt.savefig(plot_path, bbox_inches='tight', dpi=150)
