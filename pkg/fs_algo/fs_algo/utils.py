@@ -895,8 +895,8 @@ def fs_save_algo_dir_struct(dir_base: str | os.PathLike ) -> dict:
                          \n{dir_base}")
 
     # Define the standardized directory structure for algorithm output
-    # base save directory
-    dir_out = Path(Path(dir_base).parent.absolute()/Path('output'))
+    # base save directory, inside dir_base
+    dir_out = Path(dir_base) / 'output'
     dir_out.mkdir(exist_ok=True)
 
     # The trained algorithm directory
