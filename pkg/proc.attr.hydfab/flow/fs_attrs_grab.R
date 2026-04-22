@@ -64,7 +64,10 @@ logr::log_print(glue::glue("Attribute variables to be acquired include :
 
 
 # PROCESS ATTRIBUTES
-dt_comids <- proc.attr.hydfab:::grab_attrs_datasets_fs_wrap(Retr_Params,overwrite = FALSE)
+dt_comids <- proc.attr.hydfab:::grab_attrs_datasets_fs_wrap(Retr_Params,
+                                                      lyrs="network",
+                                                      overwrite = FALSE,
+                                                      path_save_gpkg_cstm=NULL)
 logr::log_close()
 # --------------------------- Compile attributes --------------------------- #
 # Demonstration of how to retrieve attributes/comids that exist inside dir_db_attrs:

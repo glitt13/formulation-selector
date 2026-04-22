@@ -4,7 +4,7 @@
 \alias{retr_attr_new}
 \title{Retrieve new attributes that haven't been acquired yet}
 \usage{
-retr_attr_new(locids, need_vars, paths_ha)
+retr_attr_new(locids, need_vars, paths_ha, paths_hfatl = NULL)
 }
 \arguments{
 \item{locids}{The list of of the comid or hydrofabric unique location identifier}
@@ -12,6 +12,8 @@ retr_attr_new(locids, need_vars, paths_ha)
 \item{need_vars}{The needed attributes that haven't been acquired yet}
 
 \item{paths_ha}{vector, the filepath(s) to HydroATLAS data downscaled to Hydrofabric, in tabular form}
+
+\item{paths_hfatl}{vector, the filepath(s) to hydrofabricATLAS data downscaled to hydrofabric, in tabular form}
 
 \item{Retr_Params}{list. List of list structure with parameters/paths needed to acquire variables of interest}
 }
