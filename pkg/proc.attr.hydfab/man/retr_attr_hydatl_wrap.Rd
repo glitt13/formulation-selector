@@ -8,7 +8,7 @@ retr_attr_hydatl_wrap(
   hf_ids,
   paths_ha,
   ha_vars,
-  hf_id_cols = c("hf_uid", "hf_id", "id"),
+  hf_id_cols = c("hf_uid", "hf_id", "divide_id", "id"),
   colname_featID = "hf_uid"
 )
 }
@@ -21,7 +21,7 @@ data downscaled to hydrofabric divides. For more details, refer to
 
 \item{hf_id_cols}{Possible hydrofabric id columns, \emph{listed in priority}, meaning
 the \code{'hf_uid'} is the most important column to find, and if that is not
-present, move on to the \code{'hf_id'} and finally to \code{'id'}}
+present, move on to the \code{'hf_id'}, then \code{'divide_id'} and finally to \code{'id'}}
 
 \item{colname_featID}{The standard column name for location id in the output datatable}
 }

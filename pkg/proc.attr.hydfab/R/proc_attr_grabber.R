@@ -98,6 +98,17 @@ attr_cfig_parse <- function(path_attr_config){
     paths_ha <- NULL
   }
 
+  # Path(s) to Hydrofabric ATLAS data (may be local &/or s3 paths)
+  if(base::any(base::grepl("paths_hfatl", names(base::unlist(raw_config$attr_select))))){
+    idxs_paths_hfatl <- grep("paths_hfatl",names(base::unlist(raw_config$attr_select)))
+    paths_hfatl <- base::unlist(raw_config$attr_select)[idxs_paths_hfatl] %>%
+      base::unname()
+    paths_hfatl <- base::lapply(paths_hfatl, function(x) glue::glue(x)) %>%
+      base::unlist()
+  } else {
+    paths_hfatl <- NULL
+  }
+
   # Additional config options
   hf_cat_sel <-  base::unlist(raw_config$hydfab_config)[['hf_cat_sel']] #c("total","all")[1] # total: interested in the single location's aggregated catchment data; all: all subcatchments of interest
   ext <- base::unlist(raw_config$hydfab_config)[['ext']] # 'gpkg'
@@ -171,6 +182,7 @@ attr_cfig_parse <- function(path_attr_config){
     dir_db_attrs=dir_db_attrs,
     dir_db_gpkg=dir_db_gpkg,
     paths_ha = paths_ha,
+    paths_hfatl = paths_hfatl,
     path_oconus_hfab_config=path_oconus_hfab_config,
     dir_std_base = dir_std_base,
     home_dir = home_dir,
@@ -496,7 +508,7 @@ retrieve_attr_exst <- function(comids, vars, dir_db_attrs, bucket_conn=NA){
 
 
 retr_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
-                                  hf_id_cols = c("hf_uid","hf_id","id"),
+                                  hf_id_cols = c("hf_uid","hf_id","divide_id","id"),
                                   colname_featID = "hf_uid"){
   #' @title Process HydroATLAS attributes wrapper
   #' @description Finds the attributes from a variety of HydroATLAS files, and
@@ -506,7 +518,7 @@ retr_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
   #' vpus such as AK and PRVI.
   #' @param hf_id_cols Possible hydrofabric id columns, *listed in priority*, meaning
   #' the `'hf_uid'` is the most important column to find, and if that is not
-  #' present, move on to the `'hf_id'` and finally to `'id'`
+  #' present, move on to the `'hf_id'`, then `'divide_id'` and finally to `'id'`
   #' @param paths_ha The local filepaths/s3 paths containing the HydroATLAS
   #' data downscaled to hydrofabric divides. For more details, refer to
   #' [hydrofabric data portal](https://www.lynker-spatial.com/data/tabular/hydroATLAS/)
@@ -525,6 +537,7 @@ retr_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
   #. 2025-05-07 add s3 placeholder, GL
   #. 2025-05-08 implement s3 compatibility, GL
   #. 2025-06-06 add another non-id column all NA checker, GL
+  #. 2026-04-21 add hfatlas compatibility, GL
   ls_dat_ha <- base::list()
   ctr <- 0
   for(path_ha in paths_ha){
@@ -551,6 +564,9 @@ retr_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
     #.  - attempt retr_attr_hydatl() for each path_ha,generate NA empties, then merge back into the appropriate order?
 
     colnames_ha <- arrow::open_dataset(path_ha) %>% base::colnames()
+    # Clean (var_name, pint_unit) tuple colnames to just var_name
+    colnames_ha <- base::sub("^\\('([^']+)',.*", "\\1", colnames_ha)
+
     # Identify which hydrofabric id is present in this dataset
     bool_ids <- base::lapply(
       hf_id_cols, function(i) i %in% colnames_ha) %>%
@@ -579,6 +595,17 @@ retr_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
       dat_ha <- proc.attr.hydfab::std_feat_id(df=dat_ha,
                                               name_featureSource ="COMID",
                                               col_featureID = "hf_id")
+    } else if (hf_id_col == "divide_id"){
+
+      dat_ha <- proc.attr.hydfab::retr_attr_hydatl(hf_id=hf_ids,
+                                                   path_ha=path_ha,ha_vars=ha_vars,
+                                                   hf_id_col=hf_id_col)
+      # TODO should this become 'custom_hfuid' ??
+      # Standardize to the featureID/featureSource format
+      dat_ha <- proc.attr.hydfab::std_feat_id(df=dat_ha,
+                                              name_featureSource ="custom_hfuid",
+                                              col_featureID = "divide_id")
+
     } else if(hf_id_col == "id"){
       # TODO add in the standardization hf_uid approach here
       logr::log_print("TODO: Add standardization for hf_uid", level = "ERROR")
@@ -641,7 +668,7 @@ retr_attr_hydatl_wrap <- function(hf_ids, paths_ha, ha_vars,
 }
 
 
-retr_attr_hydatl <- function(hf_ids, path_ha, ha_vars,hf_id_col=c("hf_uid","hf_id")[2],
+retr_attr_hydatl <- function(hf_ids, path_ha, ha_vars,hf_id_col=c("hf_uid","hf_id","divide-id")[2],
                              s3_ha='s3://lynker-spatial/tabular/hydroATLAS/hydroatlas_vars.parquet'){
   #' @title Retrieve HydroATLAS variables
   #' @description retrieves hydrofabric variables from s3 bucket or a local file
@@ -676,9 +703,16 @@ retr_attr_hydatl <- function(hf_ids, path_ha, ha_vars,hf_id_col=c("hf_uid","hf_i
     path_ha <- s3_ha
   } # presumed to be local path location
 
+  # For the case of hfatlas (var_name, pint unit) tuples as columns:
+  # Open the dataset and lazily rename the columns using regex
+  ds <- arrow::open_dataset(path_ha) %>%
+    dplyr::rename_with(~ base::sub("^\\('([^']+)',.*", "\\1", .x))
+
   # Determine whether id should be numeric or character class
-  check_first_val <- arrow::open_dataset(path_ha) %>%
-    dplyr::select(hf_id_col) %>% utils::head(n=1) %>% dplyr::collect()
+  # check_first_val <- arrow::open_dataset(path_ha) %>%
+  #   dplyr::select(hf_id_col) %>% utils::head(n=1) %>% dplyr::collect()
+  check_first_val <- ds %>%
+    dplyr::select(dplyr::all_of(hf_id_col)) %>% utils::head(n=1) %>% dplyr::collect()
   if(base::is.numeric(check_first_val[[hf_id_col]])){
     hf_ids <- base::as.numeric(hf_ids) %>% # e.g. numeric comids
       stats::na.omit() %>% base::as.numeric() %>%
@@ -687,7 +721,7 @@ retr_attr_hydatl <- function(hf_ids, path_ha, ha_vars,hf_id_col=c("hf_uid","hf_i
     hf_ids <- base::as.character(hf_ids)
   }
   # Retrieve the hydroatlas variables of interest for all comids
-  ha <- arrow::open_dataset(path_ha) %>%
+  ha <- ds %>%
     dplyr::filter(!!dplyr::sym(hf_id_col) %in% hf_ids) %>%
     dplyr::select(hf_id_col, dplyr::all_of(ha_vars)) %>%
     dplyr::collect()
@@ -1170,7 +1204,7 @@ std_attr_data_fmt <- function(attr_data){
   #. 2025-05-05 Remove featureSource col assigned from sub_dt_dat$COMID, remove COMID column, GL
   #. 2025-05-07 fix: Remove hf_uid and hf_id columns in case they exist, otherwise 'hf_uid' could end up in the attribute column, GL
   #. 2025-05-08 refactor: use formals argument defaults to define possible identifier column names; add menu checker GL
-
+  #. 2026-04-21 refactor: ignore attribute checker when data_source == "hfatl_vars"
   # Ensure consistent format of dataset
   attr_data_ls <- list()
   for(dat_srce in base::names(attr_data)){
@@ -1212,38 +1246,42 @@ std_attr_data_fmt <- function(attr_data){
         pkgcond::suppress_warnings(pattern = "are not all of the same type")
 
       # ------------------ Remove any entry that is not an official attribute
-      # Run check that wide-to-long transform didn't accidentally create attributes not in the menu
-      ls_attr_menu <- proc.attr.hydfab:::read_fs_attr_menu_config()
+      if(dat_srce!="hfatl_vars"){ # hfatl_vars can be many things, but hydroatlas_attributes, camels_attributes, and usgs_attributes are standardized
+        # Run check that wide-to-long transform didn't accidentally create attributes not in the menu
+        ls_attr_menu <- proc.attr.hydfab:::read_fs_attr_menu_config()
 
-      # All possible attributes from the menu
-      all_attrs <- base::lapply(base::names(ls_attr_menu), function(x)
-        base::names(base::unlist(ls_attr_menu[[x]]))) %>% base::unlist()
-      # Run check for bad attributes and remove
-      if(base::any(!attr_data_ls[[dat_srce]]$attribute %in% all_attrs)){
-        problem_attrs <- attr_data_ls[[dat_srce]]$attribute[which(!attr_data_ls[[dat_srce]]$attribute %in% all_attrs)] %>%
-          base::unique()
-        str_problem <- glue::glue("The following entries are not attributes per the attribute menu and shall be removed\n",
-                                  "from the attributes dataset that will get written to file:\n",
-                                  base::paste0(problem_attrs, collapse = "\n"),
-                                  "\nConsider placing these the cols_no_go object inside proc.attr.hydfab::std_attr_data_fmt\n",
-                                  "Refer to proc.attr.hydfab::read_fs_attr_menu_config for the allowable attributes defined in package config file.")
-        logr::log_print(str_problem, level = "WARN")
+        # All possible attributes from the menu
+        all_attrs <- base::lapply(base::names(ls_attr_menu), function(x)
+          base::names(base::unlist(ls_attr_menu[[x]]))) %>% base::unlist()
+        # Run check for bad attributes and remove
+        if(base::any(!attr_data_ls[[dat_srce]]$attribute %in% all_attrs)){
+          problem_attrs <- attr_data_ls[[dat_srce]]$attribute[which(!attr_data_ls[[dat_srce]]$attribute %in% all_attrs)] %>%
+            base::unique()
+          str_problem <- glue::glue("The following entries are not attributes per the attribute menu and shall be removed\n",
+                                    "from the attributes dataset that will get written to file:\n",
+                                    base::paste0(problem_attrs, collapse = "\n"),
+                                    "\nConsider placing these the cols_no_go object inside proc.attr.hydfab::std_attr_data_fmt\n",
+                                    "Refer to proc.attr.hydfab::read_fs_attr_menu_config for the allowable attributes defined in package config file.")
+          logr::log_print(str_problem, level = "WARN")
 
-        idxs_rm <- base::lapply(problem_attrs, function(x)
-          base::which(attr_data_ls[[dat_srce]]$attribute == x)) %>%
-          base::unlist()
-        attr_data_ls[[dat_srce]] <- attr_data_ls[[dat_srce]][-idxs_rm,]
+          idxs_rm <- base::lapply(problem_attrs, function(x)
+            base::which(attr_data_ls[[dat_srce]]$attribute == x)) %>%
+            base::unlist()
+          attr_data_ls[[dat_srce]] <- attr_data_ls[[dat_srce]][-idxs_rm,]
+        }
       }
+
     }
   }
   return(attr_data_ls)
 }
 
-retr_attr_new <- function(locids,need_vars,paths_ha){
+retr_attr_new <- function(locids,need_vars,paths_ha, paths_hfatl=NULL){
   #' @title Retrieve new attributes that haven't been acquired yet
   #' @param locids The list of of the comid or hydrofabric unique location identifier
   #' @param need_vars The needed attributes that haven't been acquired yet
   #' @param paths_ha vector, the filepath(s) to HydroATLAS data downscaled to Hydrofabric, in tabular form
+  #' @param paths_hfatl vector, the filepath(s) to hydrofabricATLAS data downscaled to hydrofabric, in tabular form
   #' @param Retr_Params list. List of list structure with parameters/paths needed to acquire variables of interest
   #' @seealso \link[proc.attr.hydfab]{proc_attr_wrap}
   #' @seealso \link[proc.attr.hydfab]{proc_attr_mlti_wrap}
@@ -1253,6 +1291,7 @@ retr_attr_new <- function(locids,need_vars,paths_ha){
   #. 2025 Originally created, GL
   #. 2025-05-06 implement nrow(x)>0 empty data error handling, GL
   #. 2025-05-07 add ha_vars logic to be compatible with dataset path(custom file), GL
+  #. 2026-04-__ add hfatl_vars logic, GL
   # -------------------------------------------------------------------------- #
   # Run format check on need_vars:
   need_vars <- proc.attr.hydfab:::chck_need_vars_fmt(need_vars)
@@ -1269,14 +1308,41 @@ retr_attr_new <- function(locids,need_vars,paths_ha){
   if(('ha_vars' %in% base::names(need_vars)) || ('ha_vars' %in% var_types_file)  &&
      (base::all(!base::is.na(need_vars$ha_vars))) ){
     # Hydroatlas variable query; list name formatted as {dataset_name}__v{ver_num}
-    dt_hydatl <- proc.attr.hydfab::retr_attr_hydatl_wrap(
+    dt_hfatl <- proc.attr.hydfab::retr_attr_hydatl_wrap(
       hf_ids = locids,
       paths_ha=paths_ha,
       ha_vars=need_vars$ha_vars)
-    # NOTE proc.attr.hydfab::std_feat_id is called inside retr_attr_hydatl_wrap
+    # NOTE proc.attr.hydfab::std_feat_id should be called inside retr_attr_hfatl_wrap
     #. And does not need to be called here
-    attr_data[['hydroatlas__v1']] <- dt_hydatl
+    attr_data[['hydroatlas__v1']] <- dt_hfatl
   }
+
+  # ----------- HydrofabricATLAS ------------------
+  if(('hfatl_vars' %in% base::names(need_vars)) || ('hfatl_vars' %in% var_types_file)  &&
+     (base::all(!base::is.na(need_vars$hfatl_vars))) ){
+
+    # Check if paths_hfatl was provided
+    if(base::is.null(paths_hfatl)){
+      logr::log_print("hfatl_vars requested, but paths_hfatl is missing from config.", level="ERROR")
+      stop("hfatl_vars requested, but paths_hfatl is missing from config.")
+    }
+
+    # Reuse the HydroATLAS wrapper since it handles the same tabular HF parquet format
+    dt_hfatl <- proc.attr.hydfab::retr_attr_hydatl_wrap(
+      hf_ids = locids,
+      paths_ha = paths_hfatl, # Pass the hfatl path into the existing ha wrapper
+      ha_vars = need_vars$hfatl_vars)
+
+    attr_data[['hfatl_vars']] <- dt_hfatl
+  }
+  # if('hfatl_vars' %in% base(names(need_vars)) || ('hfatl_vars' %in% var_types_file) &&
+  #     (base::all(!base::is.na(need_vars$hfatl_vars))) ){
+  #   dt_hfatl <- proc.attr.hydfab::retr_attr_hfatl_wrap(
+  #     hf_ids = locids,
+  #     paths_hfatl = paths_hfatl,
+  #     hfatl_vars=need_vars$hfatl_vars)
+  #   attr_data[['hfatl_vars']] <- dt_hydatl
+  # }
 
   # --------------- USGS NHD Plus attributes ---------------
   if( (base::any(base::grepl("usgs_vars", base::names(need_vars)))) &&
@@ -1518,7 +1584,7 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
   #' @param lyrs character. The layer names of interest from the hydrofabric gpkg. Default 'network'
   #' @param overwrite boolean. Should the hydrofabric cloud data acquisition be redone and overwrite any local files? Default FALSE.
   #' @param filter_vars boolean. Should the data be filtered down to the variables provided in `Retr_Params$vars'?`
-  #' @seealso \link[proc.attr.hydfab]{proc_attrs_gageids}
+  #' @seealso \link[proc.attr.hydfab]{proc_attr_gageids}
   #' @seealso \link[proc.attr.hydfab]{proc_attr_exst_wrap} Generates the need_vars
   #' @export
   #'
@@ -1608,7 +1674,8 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
     ls_attr_data[['new_comid']] <- proc.attr.hydfab::retr_attr_new(
       locids=comids_attrs_need,
       need_vars=Retr_Params$vars,
-      paths_ha=Retr_Params$paths$paths_ha)
+      paths_ha=Retr_Params$paths$paths_ha,
+      paths_hfatl=Retr_Params$paths$paths_hfatl)
     # Compile all locations into a single datatable
     dt_new_dat <- data.table::rbindlist(ls_attr_data[['new_comid']],
                                         use.names = TRUE,fill=TRUE)
@@ -1643,7 +1710,8 @@ proc_attr_mlti_wrap <- function(comids, Retr_Params,lyrs="network",
     ls_attr_data[['pre-exist']] <- proc.attr.hydfab::retr_attr_new(
       locids=comids_attrs_still_need,
       need_vars=still_need_vars,
-      paths_ha=Retr_Params$paths$paths_ha)
+      paths_ha=Retr_Params$paths$paths_ha,
+      paths_hfatl=Retr_Params$paths$path_hfatl)
 
     dt_prexst_dat <- data.table::rbindlist(ls_attr_data[['pre-exist']],
                                            use.names = TRUE,fill=TRUE )
@@ -2000,69 +2068,73 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
   #   hfab_retr <- base::formals(proc.attr.hydfab::proc_attr_wrap)$hfab_retr
   # }
   # ---------------------- CONUS COMID compatibility ------------------------- #
-  ls_retr_comid <- proc.attr.hydfab::retr_comids(gage_ids=gage_ids,
-                                                 featureSource=featureSource,
-                                                 featureID=featureID,
-                                                 path_save_gpkg=path_save_gpkg,
-                                                 dir_db_attrs=Retr_Params$paths$dir_db_attrs)
-  base::names(ls_retr_comid$ls_comid) <- gage_ids
-  just_comids <- ls_retr_comid$ls_comid %>% base::unname() %>% base::unlist()
+  if(featureSource!="hfuid"){
+    ls_retr_comid <- proc.attr.hydfab::retr_comids(gage_ids=gage_ids,
+                                                   featureSource=featureSource,
+                                                   featureID=featureID,
+                                                   path_save_gpkg=path_save_gpkg,
+                                                   dir_db_attrs=Retr_Params$paths$dir_db_attrs)
+    base::names(ls_retr_comid$ls_comid) <- gage_ids
+    just_comids <- ls_retr_comid$ls_comid %>% base::unname() %>% base::unlist()
 
-  # ---------------- oCONUS hydrofabric compatibility ------------------------ #
-  # The missing comids to be sought out in OCONUS hydrofabric domains
-  idxs_na_id <- base::which(base::is.na(just_comids))
-  if(base::length(idxs_na_id) > 0){  # assumed to be oCONUS if comid unavailable
-    # TODO assumption that oCONUS isn't always true, e.g. USGS-08170950 returned NA for comid but is in TX from get_nldi_feature(nldi_feature = nldi_feat)
-    gage_ids_for_hf <- gage_ids[idxs_na_id] # Locations in AK, PR, HI
+    # ---------------- oCONUS hydrofabric compatibility ------------------------ #
+    # The missing comids to be sought out in OCONUS hydrofabric domains
+    idxs_na_id <- base::which(base::is.na(just_comids))
+    if(base::length(idxs_na_id) > 0){  # assumed to be oCONUS if comid unavailable
+      # TODO assumption that oCONUS isn't always true, e.g. USGS-08170950 returned NA for comid but is in TX from get_nldi_feature(nldi_feature = nldi_feat)
+      gage_ids_for_hf <- gage_ids[idxs_na_id] # Locations in AK, PR, HI
 
-    # Convert into the nwissite form as defined by 'featureID'
-    loc_ids <- base::lapply(gage_ids_for_hf,
-                            function(gage_id) base::as.character(glue::glue(featureID))) %>%
-      base::unlist()
-    # TODO change this after oconus path refactor??
-    if(!base::is.null(Retr_Params$paths$path_oconus_hfab_config)){
-      dt_hfuid <- proc.attr.hydfab::retr_hfuids(loc_ids=loc_ids,
-                                                path_oconus_hfab_config=Retr_Params$paths$path_oconus_hfab_config, # e.g. "~/git/formulation-selector/scripts/eval_ingest/bm_test25/bm_oconus_config.yaml"
-                                                featureSource = featureSource)
+      # Convert into the nwissite form as defined by 'featureID'
+      loc_ids <- base::lapply(gage_ids_for_hf,
+                              function(gage_id) base::as.character(glue::glue(featureID))) %>%
+        base::unlist()
+      # TODO change this after oconus path refactor??
+      if(!base::is.null(Retr_Params$paths$path_oconus_hfab_config)){
+        dt_hfuid <- proc.attr.hydfab::retr_hfuids(loc_ids=loc_ids,
+                                                  path_oconus_hfab_config=Retr_Params$paths$path_oconus_hfab_config, # e.g. "~/git/formulation-selector/scripts/eval_ingest/bm_test25/bm_oconus_config.yaml"
+                                                  featureSource = featureSource)
 
-      if(base::nrow(dt_hfuid) == base::length(gage_ids_for_hf)){
-        # Integrate loc id back into the order of ls_retr_comid$ls_comid
-        just_comids[idxs_na_id] <- dt_hfuid$featureID
-        ls_retr_comid$ls_comid[idxs_na_id] <- dt_hfuid$featureID
-        #  Integrate loc id back into the order of ls_retr_comid$sf_comid
-        ls_retr_comid$sf_comid[idxs_na_id,"comid"] <- dt_hfuid$featureID
-        ls_retr_comid$sf_comid[idxs_na_id,"featureSource"] <- dt_hfuid$featureSource
+        if(base::nrow(dt_hfuid) == base::length(gage_ids_for_hf)){
+          # Integrate loc id back into the order of ls_retr_comid$ls_comid
+          just_comids[idxs_na_id] <- dt_hfuid$featureID
+          ls_retr_comid$ls_comid[idxs_na_id] <- dt_hfuid$featureID
+          #  Integrate loc id back into the order of ls_retr_comid$sf_comid
+          ls_retr_comid$sf_comid[idxs_na_id,"comid"] <- dt_hfuid$featureID
+          ls_retr_comid$sf_comid[idxs_na_id,"featureSource"] <- dt_hfuid$featureSource
+        } else {
+          logr::log_print("Problem with indexing assumption", level = "ERROR")
+          stop("Problem with indexing assumption")
+        }
       } else {
-        logr::log_print("Problem with indexing assumption", level = "ERROR")
-        stop("Problem with indexing assumption")
+        logr::log_print("oCONUS hydrofabric paths not specified. Will not consider oCONUS.", level = "WARN")
       }
-    } else {
-      logr::log_print("oCONUS hydrofabric paths not specified. Will not consider oCONUS.", level = "WARN")
     }
+    # ------------------ secondary checker using lat/lon search ---------------- #
+    # NOTE: This should ideally follow the oCONUS-oriented retr_hfuids because that
+    #. looks for ids via the hydrofabric, which does not require NLDI connections.
+    #. Anything remaining NA ids addressed here by querying NLDI via lat/lon
+    idxs_still_na_id <- base::which(base::is.na(just_comids))
+    if(base::length(idxs_still_na_id)>0 && !base::is.null(Retr_Params$paths$path_hf)){
+      # One more NA check here in cases where the lat/lon may be found, e.g. gage_id = "08170950"
+      logr::log_print("Some identifiers not found. Checking conus NLDI for coordinates.", level = "INFO")
+      gage_ids_for_lat_lon_srch <- gage_ids[idxs_still_na_id]
+      # Generate a data.frame that contains XY coordinates column
+      dt_nldi_feat <- proc.attr.hydfab::retr_nldi_feat(gage_ids=gage_ids_for_lat_lon_srch,
+                                                       featureSource,featureID)
+
+      # Search for comid using a lat/lon query of the hydrofabric
+      comids_from_lat_lon_srch <- proc.attr.hydfab::retr_hf_id_xy(df_sf = dt_nldi_feat,
+                                                                  path_gpkg=Retr_Params$paths$path_hf,
+                                                                  geom_col="geometry")
+
+      # integrate any comids just found from lat/lon search into list of just_comids
+      just_comids[idxs_still_na_id] <- comids_from_lat_lon_srch
+    }
+
+
+  } else { # The vars_hfatl scenario
+    just_comids <- gage_ids
   }
-
-  # ------------------ secondary checker using lat/lon search ---------------- #
-  # NOTE: This should ideally follow the oCONUS-oriented retr_hfuids because that
-  #. looks for ids via the hydrofabric, which does not require NLDI connections.
-  #. Anything remaining NA ids addressed here by querying NLDI via lat/lon
-  idxs_still_na_id <- base::which(base::is.na(just_comids))
-  if(base::length(idxs_still_na_id)>0 && !base::is.null(Retr_Params$paths$path_hf)){
-    # One more NA check here in cases where the lat/lon may be found, e.g. gage_id = "08170950"
-    logr::log_print("Some identifiers not found. Checking conus NLDI for coordinates.", level = "INFO")
-    gage_ids_for_lat_lon_srch <- gage_ids[idxs_still_na_id]
-    # Generate a data.frame that contains XY coordinates column
-    dt_nldi_feat <- proc.attr.hydfab::retr_nldi_feat(gage_ids=gage_ids_for_lat_lon_srch,
-                                                     featureSource,featureID)
-
-    # Search for comid using a lat/lon query of the hydrofabric
-    comids_from_lat_lon_srch <- proc.attr.hydfab::retr_hf_id_xy(df_sf = dt_nldi_feat,
-                                                                path_gpkg=Retr_Params$paths$path_hf,
-                                                                geom_col="geometry")
-
-    # integrate any comids just found from lat/lon search into list of just_comids
-    just_comids[idxs_still_na_id] <- comids_from_lat_lon_srch
-  }
-
   # ---------- RETRIEVE DESIRED ATTRIBUTE DATA FOR EACH LOCATION ------------- #
   dt_site_feat_retr <- proc.attr.hydfab::proc_attr_mlti_wrap(
     comids=just_comids,Retr_Params=Retr_Params,
@@ -2107,6 +2179,9 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
     logr::log_print(glue("The following gage_id values did not return a comid:\n
                        {paste0(gage_ids_missing,collapse=',')}"), level = "WARN")
   }
+
+
+
 
   return(dt_site_feat)
 }
@@ -2595,6 +2670,9 @@ wrap_check_vars <- function(vars_ls){
   #' 1) the variable category is a recognized category name (e.g. 'usgs_vars')
   #' 2) the variable names inside the category name are actual variable names
   #' that can be used to retrieve attributes (e.g. 'TOT_TWI' as an nhdplus attribute)
+  # Changelog
+  # 2025 (?) Originally created
+  # 2026-04-21 added hfatl_vars exception for check_attr_selection, GL
 
   # Get the accepted variable categories used in proc.attr.hydfab R package
   dir_extdata <- system.file("extdata",package="proc.attr.hydfab")
@@ -2634,8 +2712,10 @@ wrap_check_vars <- function(vars_ls){
 
   # ------------------ RUN CHECK ON INDIVIDUAL VARIABLE NAMES -------------- #
   for(var_group_name in names(vars_ls)){
-    sub_vars <- vars_ls[[var_group_name]]
-    proc.attr.hydfab::check_attr_selection(vars=sub_vars)
+    if(var_group_name != "hfatl_vars"){
+      sub_vars <- vars_ls[[var_group_name]]
+      proc.attr.hydfab::check_attr_selection(vars=sub_vars)
+    }
   }
 }
 
