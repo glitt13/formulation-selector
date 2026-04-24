@@ -468,7 +468,7 @@ def _estimate_decimals_for_plotting(val:float)-> int:
 
     return round_decimals
 
-def plot_pred_vs_obs_regr(y_pred: np.ndarray, y_obs: np.ndarray, ds:str, metr:str, r2_val:float)->Figure:
+def plot_pred_vs_obs_regr(y_pred: np.ndarray, y_obs: np.ndarray, ds:str, metr:str, r2_val:float=None)->Figure:
     """Plot the observed vs. predicted module performance
 
     :param y_pred: The predicted response variable
@@ -498,13 +498,14 @@ def plot_pred_vs_obs_regr(y_pred: np.ndarray, y_obs: np.ndarray, ds:str, metr:st
     plt.ylabel('Predicted {}'.format(metr))
     plt.xlabel('Actual {}'.format(metr))
     plt.title('Observed vs. RaFTS Predicted Values: {}'.format(ds))
-    plt.text(0.05, 0.95, f'$R^2 = {r2_val:.2f}$', transform = plt.gca().transAxes,
+    if r2_val is not None:
+        plt.text(0.05, 0.95, f'$R^2 = {r2_val:.2f}$', transform = plt.gca().transAxes,
              fontsize=12, verticalalignment='top')
     fig = plt.gcf()
     return fig
 
 def plot_pred_vs_obs_wrap(y_pred: np.ndarray, y_obs:np.ndarray, dir_out_viz_base:str|Path,
-                           ds:str, metr:str, algo_str:str, r2_val:float, split_type:str=''):
+                           ds:str, metr:str, algo_str:str, r2_val:float=None, split_type:str=''):
     """Wrapper to create & save predicted vs. observed regression plot
 
     :param y_pred: The predicted response variable
