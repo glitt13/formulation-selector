@@ -17,3 +17,8 @@ members = [
 [tool.uv.sources]
 fs_algo = { workspace = true }
 fs_prep = { workspace = true }
+
+[dependency-groups]
+spyder = [
+  "spyder-kernels; platform_system == 'Windows'"
+]
