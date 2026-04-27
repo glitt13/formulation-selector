@@ -1,0 +1,13 @@
+[project]
+name = "formulation-selector"
+version = "0.1.0"
+requires-python = ">=3.12" 
+dependencies = [
+]
+
+[tool.uv.workspace]
+# Note: Adjust these paths if they are actually nested inside a 'pkg/' directory
+members = [
+    "fs_algo",
+    "fs_prep"
+]
