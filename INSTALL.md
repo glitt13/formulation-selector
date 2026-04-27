@@ -23,6 +23,14 @@ The recommended approach is using the newer uv manager.
 ### Using uv (suggested)
 Install UV (https://docs.astral.sh/uv/getting-started/installation/)
 
+TL;DR:
+```zsh
+cd pkg
+uv sync --all-groups
+```
+
+_The following instructions are more complicated and deprecated as of April, 2026:_
+
 Windows:
 - powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
 Linux and macOS:

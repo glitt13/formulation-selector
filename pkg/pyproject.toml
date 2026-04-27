@@ -1,13 +1,19 @@
 [project]
 name = "formulation-selector"
 version = "0.1.0"
-requires-python = ">=3.12" 
+requires-python = "==3.12.11" 
 dependencies = [
+    "fs_algo",
+    "fs_prep"
 ]
 
 [tool.uv.workspace]
-# Note: Adjust these paths if they are actually nested inside a 'pkg/' directory
 members = [
     "fs_algo",
     "fs_prep"
 ]
+
+# Tell the root project to look in the local workspace for these packages
+[tool.uv.sources]
+fs_algo = { workspace = true }
+fs_prep = { workspace = true }
