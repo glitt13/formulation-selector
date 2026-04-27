@@ -57,7 +57,7 @@ __pycache__/
 .env
 .python-version
 .venv
-.envrc
+
 build/
 develop-eggs/
 dist/
@@ -75,7 +75,9 @@ share/python-wheels/
 .installed.cfg
 *.egg
 
-
+# uv #
+**/uv.lock
+**/.envrc
 
 # pyenv #
 #########
@@ -109,4 +111,3 @@ bower_components/
 src/vendor/
 dist/
 .Rproj.user
-.vscode
