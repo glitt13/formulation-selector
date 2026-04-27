@@ -987,8 +987,9 @@ class TestReadMetadata(unittest.TestCase):
     def test_read_metadata_file_not_found(self, mock_read_parquet):
         """Test that FileNotFoundError is raised when metadata file is missing."""
         path_attr_config = Path(dir_test_data, "attr_config.yaml")
-        with self.assertRaises(FileNotFoundError):
-            fsutil._read_metadata(path_attr_config, ds='dataset_name')
+        # Update 2026-04-24: changed to return None to accommodate param regionalization ignoring attr_config.yaml
+        result = fsutil._read_metadata(path_attr_config, ds='dataset_name')
+        self.assertIsNone(result)
 
     @patch('pandas.read_parquet')
     def test_read_metadata_reads_parquet(self, mock_read_parquet):

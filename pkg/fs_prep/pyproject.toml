@@ -16,7 +16,7 @@ classifiers = [
 ]
 requires-python = "==3.12.11" 
 dependencies = [
-    "numpy>=2.1.2",
+    "numpy==2.4.4",
     "pandas>=2.2.3",
     "xarray>=2024.9.0",
     "pyarrow>=17.0.0",
@@ -24,7 +24,7 @@ dependencies = [
     "dask>=2024.10.0",
     "netcdf4>=1.7.2",
     "pynhd>=0.19.0",
-   # "fs_algo"
+    "fs_algo"
 ]
 
 [project.urls]

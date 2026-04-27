@@ -1229,8 +1229,9 @@ def _read_metadata(path_attr_config:str|os.PathLike, ds:str) -> pd.DataFrame:
     vals = {'ds_type':ds_type,'write_type':write_type, 'dir_std_base':dir_std_base,'ds':ds}
     path_meta = path_meta_fstr.format(**vals)
     if not Path(path_meta).exists():
-        logging.error(f"The dataset's metadata mapping file could not be found: \n{path_meta}")
-        raise FileNotFoundError(f"The dataset's metadata mapping file could not be found: \n{path_meta}")
+        logging.warning(f"The dataset's metadata mapping file could not be found: \n{path_meta}")
+        return None
+        #raise FileNotFoundError(f"The dataset's metadata mapping file could not be found: \n{path_meta}")
     if 'parquet' in Path(path_meta).suffix:
         df_meta = pd.read_parquet(path_meta)
     elif 'csv' in Path(path_meta).suffix:
@@ -1292,9 +1293,19 @@ def combine_resp_gdf_comid_wrap(dir_std_base:str|os.PathLike,ds:str,path_attr_co
         gdf_comid = gdf_comid.drop(columns=['featureID'])
     if 'featureSource' in gdf_comid.columns:
         gdf_comid = gdf_comid.drop(columns=['featureSource'])
-    # merge gdf_comid with df_meta based on gage_id column
-    df_meta_map = df_meta[['featureID','featureSource','gage_id']].drop_duplicates()
-
+    if df_meta is not None:
+        # merge gdf_comid with df_meta based on gage_id column
+        df_meta_map = df_meta[['featureID','featureSource','gage_id']].drop_duplicates()
+    else:
+        # If the file is missing, dynamically build the mapping using the known f-string
+        gage_ids = dat_resp['gage_id'].values
+        df_meta_map = pd.DataFrame({
+            'gage_id': gage_ids,
+            'featureSource': featureSource,
+            # featureID here acts as the format string (e.g., 'USGS-{gage_id}')
+            'featureID': [featureID.format(gage_id=g) for g in gage_ids]
+        })
+        
     gdf_comid = gdf_comid.merge(df_meta_map, on='gage_id', how='left')
 
 

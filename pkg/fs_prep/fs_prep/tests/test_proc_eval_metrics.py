@@ -44,6 +44,7 @@ with open(schema_dir_test, 'r') as file:
 
 # Reads the testing config dataframe
 exp_config_df = pd.read_csv(Path(parent_dir_test,"test_config_df.csv"), index_col=None)
+exp_config_df['val_metrics'] = True
 home_dir = "~"
 # Transform the home_dir to user dir
 for col in exp_config_df.columns:
@@ -137,6 +138,7 @@ class TestProcColSchemaHier(unittest.TestCase):
         # specify netcdf config
         nc_config_df = exp_config_df.copy()
         nc_config_df['save_type'] = 'netcdf'
+        nc_config_df['val_metrics'] = 'True'
         cls.dsnc = proc_col_schema(raw_test_df,nc_config_df, dir_save)
 
     def test_hier_nc_exists(self):
@@ -227,8 +229,15 @@ class TestProcColSchemaNwisCheck(unittest.TestCase):
         global log_path
         self.df = raw_test_df.copy().iloc[0:1]
         self.col_schema_df = exp_config_df.copy()
-        self.col_schema_df.loc[0,'featureSource'] = 'nwissite'
+        # Force the column to be an object/string type before inserting strings
+        self.col_schema_df['featureID'] = self.col_schema_df['featureID'].astype(object)
         self.col_schema_df.loc[0,'featureID'] = 'USGS-{gage_id}'
+        
+        self.col_schema_df['featureSource'] = self.col_schema_df['featureSource'].astype(object)
+        self.col_schema_df.loc[0,'featureSource'] = 'nwissite'
+        # self.col_schema_df = exp_config_df.copy()
+        # self.col_schema_df.loc[0,'featureSource'] = 'nwissite'
+        # self.col_schema_df.loc[0,'featureID'] = 'USGS-{gage_id}'
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
 

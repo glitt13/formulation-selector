@@ -398,7 +398,8 @@ def _proc_check_std_fs_ids(vars_map: list, category=['metric','target_var'][0]):
 
 
 def _proc_check_input_df(df: pd.DataFrame, 
-                         col_schema_df: pd.DataFrame) -> pd.DataFrame:
+                         col_schema_df: pd.DataFrame,
+                         val_metrics: bool = True) -> pd.DataFrame:
     """
     Checks the input dataset for consistency in expected column format as 
         generated from the yaml config file.
@@ -409,6 +410,8 @@ def _proc_check_input_df(df: pd.DataFrame,
     :param col_schema_df: The column schema naming convention ingested from 
         the yaml file corresponding to the dataset.
     :type col_schema_df: pd.DataFrame
+    :param val_metrics: Set to True to validate the metric columns in the input dataframe.
+    :type val_metrics: bool
     :return: wide format df ensuring that the unique identifier for 
         each row is 'gage_id'
     :rtype: pd.DataFrame
@@ -460,9 +463,11 @@ def _proc_check_input_df(df: pd.DataFrame,
     # Standardize the metrics
     metric_mappings = col_schema_df['metric_mappings'][0].split('|')
 
-    # Run check that mappings are part of standardized column naming
-    _proc_check_std_fs_ids(metric_mappings, category = 'metric')
-
+    if val_metrics:
+        # Run check that mappings are part of standardized column naming
+        _proc_check_std_fs_ids(metric_mappings, category = 'metric')
+    else:
+        logging.warning('Skipping validation of metric mappings')
     # rename metrics to the standardized format
     df = df.rename(columns = dict(zip(metrics, metric_mappings)))
 
@@ -471,7 +476,8 @@ def _proc_check_input_df(df: pd.DataFrame,
 def proc_col_schema(df: pd.DataFrame, 
                     col_schema_df: pd.DataFrame, 
                     dir_save: str | os.PathLike, 
-                    check_nwis: bool = False) -> xr.Dataset:
+                    check_nwis: bool = False
+                    ) -> xr.Dataset:
     """
     Process model evaluation metrics into individual standardized files 
         and save a standardized metadata file.
@@ -509,6 +515,10 @@ def proc_col_schema(df: pd.DataFrame,
     formulation_id = std_form_id(col_schema_df)
     save_type = col_schema_df.loc[0, 'save_type']
     save_loc = col_schema_df.loc[0, 'save_loc']
+    if 'val_metrics' in col_schema_df.columns:
+        val_metrics = col_schema_df.loc[0, 'val_metrics'] == 'True'
+    else:
+        val_metrics = False
 
     # TODO add cloud or local saving
     if save_loc == 'local':
@@ -523,7 +533,7 @@ def proc_col_schema(df: pd.DataFrame,
         # TODO define _save_dir_base here in case .csv are desired in cloud
 
     # Run format checker/df renamer on input data based on config file's entries:
-    df = _proc_check_input_df(df,col_schema_df)
+    df = _proc_check_input_df(df,col_schema_df,val_metrics)
 
     # Run format checker on nwissite gage ids for missing leading zeros
     if check_nwis and col_schema_df['featureSource'].values[0] == 'nwissite':
