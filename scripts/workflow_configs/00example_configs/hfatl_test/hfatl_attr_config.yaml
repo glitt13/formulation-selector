@@ -46,7 +46,7 @@ attr_select: # Required. The names of variable sublistings are standardized with
   - paths_ha: # Paths to tabular HydroATLAS variables downscaled to hydrofabric divide
     - "{home_dir}/noaa/hydrofabric/tabular-data/hydroatlas_vars.parquet" # path to hydroatlas data formatted for hydrofabric. Required only if hydroatlas variables desired (defined as ha_vars section below).
   - paths_hfatl: # Paths to tabular HydroATLAS variables downscaled to hydrofabric divide
-    - "{home_dir}/git/hydrofabricATLAS/workflow/nwmv4_static_params/results/apr26cal_hf22/final/apr26cal_hf22_final.parquet" #/hydrofabric/tabular-data/hydroatlas_vars.parquet"
+    - "{home_dir}/noaa/regionalization/data/raw/hfatl_test/pred_dataset.parquet" #/hydrofabric/tabular-data/hydroatlas_vars.parquet"
   - hfatl_vars:  # hydrofabricatlas variables. Must specify s3_path_hydatl and/or paths_ha if desired.
     - "lka_stats"
     - "ele_stats"
