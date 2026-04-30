@@ -671,8 +671,9 @@ def gen_conus_basemap(dir_out_basemap:str | Path, # This should be the data_visu
 
     return states
     
-def plot_map_pred(geo_df:gpd.GeoDataFrame, states,title:str,metr:str,
-                  colname_data:str='prediction'):
+def plot_map_pred(geo_df:gpd.GeoDataFrame, states:gpd.GeoDataFrame,
+                  title:str,metr:str,colname_data:str='prediction'
+                  ):
     """Genereate a map of predicted response variables
 
     :param geo_df: Geodataframe of response variable results
@@ -688,6 +689,7 @@ def plot_map_pred(geo_df:gpd.GeoDataFrame, states,title:str,metr:str,
     :return: Map of predicted response variables
     :rtype: Figure
     """
+
     # Calculate vmin and vmax based on the data
     vmin = geo_df[colname_data].min(skipna=True)
     vmax = geo_df[colname_data].max(skipna=True)
@@ -717,20 +719,53 @@ def plot_map_pred(geo_df:gpd.GeoDataFrame, states,title:str,metr:str,
 def plot_map_pred_wrap(test_gdf,dir_out_viz_base, ds,
                       metr,algo_str,
                       split_type='test',
-                      colname_data='prediction'):
+                      colname_data='prediction',
+                      epsg_reproj=3857):
+    """Wrapper for plotting map displays
+
+    :param test_gdf: _description_
+    :type test_gdf: _type_
+    :param dir_out_viz_base: _description_
+    :type dir_out_viz_base: _type_
+    :param ds: _description_
+    :type ds: _type_
+    :param metr: _description_
+    :type metr: _type_
+    :param algo_str: _description_
+    :type algo_str: _type_
+    :param split_type: _description_, defaults to 'test'
+    :type split_type: str, optional
+    :param colname_data: _description_, defaults to 'prediction'
+    :type colname_data: str, optional
+    :param epsg_reproj: The EPSG code for reprojecting data for map display, defaults to 3857
+    :type epsg_reproj: int
+    """
 
     path_pred_map_plot = std_map_pred_path(dir_out_viz_base,ds,metr,algo_str,split_type)
     dir_out_basemap = path_pred_map_plot.parent.parent
     states = gen_conus_basemap(dir_out_basemap = dir_out_basemap)
 
     # TODO add option to print oconus basemap
+    # TODO change epsg_reproj for oconus basemap
 
     # Ensure the gdf matches the 4326 epsg used for states:
     test_gdf = test_gdf.to_crs(4326)
 
+    # Re-project for visualization
+    states = states.to_crs(epsg=epsg_reproj)
+    geo_df = test_gdf.to_crs(epsg=epsg_reproj)
+    geo_df_valid = geo_df[~geo_df.geometry.is_empty]
+    if geo_df_valid.shape[0] < geo_df.shape[0]:
+        logging.warning(f"Lost a total {geo_df.shape[0]-geo_df_valid.shape[0]} \
+                         of {geo_df.shape[0]} data rows due to invalid geometries")
+        if colname_data in geo_df_valid.columns:
+            geo_df_valid = geo_df_valid.dropna(subset=[colname_data])
+        geo_df_valid = geo_df_valid.reset_index(drop=True)
+        geo_df = geo_df_valid.copy()
+
     # Generate the map
     plot_title = f"Predicted Values: {metr} - {ds}: {algo_str} algorithm"
-    plot_pred_map = plot_map_pred(geo_df=test_gdf, states=states,title=plot_title,
+    plot_pred_map = plot_map_pred(geo_df=geo_df, states=states,title=plot_title,
                                   metr=metr,colname_data=colname_data)
 
     # Save the plot as a .png file
