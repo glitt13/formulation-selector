@@ -502,7 +502,7 @@ def _check_attr_rm_dupes(attr_df:pd.DataFrame,
         attr_df = attr_df.drop_duplicates(subset=uniq_cols, keep='first')
     return attr_df
 
-def fs_read_attr_comid(dir_db_attrs:str | os.PathLike, comids_resp:list | Iterable, attrs_sel: str | Iterable = 'all',
+def fs_read_attr_comid(dir_db_attrs:str | os.PathLike, comids_resp:list | Iterable = None, attrs_sel: str | Iterable = 'all',
                        _s3 = None,storage_options=None,read_type:str=['all','filename'][0],
                        reindex:bool=False)-> pd.DataFrame:
     """Read attribute data acquired using proc.attr.hydfab R package & subset to desired attributes
@@ -538,6 +538,7 @@ def fs_read_attr_comid(dir_db_attrs:str | os.PathLike, comids_resp:list | Iterab
     #  2025-06-10 fix: rm accidental elif in entry point for read_type; add partitioning schema, GL
     #  2025-06-13 feat: add timestamp datetime coercion, GL
     #. 2025-09-30 fix: 'filename' option uses only dd instead of pd inside dd
+    #. 2026-05-03 refactor: allow no comids_resp, meaning all comids returned with data, GL
     if _s3:
         storage_options={"anon",True} # for public
         # TODO  Setup the s3fs filesystem that will be used, with xarray to open the parquet files
@@ -559,48 +560,71 @@ def fs_read_attr_comid(dir_db_attrs:str | os.PathLike, comids_resp:list | Iterab
                 pa.field("attribute", pa.string()), pa.field('value', pa.float64())]),
                 flavor="hive")
 
-    # ------------------- Subset based on comids of interest ------------------
-    if read_type == 'all': # Considering all parquet files inside directory
-        # Read attribute data acquired using proc.attr.hydfab R package
-        comids_resp_str = [str(s) for s in comids_resp]
-        all_attr_ddf = dd.read_parquet(dir_db_attrs, storage_options = storage_options,
-                                        engine='pyarrow',partitioning=partitioning)
-        attr_ddf_subloc = all_attr_ddf[all_attr_ddf['featureID'].isin(comids_resp_str)]
-    elif read_type == 'filename': # Read based on comid being located in the parquet filename
-        substrings = [f'_{sub}_' for sub in comids_resp]
-        pattern = re.compile('|'.join(map(re.escape,substrings)))
-        all_files = [file for file in Path(dir_db_attrs).iterdir() if file.is_file()]
-        matching_files = [file for file in all_files if pattern.search(str(file))]
-        # Read in all matching filenames and proceed
-        attr_ddf_subloc = dd.read_parquet(matching_files,
-                                          engine='pyarrow',
-                                          partitioning=partitioning)
+    if comids_resp is None:
+        # No specific location identifiers specified, so grab all.
+        logging.info("comids_resp is None. Reading all available locations in subdirectory.")
+        attr_ddf_subloc = dd.read_parquet(dir_db_attrs, storage_options=storage_options,
+                                          engine='pyarrow', partitioning=partitioning)
     else:
-        # Initialize attr_ddf_sub
-        attr_ddf_sub = None
-        logging.error(f"Unrecognized read_type provided in fs_read_attr_comid: {read_type}")
-        raise ValueError(f"Unrecognized read_type provided in fs_read_attr_comid: {read_type}")
-    
-    if attr_ddf_subloc.shape[0].compute() == 0:
-        logging.warning(f'None of the provided featureIDs exist in {dir_db_attrs}: \
-                      \n {", ".join(attrs_sel)} ')
+        # ------------------- Subset based on comids of interest ------------------
+        if read_type == 'all': # Considering all parquet files inside directory
+            # Read attribute data acquired using proc.attr.hydfab R package
+            comids_resp_str = [str(s) for s in comids_resp]
+            all_attr_ddf = dd.read_parquet(dir_db_attrs, storage_options = storage_options,
+                                            engine='pyarrow',partitioning=partitioning)
+            attr_ddf_subloc = all_attr_ddf[all_attr_ddf['featureID'].isin(comids_resp_str)]
+        elif read_type == 'filename': # Read based on comid being located in the parquet filename
+            substrings = [f'_{sub}_' for sub in comids_resp]
+            pattern = re.compile('|'.join(map(re.escape,substrings)))
+            all_files = [file for file in Path(dir_db_attrs).iterdir() if file.is_file()]
+            matching_files = [file for file in all_files if pattern.search(str(file))]
+            # Read in all matching filenames and proceed
+            attr_ddf_subloc = dd.read_parquet(matching_files,
+                                            engine='pyarrow',
+                                            partitioning=partitioning)
+        else:
+            # Initialize attr_ddf_sub
+            attr_ddf_sub = None
+            logging.error(f"Unrecognized read_type provided in fs_read_attr_comid: {read_type}")
+            raise ValueError(f"Unrecognized read_type provided in fs_read_attr_comid: {read_type}")
+        
+        if attr_ddf_subloc.shape[0].compute() == 0:
+            logging.warning(f'None of the provided featureIDs exist in {dir_db_attrs}: \
+                        \n {", ".join(attrs_sel)} ')
     
     # ------------------- Subset based on attributes of interest ------------------
     if attrs_sel == 'all':
-        attrs_sel = attr_ddf_subloc['attribute'].unique().compute()
+        attrs_sel_list = attr_ddf_subloc['attribute'].unique().compute().tolist()
+    else:
+        atrs_sel_list = list(attrs_sel)
 
     attr_ddf_sub = attr_ddf_subloc[attr_ddf_subloc['attribute'].isin(attrs_sel)]
-    
     attr_df_sub = attr_ddf_sub.compute() # This takes a while querying many files.
 
     if attr_df_sub.shape[0] == 0:
         logging.warning(f'The provided attributes do not exist with the retrieved featureIDs : \
-                        \n {",".join(attrs_sel)}')
+                        \n {",".join(atrs_sel_list)}')
+        
+    # ------------------- INTERSECTION: Keep only locations with ALL attributes -------------------
+    if comids_resp is None and len(attr_df_sub) > 0:
+        required_attr_count = len(atrs_sel_list)
+        
+        # Count unique attributes per featureID
+        attr_counts = attr_df_sub.groupby('featureID')['attribute'].nunique()
+        
+        # Filter for featureIDs that have exactly the required number of attributes
+        valid_feature_ids = attr_counts[attr_counts == required_attr_count].index
+        
+        dropped_count = len(attr_counts) - len(valid_feature_ids)
+        if dropped_count > 0:
+            logging.info(f"Dropped {dropped_count} locations that did not contain all {required_attr_count} requested attributes.")
+            
+        attr_df_sub = attr_df_sub[attr_df_sub['featureID'].isin(valid_feature_ids)].copy()    
     # ------------------- Remove any duplicates & run checks -------------------
     attr_df_sub = _check_attr_rm_dupes(attr_df=attr_df_sub)
 
     # Run check that all variables are present across all basins
-    dict_rslt = _check_attributes_exist(attr_df_sub,attrs_sel)
+    dict_rslt = _check_attributes_exist(attr_df_sub,atrs_sel_list)
     attr_df_sub, attrs_sel_ser = dict_rslt['df_attr'], dict_rslt['attrs_sel']
 
     if not pd.api.types.is_float_dtype(attr_df_sub['value']):
