@@ -1,19 +1,28 @@
 # Prepare the Julie Mai xSSA metrics datasets from 2022 Nature Comm pub
 col_schema:   # required column mappings in the evaluation metrics dataset
   - 'gage_id': 'divide_id' # The basin identifier/gage id used for each modeled location in the evaluation metrics dataset
-  - 'featureID': 'hfuid-{gage_id}' # python f-string / R glue() format; converting the 'gage_id' to the standardized featureID used by nhdplusTools. Must use '{gage_id}' e.g. 'USGS-{gage_id}'
-  - 'featureSource': 'hfuid' # The standardized nhdplusTools featureSource. Possible featureSources might be 'nwissite', 'comid'.
-  - 'metric_cols': 'wltsmc' # Column(s) in the dataset corresponding to the evaluation metrics. If multiple exist, separate each string by '|' e.g. 'rmse|kge|nse'
-  - 'metric_mappings': 'fake' # The mapping of metric_cols to the standardized format as specified in fs_categories.yaml, separate each metric name by '|' e.g. 'RMSE|KGE|NSE'
+  - 'featureID': '{gage_id}' # python f-string / R glue() format; converting the 'gage_id' to the standardized featureID used by nhdplusTools. Must use '{gage_id}' e.g. 'USGS-{gage_id}'
+  - 'featureSource': 'hfv22_id' # The standardized nhdplusTools featureSource. Possible featureSources might be 'nwissite', 'comid', 'hfv22_id', hfv30_id
+  - 'metric_cols': 'snw_pc_max|gw_Expon' # Column(s) in the dataset corresponding to the evaluation metrics. If multiple exist, separate each string by '|' e.g. 'rmse|kge|nse'
+  - 'metric_mappings': 'snw_pc_max|gw_Expon' # The mapping of metric_cols to the standardized format as specified in fs_categories.yaml, separate each metric name by '|' e.g. 'RMSE|KGE|NSE'
+  - 'val_metrics': 'False'
 file_io: # May define {home_dir} for python's '{home_dir}/string_path'.format(home_dir =str(Path.home())) functionality
   - 'home_dir': '~' # OPTIONAL, define the home_dir path. If undefined, fs_prep will automatically assume default '~' 
-  #- 'path_camels': '{home_dir}/noaa/camels/camels_hydro.txt' # Path to the CAMELS basins dataset. CAMELS data should not always be a requirement for dataset processing, but serves to help analyze common catchments.
-  - 'path_data': '{home_dir}/noaa/regionalization/data/raw/hfatl_test/hfatl_fake_dat.csv' # Where the raw input data are stored.
+  - 'path_data': '{home_dir}/noaa/regionalization/data/raw/hfatl_test/resp_dataset.parquet' # Where the raw input data are stored.
+  - 'data_source': 'hfATLAS_hf22' # The hydrofabricATLAS dataset version (may need to update with major version changes, or somehow integrate with dvc tracking)
   - 'dir_save': '{home_dir}/noaa/regionalization/data/input' # Required. The save location of standardized output
   - 'save_type': 'netcdf' #  Required. Save as hierarchical files 'netcdf' or 'zarr'. Default 'netcdf' until attribute 
   - 'save_loc': 'local' #  Required.  Use 'local' for saving to a local path via dir_save. Future work will create an approach for 'aws' or other cloud saving methods
+  - 'path_hf_gpkg': "{home_dir}/noaa/hydrofabric/v2.2_2025Apr/conus_nextgen.gpkg" # The path to the gpkg containing the hfATLAS divides. This is required for mapping the divide_id to the standardized featureID and featureSource.
+  - 'hf_divides_layer': "divides"         # The layer name inside the gpkg
+  - 'map_divide_id_col': "divide_id"     # The column name in your metadata mapping CS
+  - 'hf_fp_layer': "flowpaths" # Hydrofabric layer name for flowpaths layer
+  - 'hf_fp_id_col': "id" # The column name in the flowpaths layer corresponding to the flowpath outlet of the divide
+  - 'vpu_id_col': "vpuid" # The column name in the hydrofabric flowpaths layer
+  - 'vpu_mapped': 'True' # Boolean str. Should output attribute data be organized by vpu? True recommended for large datasets, e.g. entire CONUS scale.
+  - 'dir_db_gpkg': "{home_dir}/noaa/regionalization/data/input/gpkg/hfatl/"
 formulation_metadata:  
-  - 'dataset_name': 'test-hfatl' # Required. 
+  - 'dataset_name': 'test_hfatl0' # Required. 
   - 'formulation_base': 'test_regnl' # Required. Basename of formulation. the rr, sp, and gw will be added to this if 'formulation_id' is left empty
   - 'formulation_id': 'test_regnl' # Optional alternative in lieu of generating a formulation_id based on 'formulation_base'. Should leave empty if automatic formulation_id generation desired.
   - 'formulation_ver': # Optional. The version of the formulation
