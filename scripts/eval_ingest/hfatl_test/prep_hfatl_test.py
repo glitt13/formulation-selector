@@ -49,18 +49,20 @@ if __name__ == "__main__":
     # BEGIN CUSTOMIZED DATASET MUNGING
     # ---- Read in hfatlas test dataset
     logging.info("Custom code: Reading/formatting non-standardized input datasets")
-    df_all_data = pd.read_csv(path_data,sep = ',',dtype={col_schema_df['gage_id'].loc[0] :str},engine="python")
+    df_all_data = pd.read_parquet(path_data)#,engine="pyarrow")
+   # df_all_data[col_schema_df['gage_id']] = df_all_data.index.astype(str)
     
     # Drop unnamed column
-    df_all_data = df_all_data.drop(columns=[col for col in df_all_data.columns if "Unnamed" in col])
+    #df_all_data = df_all_data.drop(columns=[col for col in df_all_data.columns if "Unnamed" in col])
 
     # Ensure appropriate str formats & remove extraneous spaces that exist in this particular dataset
-    df_all_data.columns = df_all_data.columns.str.replace(' ','')
-    df_all_data[col_schema_df['gage_id'].loc[0]] = df_all_data[col_schema_df['gage_id'].loc[0]].str.replace(' ','')
+    # df_all_data.columns = df_all_data.columns.str.replace(' ','')
+    #df_all_data[col_schema_df['gage_id'].loc[0]] = df_all_data[col_schema_df['gage_id'].loc[0]].str.replace(' ','')
 
  
     # END CUSTOMIZED DATASET MUNGING
 
     # ------ Extract metric data and write to file
     ds = pem.proc_col_schema(df_all_data, col_schema_df, dir_save)
+    print("COMPLETED PROCESSING prep_hfatl_test.py")
     logging.shutdown() # Remember to add this at the end of each script so that log files are separated by the script run
