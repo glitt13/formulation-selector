@@ -51,7 +51,9 @@ if __name__ == "__main__":
     logging.info("Custom code: Reading/formatting non-standardized input datasets")
     df_all_data = pd.read_parquet(path_data)#,engine="pyarrow")
    # df_all_data[col_schema_df['gage_id']] = df_all_data.index.astype(str)
-    
+
+    print("Subsetting to 8000 locations just for testing.")
+    df_all_data = df_all_data.sample(n=8000, random_state=42)
     # Drop unnamed column
     #df_all_data = df_all_data.drop(columns=[col for col in df_all_data.columns if "Unnamed" in col])
 
