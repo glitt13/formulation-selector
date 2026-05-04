@@ -173,7 +173,7 @@ if __name__ == "__main__":
 
         vals = {'ds_type':ds_type,'write_type':write_type, 'dir_std_base':dir_std_base,'ds':ds}
         path_meta = path_meta_fstr.format(**vals)
-        
+        dir_db_attrs = Path(str(dir_db_attrs).format(**vals))
         if Path(path_meta).exists() and False:
             # TODO allow secondary option where dat_resp and metrics read in from elsewhere. 
             # NOTE dataset metadata handling will also need to be considered
@@ -235,7 +235,7 @@ if __name__ == "__main__":
         except:
             logging.error("Could not convert to long format. A common culprit is duplicated data, perhaps un-detected due to" \
             " 1) multiple sub-directories containing data inside dir_db_attrs" \
-            " 2) data across all standard columns are the same but the dl_timestamp differs."
+            " 2) data across all standard columns are the same but the dl_timestamp differs.")
             sys.exit(1)
         comids_df_attr_wide = df_attr_wide.index.values
 
