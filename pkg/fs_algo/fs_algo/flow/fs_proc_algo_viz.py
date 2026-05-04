@@ -31,7 +31,6 @@ import xarray as xr
 import fs_prep.proc_eval_metrics as pem
 from logging.handlers import MemoryHandler
 import logging
-import importlib.util
 import sys
 import fs_algo.schemas.schemas as schemas
 import yaml 
@@ -231,7 +230,13 @@ if __name__ == "__main__":
         fsutil.validate_input_attributes(df_attr,arg_val=arg_val)
             
         # Convert into wide format for model training
-        df_attr_wide = df_attr.pivot(index=col_locid, columns = 'attribute', values = 'value')
+        try:
+            df_attr_wide = df_attr.pivot(index=col_locid, columns = 'attribute', values = 'value')
+        except:
+            logging.error("Could not convert to long format. A common culprit is duplicated data, perhaps un-detected due to" \
+            " 1) multiple sub-directories containing data inside dir_db_attrs" \
+            " 2) data across all standard columns are the same but the dl_timestamp differs."
+            sys.exit(1)
         comids_df_attr_wide = df_attr_wide.index.values
 
         # Prepare attribute correlation matrix w/o NA values (writes to file)
