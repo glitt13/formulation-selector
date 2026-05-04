@@ -8,7 +8,7 @@ import pynhd as nhd
 import dask.dataframe as dd
 import os
 from collections.abc import Iterable
-from typing import List, Optional, Dict, Any, Tuple
+from typing import List, Union, Optional, Dict, Any, Tuple
 from pathlib import Path
 import itertools
 import yaml
@@ -18,6 +18,7 @@ from shapely.geometry import Point
 import geopandas as gpd
 import pyarrow as pa
 import pyarrow.dataset as ds
+import pyarrow.parquet as pq
 import ast
 from sklearn.model_selection import train_test_split
 import joblib
@@ -626,6 +627,7 @@ def fs_read_attr_comid(dir_db_attrs:str | os.PathLike, comids_resp:list | Iterab
     # Run check that all variables are present across all basins
     dict_rslt = _check_attributes_exist(attr_df_sub,atrs_sel_list)
     attr_df_sub, attrs_sel_ser = dict_rslt['df_attr'], dict_rslt['attrs_sel']
+    
 
     if not pd.api.types.is_float_dtype(attr_df_sub['value']):
         logging.warning("Forcing all attribute values to be float")
@@ -636,12 +638,15 @@ def fs_read_attr_comid(dir_db_attrs:str | os.PathLike, comids_resp:list | Iterab
                       which may be problematic for some algo training/testing. \
                       \nConsider reprocessing the attribute grabber (proc.attr.hydfab R package)')
     
+
     if reindex:
         attr_df_sub = attr_df_sub.reindex()
 
     # Coerce the timestamp column to datetime
     if 'dl_timestamp' in attr_df_sub.columns:
         attr_df_sub['dl_timestamp'] = pd.to_datetime(attr_df_sub['dl_timestamp'], errors='coerce')
+
+    # Drop the duplicates pertaining to featureID,featureSource, attribute, and value:
 
     return attr_df_sub
 
@@ -1933,31 +1938,163 @@ def validate_df_comids(
 
 # --------------------------------------------------------------------------- #
 # --------------------------------- hfATLAS --------------------------------- #
-def read_hfatlas_wrap(path_hfatl: Path | os.PathLike, attrs_sel:list, 
-                        map_id_col: str = "divide_id") -> pd.DataFrame: 
-    """Read attribute dataset, removing pint awareness when hfATLAS formatted as 
-    tuple of (colname, pint unit)
+# def read_hfatlas_wrap(path_hfatl: Path | os.PathLike, attrs_sel:list, 
+#                         map_id_col: str = "divide_id") -> pd.DataFrame: 
+#     """Read attribute dataset, removing pint awareness when hfATLAS formatted as 
+#     tuple of (colname, pint unit)
 
-    :param path_hfatl: The filepath to the hydrofabricATLAS aggregated final output
-    :type path_hfatl: Path | os.PathLike
-    :param attrs_sel: The attributes of interest for training/predicting
-    :type attrs_sel: list
-    :param map_id_col: The location id col in attribute data, defaults to "divide_id"
-    :type map_id_col: str, optional
-    :return: Dataset of location identifier column and subset attributes
-    :rtype: pd.DataFrame
+#     :param path_hfatl: The filepath to the hydrofabricATLAS aggregated final output
+#     :type path_hfatl: Path | os.PathLike
+#     :param attrs_sel: The attributes of interest for training/predicting
+#     :type attrs_sel: list
+#     :param map_id_col: The location id col in attribute data, defaults to "divide_id"
+#     :type map_id_col: str, optional
+#     :return: Dataset of location identifier column and subset attributes
+#     :rtype: pd.DataFrame
+#     """
+#     if not isinstance(path_hfatl, list):
+#         path_hfatl = [path_hfatl]
+
+#     combined_df = None
+#     found_attrs = set() # Track attributes we successfully find across ANY file
+
+#     # 2. Loop through all provided files
+#     for p in path_hfatl:
+#         p_obj = Path(p)
+#         if not p_obj.exists():
+#             logging.warning(f"hfATLAS path does not exist and will be skipped: {p_obj}")
+#             continue
+
+#         # Read and clean the current file
+#         df = pd.read_parquet(p_obj)
+#         df = clean_hfatlas_columns(df) 
+
+#         if map_id_col not in df.columns:
+#             logging.warning(f"ID column '{map_id_col}' not found in {p_obj.name}. Skipping file.")
+#             continue
+            
+#         # Determine which of our target attributes actually live in THIS file
+#         available_attrs = [col for col in attrs_sel if col in df.columns]
+        
+#         # If this file has none of our requested attributes, just skip it
+#         if not available_attrs:
+#             continue
+            
+#         # Mark these attributes as "found"
+#         found_attrs.update(available_attrs)
+        
+#         # Subset the dataframe to just the ID column and the found attributes
+#         cols_keep = [map_id_col] + available_attrs
+#         df_subset = df.filter(items=cols_keep)
+        
+#         # 3. Merge into the master dataframe
+#         if combined_df is None:
+#             combined_df = df_subset
+#         else:
+#             # Prevent overlapping column suffixes (e.g., '_x', '_y') if an attribute exists in multiple files
+#             overlap = set(df_subset.columns).intersection(set(combined_df.columns)) - {map_id_col}
+#             if overlap:
+#                 df_subset = df_subset.drop(columns=list(overlap))
+                
+#             combined_df = combined_df.merge(df_subset, on=map_id_col, how='outer')
+
+#     if combined_df is None:
+#         logging.warning("Failed to load any valid data from the provided hfATLAS paths.")
+#         return pd.DataFrame(columns=[map_id_col] + attrs_sel)
+
+#     miss_cols = [col for col in attrs_sel if col not in found_attrs]
+#     if len(miss_cols) > 0:
+#         logging.warning(f"Problem with attribute selection, the following are missing across ALL files: "
+#                         f"{miss_cols}")
+#     return combined_df
+
+def read_hfatlas_wrap_dask(paths_hfatl: Union[Path, str, List[Union[Path, str]]], attrs_sel: list, 
+                           map_id_col: str = "divide_id") -> pd.DataFrame: 
     """
-    df_hfatlas = pd.read_parquet(path_hfatl)
-    df_hfatlas = clean_hfatlas_columns(df_hfatlas) 
-    # Subset to attribute columns. This must happen after clean_hfatlas_columns, which drops pint unit awareness
-    cols_keep_hfatlas = [map_id_col] + attrs_sel
-    df_hfatlas = df_hfatlas.filter(items=cols_keep_hfatlas)
-    miss_cols = [col for col in cols_keep_hfatlas if col not in df_hfatlas.columns]
-    if len(miss_cols) > 0:
-        logging.warning(f"Problem with attribute selection, the following are missing: \
-                        {miss_cols}")
-    return df_hfatlas
+    Highly efficient Dask/PyArrow implementation to read and merge requested attributes.
+    Peeks at Parquet metadata to resolve pint-aware tuples before lazy-loading data.
+    """
+    if not isinstance(paths_hfatl, list):
+        paths_hfatl = [paths_hfatl]
+        
+    # 1. Expand directories into a list of specific parquet files
+    all_files = []
+    for p in paths_hfatl:
+        p_obj = Path(p)
+        if p_obj.is_dir():
+            all_files.extend(list(p_obj.rglob("*.parquet")))
+        elif p_obj.is_file() and p_obj.suffix == '.parquet':
+            all_files.append(p_obj)
+            
+    if not all_files:
+        logging.error("No valid parquet files found in the provided hfATLAS paths.")
+        return pd.DataFrame()
 
+    ddfs_to_merge = []
+    found_attrs = set()
+
+    # 2. PEEK phase: Read only the schema metadata (extremely fast, ~0 RAM)
+    for file in all_files:
+        try:
+            # Read just the column names from the parquet metadata
+            raw_cols = pq.ParquetFile(file).schema.names
+        except Exception as e:
+            logging.warning(f"Could not read schema for {file.name}: {e}")
+            continue
+
+        # Build a mapping of clean_name -> raw_name for this specific file
+        col_mapping = {}
+        for raw_col in raw_cols:
+            if raw_col.startswith("('") and raw_col.endswith("')"):
+                try:
+                    clean_col = ast.literal_eval(raw_col)[0]
+                    col_mapping[clean_col] = raw_col
+                except (ValueError, SyntaxError):
+                    col_mapping[raw_col] = raw_col
+            else:
+                col_mapping[raw_col] = raw_col
+
+        # Determine which requested attributes actually exist in this file
+        available_clean_cols = [col for col in attrs_sel if col in col_mapping]
+            
+        logging.info(f"Found {len(available_clean_cols)} requested attributes in {file.name}")
+        found_attrs.update(available_clean_cols)
+
+        # The exact raw strings we need to ask Dask to load
+        raw_cols_to_load = [col_mapping[map_id_col]] + [col_mapping[col] for col in available_clean_cols]
+        
+        # Mapping to rename them back to clean names after loading
+        rename_dict = {col_mapping[col]: col for col in [map_id_col] + available_clean_cols}
+
+        # 3. LAZY LOAD phase: Tell Dask to read *only* the specific columns we need
+        ddf = dd.read_parquet(file, columns=raw_cols_to_load, engine='pyarrow')
+        ddf = ddf.rename(columns=rename_dict)
+        
+        # Set the index to map_id_col to optimize Dask merges
+        ddf = ddf.set_index(map_id_col)
+        ddfs_to_merge.append(ddf)
+
+    if not ddfs_to_merge:
+        logging.warning("None of the requested attributes were found across any of the provided files.")
+        return pd.DataFrame(columns=[map_id_col] + attrs_sel)
+
+    # 4. MERGE phase: Let Dask build the graph to outer join all datasets on the index
+    logging.info("Building Dask merge graph...")
+    combined_ddf = ddfs_to_merge[0]
+    for i in range(1, len(ddfs_to_merge)):
+        # Because we set_index earlier, Dask can join these much more efficiently
+        combined_ddf = combined_ddf.join(ddfs_to_merge[i], how='outer')
+
+    # 5. COMPUTE phase: Execute the graph and bring the final, slimmed-down table into Pandas RAM
+    logging.info("Executing computations and pulling to memory...")
+    combined_df = combined_ddf.compute().reset_index()
+
+    # Check for missing columns across the entire batch
+    miss_cols = [col for col in attrs_sel if col not in found_attrs]
+    if len(miss_cols) > 0:
+        logging.warning(f"Problem with attribute selection. The following are missing across all searched files: {miss_cols}")
+        
+    return combined_df
 
 def clean_hfatlas_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Parses pint-aware string columns and renames them to standard strings.
@@ -2095,18 +2232,22 @@ def hfatl_hf_cmbo_wrap(df_hfatlas:pd.DataFrame, gdf_hf:gpd.GeoDataFrame,
     :rtype: pd.DataFrame
     """
   
-    df_hfatlas = df_hfatlas.merge(gdf_hf, how = 'outer', on = map_id_col)
+    df_hfatlas_geo = df_hfatlas.merge(gdf_hf, how = 'outer', on = map_id_col)
+    if df_hfatlas_geo.shape[0] == 0:
+        logging.error("Problem: no data generated when combining df_hfatlas with hydrofabric geodataframe")
+        sys.exit(1)
 
     if not vpu_mapped:
         logging.info("No valid VPU mapping found or specified. Defaulting to placeholder VPU ID: 'all'")
-        df_hfatlas['vpuid'] = 'all'
+        df_hfatlas_geo['vpuid'] = 'all'
+
 
     # 4. Reshape to RaFTS Long Format
     logging.info("Reshaping attributes to RaFTS standard schema...")
     # df_long = df_hfatl.melt(id_vars=[map_id_col, vpu_id_col], var_name='attribute', value_name='value')
     # df_long['value'] = pd.to_numeric(df_long['value'], errors='coerce')
     # df_long = df_long.dropna(subset=['value'])
-    df_long = hfatl_std_long(df_hfatlas, map_id_col, vpu_id_col)
+    df_long = hfatl_std_long(df_hfatlas_geo, map_id_col, vpu_id_col)
     df_long = df_long.rename(columns={map_id_col: 'featureID'})
     df_long['featureSource'] = featureSource
     df_long['data_source'] = data_source
@@ -2114,7 +2255,6 @@ def hfatl_hf_cmbo_wrap(df_hfatlas:pd.DataFrame, gdf_hf:gpd.GeoDataFrame,
     
     final_columns = ['vpuid', 'featureID', 'featureSource', 'data_source', 'dl_timestamp', 'attribute', 'value']
     df_long = df_long[final_columns]
-
 
     # 5. Distributed I/O: Write parquet files by VPU
     logging.info(f"Writing parquet files grouped by VPU to {dir_db_attrs}")
@@ -2127,7 +2267,7 @@ def hfatl_hf_cmbo_wrap(df_hfatlas:pd.DataFrame, gdf_hf:gpd.GeoDataFrame,
         save_path = generate_vpu_attr_filepath(dir_db_attrs, ds, vpuid)
         logging.info(f"Writing {save_path.name} ({i+1}/{total_vpus})...")
         df_save.to_parquet(save_path, index=False)
-    return df_save
+    return df_long
 
 def generate_vpu_attr_filepath(dir_db_attrs: Path, dataset_name: str, vpuid: str) -> Path:
     """Creates a standardized filepath grouped by dataset and VPU identifier.

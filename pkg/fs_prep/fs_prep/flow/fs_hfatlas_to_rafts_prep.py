@@ -60,7 +60,7 @@ if __name__ == "__main__":
     path_prep_config = Path(args.path_prep_config).expanduser()
     if not path_prep_config.exists():
         raise ValueError(f"Prep config file not found at {path_prep_config}")
-    logging.info(f"Running fs_hfatlas_to_rafts.py with {path_prep_config.name} config file")
+    logging.info(f"Running fs_hfatlas_to_rafts_prep.py with {path_prep_config.name} config file")
 
     # # --- Execute workflow
     # process_hfatlas_to_rafts(path_prep_config, args.validate, memory_handler, root_logger)
@@ -83,11 +83,30 @@ if __name__ == "__main__":
     attrs_sel = attr_cfig.attrs_cfg_dict.get("attrs_sel")
 
     # TODO add path_hfatl to attr_config parser
-    home_dir = Path("~/").expanduser()
-    path_hfatl = Path([x.get('paths_hfatl') for x in attr_cfig.attr_config.get('attr_select') if x.get('paths_hfatl') is not None][0][0].format(home_dir=home_dir))
-    if not path_hfatl.exists():
-        logging.error("No real path provided for hfATLAS data in the attribute config entry, paths_hfatl.")
+    home_dir = Path.home()
+    paths_raw = [
+        x.get('paths_hfatl') 
+        for x in attr_cfig.attr_config.get('attr_select', []) 
+        if x.get('paths_hfatl') is not None
+    ]
+    paths_hfatl = []
+    if paths_raw and isinstance(paths_raw[0], list):
+        for p in paths_raw[0]:
+            # Handle both {home_dir} string formatting and standard '~/' expansion
+            formatted_path = str(p).format(home_dir=home_dir)
+            resolved_path = Path(formatted_path).expanduser()
+            
+            if resolved_path.exists():
+                paths_hfatl.append(resolved_path)
+            else:
+                logging.warning(f"hfATLAS path defined in config does not exist and will be skipped: {resolved_path}")
+                
+    if not paths_hfatl:
+        logging.error("No valid paths provided or found for hfATLAS data (paths_hfatl).")
+        sys.exit(1)
 
+
+    # --- 
     # Loop over each dataset. Realistically this will only be one, but keeping the definition of ds for consistency across RaFTS workflow scripts
     for ds in datasets: 
         logging.info(f'PROCESSING {ds} dataset inside \n {dir_std_base}')
@@ -133,11 +152,6 @@ if __name__ == "__main__":
         file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
         root_logger.addHandler(file_handler)
         
-        # Stream handler for console output
-        stream_handler = logging.StreamHandler(sys.stdout)
-        stream_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-        root_logger.addHandler(stream_handler)
-        
         # Flush memory handler to the newly created file/stream handlers, then remove it
         memory_handler.setTarget(file_handler)
         memory_handler.flush()
@@ -147,10 +161,11 @@ if __name__ == "__main__":
         logging.info("Starting hfATLAS to RaFTS conversion.")
 
         # 3. Ingest Data
-        logging.info(f"Loading hfATLAS predictors from {path_hfatl}")
+        paths_str = "\n    ".join(str(p) for p in paths_hfatl)
+        logging.info(f"Loading hfATLAS predictors from \n{paths_str}")
         
         # Run attribute read & clean wrapper function
-        df_hfatlas = fsutil.read_hfatlas_wrap(path_hfatl, attrs_sel, 
+        df_hfatlas = fsutil.read_hfatlas_wrap_dask(paths_hfatl, attrs_sel, 
                               map_id_col)
 
         # Read in the hydrofabric flowpath w/ vpuid and standardize cols
