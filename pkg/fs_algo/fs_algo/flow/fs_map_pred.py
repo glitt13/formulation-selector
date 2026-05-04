@@ -108,6 +108,8 @@ if __name__ == "__main__":
                                                     ds=ds,ds_type=ds_type, write_type=write_type)
         comids_pred = fsutil._read_pred_comid(path_pred_locs, comid_pred_col )
        
+        vals = {'dir_std_base':dir_std_base,'ds':ds}
+        dir_db_attrs = Path(str(dir_db_attrs).format(**vals))
 
         path_fs_dat_resp =  fsutil._std_fs_prep_ds_paths(dir_std_base=dir_std_base,ds=ds,mtch_str='*.nc')
         path_gpkg_fs_prep = fsutil._std_fs_prep_ds_companion_gpkg_path(path_fs_dat_resp[0])
