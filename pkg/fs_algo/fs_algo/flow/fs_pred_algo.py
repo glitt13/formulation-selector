@@ -167,19 +167,17 @@ if __name__ == "__main__":
                 dir_db_attrs, comids_pred, attrs_sel=attrs_sel,
                 read_type='filename', _s3=None, storage_options=None
             )
+            
+            fsutil.validate_input_attributes(df_attr,arg_val=arg_val)
+
             df_attr = df_attr.drop(columns='dl_timestamp')
 
-            fsutil.validate_input_attributes(df_attr,arg_val=arg_val)
-        
             # Constrain the values in the value column to two digits after the decimal point (to help ID duplicates)
             is_duplicate = df_attr.assign(value=df_attr['value'].round(2)).duplicated()
             df_attr = df_attr[~is_duplicate].copy()
             df_attr.reset_index(inplace=True)
-        
-            # Remove the old index column
-            df_attr.drop(columns=['index'], inplace=True)
 
-            new_df_attr = df_attr[['featureID', 'attribute', 'value']]
+            new_df_attr = df_attr[['featureID', 'featureSource', 'attribute', 'value']]
             # Convert into wide format for model training
             #df_attr_wide = new_df_attr.pivot(index='featureID', columns = 'attribute', values = 'value')
         else: # Grab from hydrofabric/hydroATLAS sources
@@ -214,9 +212,6 @@ if __name__ == "__main__":
 
             for algo in algos:
                 path_algo = fsutil.std_algo_path(dir_out_alg_ds, algo=algo, metric=resp_var, dataset_id=ds)
-                
-                # --- Pipeline loading and validation ---
-                pipeline_data = fsutil.load_validated_pipeline(path_algo, arg_val=arg_val)
                 
                 # --- Pipeline loading and validation ---
                 pipeline_data = fsutil.load_validated_pipeline(path_algo, arg_val=arg_val)

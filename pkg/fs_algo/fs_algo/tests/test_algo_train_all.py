@@ -45,6 +45,14 @@ import logging
 import io
 import sys
 from contextlib import redirect_stdout
+# Ignore some warnings that arise during testing:
+import pytest
+
+# Tell pytest natively to ignore these specific warnings for this entire file
+pytestmark = pytest.mark.filterwarnings(
+    "ignore:.*disp.*iprint.*:DeprecationWarning",
+    "ignore:.*lbfgs failed to converge.*:sklearn.exceptions.ConvergenceWarning"
+)
 
 # %% UNIT TESTING FOR AttrConfigAndVars
 parent_dir_test = Path(__file__).parent

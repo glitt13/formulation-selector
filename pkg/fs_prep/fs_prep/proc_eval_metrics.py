@@ -28,7 +28,8 @@ from itertools import compress
 import pynhd as nhd
 import logging
 import __future__
-pd.set_option('future.no_silent_downcasting', True)
+import sys
+#pd.set_option('future.no_silent_downcasting', True)
 
 def std_dir_logs(dir_input:str | os.PathLike) -> Path:
     """The standard RaFTS directory for logs
@@ -447,9 +448,11 @@ def _proc_check_input_df(df: pd.DataFrame,
         # Change the name to gage_id   
         df.rename(columns = {gage_id : 'gage_id'},inplace=True)
         if not any(df.columns.str.contains('gage_id')):
-            logging.warning(f'Expecting one df column to be named: {gage_id}'
-                          ' - per the config file. Inspect config file'
-                          ' and/or dataframe col names')
+            msg_err_colname = f'Expecting one df column to be named: {gage_id}' \
+                                ' - per the config file. Inspect config file' \
+                                ' and/or dataframe col names'
+            logging.error(msg_err_colname)
+            raise ValueError(msg_err_colname)
         # Set gage_id as the index
         if any(df['gage_id'].duplicated()):
             logging.warning('Expect only one gage_id for each row in the data.'

@@ -118,15 +118,16 @@ If the software is configurable, describe it in detail, either here or in other 
 
 ## How to test the software
 
-You may also run unit tests on `fs_prep`:
+To run unit tests and assess code coverage:
+```zsh
+cd path/to/git/formulation-selector/pkg
+uv run pytest --cov=fs_algo --cov=fs_prep
 ```
-> cd /path/to/formulation-selection/pkg/fs_prep/fs_prep/tests
-> python -m unittest test_proc_eval_metrics.py
-```
-To assess code coverage:
-```
-python -m coverage run -m unittest
-python -m coverage report
+
+To run integration tests:
+```zsh
+cd path/to/git/formulation-selector/tests/
+uv run python -m unittest test_rafts_prep_to_pred.py
 ```
 
 ## Known issues

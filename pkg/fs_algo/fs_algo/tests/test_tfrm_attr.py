@@ -240,7 +240,7 @@ def test_read_tfrm_config_parses_yaml_correctly():
     assert parser.fio['overwrite_tfrm'] is False
     assert parser.fio['name_attr_config'] == 'xssatf_attr_config.yaml'
     assert len(parser.tfrm_cfg) == 2
-    assert parser.overwrite_tfrm is True, "overwrite_tfrm attribute should be set correctly"
+    assert parser.overwrite_tfrm is False, "overwrite_tfrm attribute should be set correctly"
 
 def test_read_tfrm_bad():
     path_tfrm_test = Path(__file__).parent / "test_data" / "test_xssatf_attrs_tform_bad.yaml"

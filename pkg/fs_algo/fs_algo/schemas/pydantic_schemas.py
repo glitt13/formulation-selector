@@ -38,7 +38,7 @@ class ModelMetadata(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def validate_uncertainty(cls, values):
+    def validate_uncertainty(self, values):
         """
         Deep validation of the Uncertainty dictionary if it exists.
         """
