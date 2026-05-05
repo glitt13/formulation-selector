@@ -298,11 +298,20 @@ class AttrConfigAndVars:
         home_dir = _define_home_dir(self.attr_config)
 
         dir_base = Path(list([x for x in self.attr_config['file_io'] if 'dir_base' in x][0].values())[0].format(home_dir=home_dir))
+    
         # Location of attributes (predictor data):
         try:
-            dir_db_attrs = Path(list([x for x in self.attr_config['file_io'] if 'dir_db_attrs' in x][0].values())[0].format(dir_base=dir_base, home_dir=home_dir))
-        except:
-            dir_db_attrs = Path(list([x for x in self.attr_config['file_io']][0].values())[0].format(dir_base=dir_base, home_dir=home_dir))
+            raw_path = list([x for x in self.attr_config['file_io'] if 'dir_db_attrs' in x][0].values())[0]
+            # 1. Escape {ds} by turning it into {{ds}}
+            # 2. Format dir_base and home_dir
+            # 3. Python automatically turns {{ds}} back into {ds}
+            formatted_path = raw_path.replace('{ds}', '{{ds}}').format(dir_base=dir_base, home_dir=home_dir)
+            dir_db_attrs = Path(formatted_path)
+            
+        except Exception as e:
+            # Catch specific exceptions so we don't fail silently anymore!
+            logging.error(f"Failed to parse 'dir_db_attrs'. Error: {e}")
+            raise ValueError(f"Could not parse 'dir_db_attrs' from config: {e}")
         # parent location of response variable data:
         dir_std_base = Path(list([x for x in self.attr_config['file_io'] if 'dir_std_base' in x][0].values())[0].format(dir_base=dir_base, home_dir=home_dir))
 
@@ -2190,7 +2199,6 @@ def hfatl_hf_cmbo_wrap(df_hfatlas:pd.DataFrame, gdf_hf:gpd.GeoDataFrame,
     df_long = df_long[final_columns]
 
     # 5. Distributed I/O: Write parquet files by VPU
-    logging.info(f"Writing parquet files grouped by VPU to {dir_db_attrs}")
     grouped_vpus = df_long.groupby('vpuid')
     total_vpus = len(grouped_vpus)
     
@@ -2200,6 +2208,8 @@ def hfatl_hf_cmbo_wrap(df_hfatlas:pd.DataFrame, gdf_hf:gpd.GeoDataFrame,
         save_path = generate_vpu_attr_filepath(dir_db_attrs, ds, vpuid)
         logging.info(f"Writing {save_path.name} ({i+1}/{total_vpus})...")
         df_save.to_parquet(save_path, index=False)
+    
+    logging.info(f"Wrote parquet files grouped by VPU to {save_path.parent.parent}")
     return df_long
 
 def generate_vpu_attr_filepath(dir_db_attrs: Path, dataset_name: str, vpuid: str) -> Path:
@@ -2214,8 +2224,12 @@ def generate_vpu_attr_filepath(dir_db_attrs: Path, dataset_name: str, vpuid: str
     :return: The fully resolved Path object for saving the attribute parquet file.
     :rtype: Path
     """
-    # TODO ensure that dir_db_attrs is ALWAYS used here for consistency across codebase attribute storage
-    save_dir = dir_db_attrs / dataset_name / str(vpuid)
+    dir_db_attrs = Path(str(dir_db_attrs).format(ds = dataset_name)) 
+    if dataset_name in str(dir_db_attrs):
+        # TODO ensure that dir_db_attrs is ALWAYS used here for consistency across codebase attribute storage
+        save_dir = dir_db_attrs / str(vpuid)
+    else:
+        save_dir = dir_db_attrs / dataset_name / str(vpuid)
     save_dir.mkdir(parents=True, exist_ok=True)
     return save_dir / f"attr_{vpuid}.parquet"
 
