@@ -38,13 +38,13 @@ class ModelMetadata(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def validate_uncertainty(self, values):
+    def validate_uncertainty(self) -> "ModelMetadata":
         """
         Deep validation of the Uncertainty dictionary if it exists.
         """
-        unc = values.Uncertainty
+        unc = self.Uncertainty 
         if unc is None:
-            return values
+            return self
 
         # forestci block
         if "forestci" in unc:
@@ -79,4 +79,4 @@ class ModelMetadata(BaseModel):
                     if not (isinstance(arr, np.ndarray) and np.issubdtype(arr.dtype, np.floating)):
                         raise ValueError(f"bagging_confidence_intervals -> {k} -> {bound} must be a NumPy array of floats")
 
-        return values
+        return self
