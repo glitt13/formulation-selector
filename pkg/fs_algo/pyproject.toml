@@ -60,3 +60,8 @@ path = "fs_algo/__version__.py"
 # Translates package_data={'fs_algo': ['data/*']}
 #[tool.hatch.build.targets.wheel.force-include]
 "fs_algo/data" = "fs_algo/data"
+
+[dependency-groups]
+dev = [
+    "coverage==7.13.5",
+]

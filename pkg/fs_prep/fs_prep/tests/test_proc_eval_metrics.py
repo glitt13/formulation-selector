@@ -15,6 +15,7 @@ Changelog/contributions
     2024-07-11 Originally created, GL
     2024-10-14 Add nwissite testing, GL
     2025-08-19 adapted for logging, GL
+    2026-05-05 update logging for pytest compatibility, Gemini3Pro
 '''
 
 import unittest
@@ -57,21 +58,6 @@ test_df = pd.read_csv(Path(parent_dir_test,"user_metric_data.csv"))
 raw_test_df = test_df.rename(columns = dict(zip(exp_config_df['metric_mappings'].str.split('|')[0],
     exp_config_df['metric_cols'].str.split('|')[0])))
 
-# Set up a logger for the module being tested to capture its output
-logger_dir = Path(dir_save) / Path("logs")
-logger_dir.mkdir(parents=True, exist_ok=True)
-log_path = logger_dir / "fs_prep.proc_eval_metrics.log"
-logging.basicConfig(filename=log_path, level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', filemode='w')
-logging.info(f"Beginning unit tests from {parent_dir_test}")
-
-def read_log_file():
-    global log_path
-    if Path(log_path).exists():
-        with open(log_path, 'r') as f:
-            return f.read()
-    else:
-        print("LOG FILE NOT FOUND")
-    return ""
 
 class TestStdConfigFunctions(unittest.TestCase):
     @patch('fs_prep.proc_eval_metrics._read_std_config')
@@ -100,7 +86,7 @@ class TestReadSchmLsOfDict(unittest.TestCase):
         global parent_dir_test
         global schema_dir_test
         global exp_config_df
-        gen_config_df = read_schm_ls_of_dict(schema_dir_test).fillna(np.nan).infer_objects(copy=False)
+        gen_config_df = read_schm_ls_of_dict(schema_dir_test).fillna(np.nan).infer_objects()
         pd.testing.assert_frame_equal(exp_config_df, gen_config_df, check_dtype = False)
 
 
@@ -154,27 +140,40 @@ class TestProcCheckInputDf(unittest.TestCase):
         self.exp_config_df = exp_config_df.copy()
 
     def test_expect_warn_missing_gage_id(self):
-        df_no_gage_id = self.raw_test_df.rename(columns={'gage_id': 'wrong_name'})
-        try:
-            rslt = _proc_check_input_df(df_no_gage_id, self.exp_config_df)
-        except:
-            rslt = None
-        log_content = read_log_file()
-        self.assertIn("Expecting one df column to be named", log_content)
+        df_reset = self.raw_test_df.reset_index()
+        df_reset.index.name = None
+        
+        # 2. Force drop both the literal 'gage_id' AND whatever the config expects
+        cfg_gage_id = self.exp_config_df.loc[0, 'gage_id']
+        df_no_gage_id = df_reset.drop(columns=['gage_id', cfg_gage_id], errors='ignore')
+        
+        with self.assertLogs(level='ERROR') as cm:
+            try:
+                # This will now hit your new ValueError and ERROR log
+                rslt = _proc_check_input_df(df_no_gage_id, self.exp_config_df)
+            except ValueError:
+                # Catch your newly implemented exception!
+                rslt = None
+                
+        self.assertTrue(any("Expecting one df column to be named" in log for log in cm.output))
 
     def test_expect_warn_two_gage_ids(self):
         proc_df = _proc_check_input_df(self.raw_test_df, self.exp_config_df)
         proc_df_duplicated = proc_df.reset_index()
         proc_df_duplicated['gage_id'] = 'aaa'
-        _proc_check_input_df(proc_df_duplicated, self.exp_config_df)
-        log_content = read_log_file()
-        self.assertIn("Expect only one gage_id for each row", log_content)
+        
+        with self.assertLogs(level='WARNING') as cm:
+            _proc_check_input_df(proc_df_duplicated, self.exp_config_df)
+            
+        self.assertTrue(any("Expect only one gage_id for each row" in log for log in cm.output))
 
     def test_expect_warn_missing_col(self):
         bad_test_df = self.raw_test_df.drop('nse', axis=1)
-        _proc_check_input_df(bad_test_df, self.exp_config_df)
-        log_content = read_log_file()
-        self.assertIn("The following metric columns are not in your input dataframe", log_content)
+        
+        with self.assertLogs(level='WARNING') as cm:
+            _proc_check_input_df(bad_test_df, self.exp_config_df)
+            
+        self.assertTrue(any("The following metric columns are not in your input dataframe" in log for log in cm.output))
 
 class TestProcCheckStdFsIds(unittest.TestCase):
     def setUp(self):
@@ -185,9 +184,10 @@ class TestProcCheckStdFsIds(unittest.TestCase):
             _proc_check_std_fs_ids(vars_map=['notavar'], category='metric')
     
     def test_atomic_var(self):
-        _proc_check_std_fs_ids(vars_map='NSE', category='metric')
-        log_content = read_log_file()
-        self.assertIn('The metric mappings from the dataset schema match expected format.', log_content)
+        with self.assertLogs(level='INFO') as cm:
+            _proc_check_std_fs_ids(vars_map='NSE', category='metric')
+            
+        self.assertTrue(any('The metric mappings from the dataset schema match expected format.' in log for log in cm.output))
     
 class TestProcCheckInputConfig(unittest.TestCase):
     def setUp(self):
@@ -226,7 +226,6 @@ class TestProcColSchemaNwisCheck(unittest.TestCase):
         logging.info("----- Setting up TestProcColSchemaNwisCheck")
         global exp_config_df
         global raw_test_df
-        global log_path
         self.df = raw_test_df.copy().iloc[0:1]
         self.col_schema_df = exp_config_df.copy()
         # Force the column to be an object/string type before inserting strings
@@ -235,9 +234,7 @@ class TestProcColSchemaNwisCheck(unittest.TestCase):
         
         self.col_schema_df['featureSource'] = self.col_schema_df['featureSource'].astype(object)
         self.col_schema_df.loc[0,'featureSource'] = 'nwissite'
-        # self.col_schema_df = exp_config_df.copy()
-        # self.col_schema_df.loc[0,'featureSource'] = 'nwissite'
-        # self.col_schema_df.loc[0,'featureID'] = 'USGS-{gage_id}'
+
         self.temp_dir = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp_dir.cleanup)
 
@@ -247,21 +244,22 @@ class TestProcColSchemaNwisCheck(unittest.TestCase):
         mock_fixed_df['gage_id'] = '1013500'
         mock_check_fix_nwissite_gageids.return_value = mock_fixed_df
 
-        proc_col_schema(df=self.df,
-                        col_schema_df=self.col_schema_df,
-                        dir_save=self.temp_dir.name,
-                        check_nwis=True)
-        
-        log_content = read_log_file()
-        self.assertIn("Auto-corrected gage ids may not have caught all issues", log_content)
+        with self.assertLogs(level='WARNING') as cm:
+            proc_col_schema(df=self.df,
+                            col_schema_df=self.col_schema_df,
+                            dir_save=self.temp_dir.name,
+                            check_nwis=True)
+            
+        self.assertTrue(any("Auto-corrected gage ids may not have caught all issues" in log for log in cm.output))
         
     def test_check_warn_nwissite(self):
-        rslt =proc_col_schema(df=self.df,
-                        col_schema_df=self.col_schema_df,
-                        dir_save=self.temp_dir.name,
-                        check_nwis=False)
-        log_content = read_log_file()
-        self.assertIn("check_nwis=True to run a check on whether", log_content)
+        with self.assertLogs(level='INFO') as cm:
+            rslt = proc_col_schema(df=self.df,
+                            col_schema_df=self.col_schema_df,
+                            dir_save=self.temp_dir.name,
+                            check_nwis=False)
+            
+        self.assertTrue(any("check_nwis=True to run a check on whether" in log for log in cm.output))
 
 class TestCheckFixNwissiteGageIds(unittest.TestCase):
     def setUp(self):
@@ -289,14 +287,12 @@ class TestCheckFixNwissiteGageIds(unittest.TestCase):
         mock_navigate_byid.side_effect = [Exception("Not Found"), Exception("Still Not Found")]
         df = pd.DataFrame({'basin_id': ['12345678901']})
         
-        result_df = check_fix_nwissite_gageids(df, gage_id_col='basin_id', replace_orig_gage_id_col=False)
-        log_content = read_log_file()
-        print("!!!!!!!!!!!!!!!!!!!!!!!")
-        print(result_df)
-        self.assertIn("Some gage_id values still not recognized", log_content)
+        with self.assertLogs(level='WARNING') as cm:
+            result_df = check_fix_nwissite_gageids(df, gage_id_col='basin_id', replace_orig_gage_id_col=False)
+            
+        self.assertTrue(any("Some gage_id values still not recognized" in log for log in cm.output))
         self.assertEqual(result_df.shape[0], 1)
         self.assertIn('fix', result_df.columns)
-        # self.assertTrue(pd.isna(result_df['fix'].iloc[0])) # TODO consider if this should be addressed in the elif ls_still_bad > 0
 
     @patch('pynhd.NLDI.navigate_byid')
     def test_empty_dataframe(self, mock_navigate_byid):
