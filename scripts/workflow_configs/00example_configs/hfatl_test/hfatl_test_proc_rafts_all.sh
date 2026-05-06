@@ -64,12 +64,12 @@ uv run python "${DIR_PY}/fs_pred_algo.py" "${DIR_CONFIG}/hfatl_pred_config_uncn.
 echo "Process predictions completed successfully!"
 
 # 5. Map the predictions
-# echo "--> Plotting the process predictions on static map..."
-# uv run python "${DIR_CONFIG}/fs_proc_viz_xssaus.py" "${DIR_CONFIG}/hfatl_pred_config.yaml" || {
-#     echo "ERROR: Prediction mapping failed. Exiting."
-#     exit 1
-# }
-# echo "Completed prediction mapping!"
+echo "--> Plotting the process predictions on static map..."
+uv run python "${DIR_PY}/fs_map_pred_hfatl.py.py" "" || {
+    echo "ERROR: Prediction mapping failed. Exiting."
+    exit 1
+}
+echo "Completed prediction mapping!"
 
 echo "========================================================================"
 echo "SUCCESS: Finished the hfATLAS regionalization predictions!"
