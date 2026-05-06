@@ -672,7 +672,8 @@ def gen_conus_basemap(dir_out_basemap:str | Path, # This should be the data_visu
     return states
     
 def plot_map_pred(geo_df:gpd.GeoDataFrame, states:gpd.GeoDataFrame,
-                  title:str,metr:str,colname_data:str='prediction'
+                  title:str,metr:str,colname_data:str='prediction',
+                  plot_style:str='auto'
                   ):
     """Genereate a map of predicted response variables
 
@@ -686,6 +687,8 @@ def plot_map_pred(geo_df:gpd.GeoDataFrame, states:gpd.GeoDataFrame,
     :type metr: str
     :param colname_data: The geo_df column name representing data of interest, defaults to 'prediction'
     :type colname_data: str, optional
+    :param plot_style: 'auto', 'points', or 'hexbin'. Defaults to 'auto'
+    :type plot_style: str, optional
     :return: Map of predicted response variables
     :rtype: Figure
     """
@@ -699,21 +702,45 @@ def plot_map_pred(geo_df:gpd.GeoDataFrame, states:gpd.GeoDataFrame,
     # Points
     geo_df.plot(column=colname_data, ax=ax, markersize=150, cmap='viridis', legend=False, zorder=2) # delete zorder to plot points behind states boundaries
     # States
-    states.boundary.plot(ax=ax, color="#555555", linewidth=1, zorder=1)  # Plot states boundary again with lower zorder
+    states.boundary.plot(ax=ax, color="#555555", linewidth=1, zorder=1, alpha=0.5)  # Plot states boundary again with lower zorder
     
-    cbar = plt.cm.ScalarMappable(cmap='viridis')
-    cbar = plt.cm.ScalarMappable(norm=matplotlib.colors.Normalize(vmin=vmin, vmax=vmax), cmap='viridis')
+    if plot_style == 'auto':
+        plot_style = 'hexbin' if geo_df.shape[0] > 20000 else 'points'
+
+
+    if plot_style == 'hexbin':
+        logging.info(f"Using hexbin mapping for large dataset ({len(geo_df)} points).")
+        # hexbin aggregates spatial data into geographic bins and takes the mean of the values
+        hb = ax.hexbin(
+            x=geo_df.geometry.x, 
+            y=geo_df.geometry.y, 
+            C=geo_df[colname_data], 
+            reduce_C_function=np.mean, 
+            gridsize=150, # Controls resolution/number of hexagons (higher = smaller hexes)
+            cmap='viridis', 
+            vmin=vmin, vmax=vmax, 
+            zorder=2, alpha=0.9, edgecolors='none'
+        )
+        cbar_mappable = hb # Map the colorbar to the hexbin object
+    else: 
+        ms = 150 if len(geo_df) < 10000 else max(0.5, 500000 / len(geo_df))
+        geo_df.plot(column=colname_data, ax=ax, markersize=ms, cmap='viridis', legend=False, zorder=2)
+        cbar_mappable = plt.cm.ScalarMappable(norm=matplotlib.colors.Normalize(vmin=vmin, vmax=vmax), cmap='viridis')
+
     ax.tick_params(axis='x', labelsize= 24)
     ax.tick_params(axis='y', labelsize= 24)
-    plt.xlabel('Latitude',fontsize = 26)
-    plt.ylabel('Longitude',fontsize = 26)
-    cbar_ax = plt.colorbar(cbar, ax=ax,fraction=0.02, pad=0.04)
+    plt.xlabel('Longitude',fontsize = 26) # Fixed: X is Longitude
+    plt.ylabel('Latitude',fontsize = 26)  # Fixed: Y is Latitude
+    
+    cbar_ax = plt.colorbar(cbar_mappable, ax=ax,fraction=0.02, pad=0.04)
     cbar_ax.set_label(label=metr,size=24)
-    cbar_ax.ax.tick_params(labelsize=24)  # Set colorbar tick labels size
+    cbar_ax.ax.tick_params(labelsize=24) 
+    
     plt.title(title, fontsize = 28)
     ax.set_xlim(-126, -66)
     ax.set_ylim(24, 50)
     fig = plt.gcf()
+
     return fig
 
 def plot_map_pred_wrap(test_gdf,dir_out_viz_base, ds,
