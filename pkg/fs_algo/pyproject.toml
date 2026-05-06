@@ -7,7 +7,10 @@ name = "fs_algo"
 dynamic = ["version"] 
 description = "Formulation Selector Algorithm"
 authors = [
-    { name = "Guy Litt", email = "guy.litt@noaa.gov" }
+    { name = "Guy Litt", email = "guy.litt@noaa.gov" },
+    { name = "Soroush Sorourian", email = "soroush.sorourian@noaa.gov"},
+    { name = "Lauren Bolotin", email = "lauren.bolotin@noaa.gov"},
+    { name = "Ben Choat", email = "benjamin.choat@noaa.gov"}
 ]
 license = { text = "MIT License" }
 keywords = ["formulation", "algorithm", "evaluation"]
