@@ -175,3 +175,79 @@ class TestHfAtlasToRaftsPrep(unittest.TestCase):
         # Validate grouped saving to disk
         self.assertTrue((self.test_path / "test_ds" / "01" / "attr_01.parquet").exists())
         self.assertTrue((self.test_path / "test_ds" / "02" / "attr_02.parquet").exists())
+
+    def test_read_hfatlas_wrap_dask_edge_cases(self):
+        # 1. Hit the .is_dir() branch by passing the parent temp directory
+        # 2. Hit the missing columns warning by asking for 'FAKE_ATTR'
+        result_df = fsutil.read_hfatlas_wrap_dask([self.test_path], ["TOT_AET", "FAKE_ATTR"], "divide_id")
+        self.assertNotIn("FAKE_ATTR", result_df.columns)
+        
+        # 3. Hit the corrupt file exception branch by making a fake text file with a .parquet extension
+        bad_parquet = self.test_path / "corrupt.parquet"
+        bad_parquet.write_text("This is not a real parquet file")
+        
+        # This will safely catch the error in the try/except block, log a warning, and return empty
+        with self.assertLogs(level='WARNING') as cm:
+            fsutil.read_hfatlas_wrap_dask([bad_parquet], ["TOT_AET"], "divide_id")
+        self.assertTrue(any("Could not read schema" in log for log in cm.output))
+    
+    def test_generate_algo_points_gpkg_wrap_edge_cases(self):
+        # Create a GPKG with POINTS instead of LineStrings to hit the `try` block (geometry.x)
+        # Also omit the 'vpuid' column to trigger the missing VPU warning
+        gdf_pts = gpd.GeoDataFrame({
+            "divide_id": ["div1"]
+        }, geometry=[Point(5, 5)], crs="EPSG:4326")
+        
+        path_pts_gpkg = self.test_path / "pts.gpkg"
+        gdf_pts.to_file(path_pts_gpkg, driver="GPKG", layer="flowpaths")
+
+        with self.assertLogs(level='WARNING') as cm:
+            result_gdf = fsutil.generate_algo_points_gpkg_wrap(
+                div_ids=pd.Series(["div1"]),
+                path_hf_gpkg=path_pts_gpkg,
+                dir_db_gpkg=self.test_path,
+                path_gpkg_fs_prep=None, # Hit the branch that skips saving the output file
+                hf_layer="flowpaths",
+                map_id_col="divide_id"
+            )
+            
+        self.assertTrue(any("Expecting vpuid vpu col" in log for log in cm.output))
+        self.assertEqual(result_gdf.iloc[0]["X"], 5.0) # Confirms it hit the try block!
+
+    def test_hfatl_hf_cmbo_wrap_edge_cases(self):
+        df_hfatlas = pd.DataFrame({"divide_id": ["div1"], "TOT_AET": [10.5]})
+        gdf_hf = gpd.GeoDataFrame({"divide_id": ["div1"], "vpuid": ["01"]}, geometry=[Point(0,0)])
+        
+        # 1. Hit the vpu_mapped=False branch
+        result_long = fsutil.hfatl_hf_cmbo_wrap(
+            df_hfatlas=df_hfatlas, gdf_hf=gdf_hf, ds="test_ds",
+            dir_db_attrs=self.test_path, featureSource="hf_test",
+            vpu_mapped=False # <-- Triggers the 'all' vpuid override
+        )
+        self.assertEqual(result_long.iloc[0]["vpuid"], "all")
+        
+        # 2. Hit the sys.exit(1) branch by passing completely EMPTY dataframes
+        df_empty = pd.DataFrame(columns=["divide_id", "TOT_AET"])
+        gdf_empty = gpd.GeoDataFrame(columns=["divide_id", "vpuid", "geometry"], crs="EPSG:4326")
+        
+        # Catch the SystemExit so it doesn't crash the test runner!
+        with self.assertRaises(SystemExit):
+            fsutil.hfatl_hf_cmbo_wrap(
+                df_hfatlas=df_empty, gdf_hf=gdf_empty, ds="test_ds",
+                dir_db_attrs=self.test_path, featureSource="hf_test"
+            )
+
+    def test_generate_vpu_attr_filepath_redundant_name(self):
+        # Pass a dir_db_attrs that ALREADY contains the dataset name ('my_dataset')
+        path_with_ds = self.test_path / "my_dataset"
+        
+        path = fsutil.generate_vpu_attr_filepath(path_with_ds, "my_dataset", "18")
+        
+        # It should NOT duplicate 'my_dataset/my_dataset' in the final path
+        expected = self.test_path / "my_dataset" / "18" / "attr_18.parquet"
+        self.assertEqual(path, expected)
+
+    def test_get_middle_vertex_empty(self):
+        # Hit the fallback conditions at the top of the function
+        self.assertIsNone(fsutil.get_middle_vertex(None))
+        self.assertIsNone(fsutil.get_middle_vertex(LineString()))
