@@ -47,7 +47,9 @@ import sys
 from contextlib import redirect_stdout
 # Ignore some warnings that arise during testing:
 import pytest
-
+import geopandas as gpd
+from shapely import Point
+import joblib 
 # Tell pytest natively to ignore these specific warnings for this entire file
 pytestmark = pytest.mark.filterwarnings(
     "ignore:.*disp.*iprint.*:DeprecationWarning",
@@ -166,6 +168,20 @@ class TestFsReadAttrComid(unittest.TestCase):
         self.assertTrue(any("Missing attributes include:" in m for m in cm.output))
         self.assertTrue(any("nonexistent" in m for m in cm.output))
         print("✅ fs_read_attr_comid single-row test passed.")
+
+class TestHomeDirUtilities(unittest.TestCase):
+    def test_make_home_dir(self):
+        # 1. Test None/Empty triggers Path.home()
+        self.assertEqual(fsutil._make_home_dir([]), Path.home())
+        self.assertEqual(fsutil._make_home_dir([None]), Path.home())
+
+        # 2. Test tilde expansion
+        self.assertEqual(fsutil._make_home_dir(["~/some/path"]), Path.home() / "some/path")
+
+        # 3. Test explicit path that doesn't exist (logs warning, uses default system home)
+        with self.assertLogs(level='WARNING'):
+            res = fsutil._make_home_dir(["/fake/path/that/does/not/exist/12345"])
+            self.assertEqual(res, Path.home())
 
 # %% UNIT TESTING FOR AlgoConfigParser
 class TestAlgoConfigParser(unittest.TestCase):
@@ -289,6 +305,25 @@ class TestFsRetrNhdpComids(unittest.TestCase):
         self.assertListEqual(result['comid'].tolist(), ['1722317', '1520007'])
         self.assertEqual(result.columns.tolist(), ['comid','gage_id', 'geometry'])
         print("✅ test_fs_retr_nhdp_comids test passed.")
+
+    def test_fs_retr_nhdp_comids_geom_wrap_cached(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            gpkg_path = Path(tmpdir) / "cache.gpkg"
+            
+            # Create a dummy cached file with our target gage_id
+            gdf = gpd.GeoDataFrame({
+                'gage_id': ['gage1'],
+                'comid': ['111']
+            }, geometry=[Point(0,0)], crs="EPSG:4326")
+            gdf.to_file(gpkg_path, driver="GPKG", layer="outlet")
+            
+            # Request the exact same gage_id to hit the fully cached branch
+            result = fsutil.fs_retr_nhdp_comids_geom_wrap(
+                path_save_gpkg=gpkg_path,
+                gage_ids=['gage1']
+            )
+            self.assertEqual(result['comid'].iloc[0], '111')
+
 class TestFindFeatSrceId(unittest.TestCase):
 
     def test_find_feat_srce_id(self):
@@ -1249,6 +1284,259 @@ class TestWarningAndClippingFunctions(unittest.TestCase):
         result = fsutil.clip_pis(self.y_pis, 0.0, None)
         np.testing.assert_array_equal(result, expected)
         print("✅ test_clip_pis_min_only passed.")
+
+class TestValidationUtilities(unittest.TestCase):
+    def setUp(self):
+        # Reuse existing dummy data strategy
+        self.good_df = pd.DataFrame({
+            'comid': ['123', '456'],
+            'attr1': [1.0, 2.0]
+        })
+        self.bad_df = pd.DataFrame({
+            'comid': [123, 456], # Int instead of string!
+            'attr1': ['bad', 'data']
+        })
+
+    def test_validate_input_attributes_exit(self):
+        # 1. Test happy path (no exit)
+        fsutil.validate_input_attributes(self.good_df, arg_val=False) 
+        
+        # 2. Test fatal exit using your existing bad dataframe
+        with self.assertRaises(SystemExit):
+            fsutil.validate_input_attributes(self.bad_df, arg_val=True)
+
+    def test_validate_dat_resp_schema_exit(self):
+        # Create an xarray dataset missing the required 'gage_id' coordinate
+        bad_xr = xr.Dataset(
+            {"NSE": (("wrong_id",), [0.8])},
+            coords={"wrong_id": ["G1"]}
+        )
+        bad_xr.attrs['metric_mappings'] = 'NSE'
+        
+        # Trigger the fatal Pandera validation failure
+        with self.assertRaises(SystemExit):
+            fsutil.validate_dat_resp_schema(
+                dat_resp=bad_xr, 
+                valid_metrics=["NSE"], 
+                col_locid="featureID", 
+                arg_val=True
+            )
+
+class TestCombineRespGdfComidWrap(unittest.TestCase):
+    def test_combine_resp_gdf_comid_wrap(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            ds_dir = base_dir / "test_ds"
+            ds_dir.mkdir()
+            
+            # 1. Create a real temporary NetCDF file
+            ds = xr.Dataset(
+                {"metric1": (("gage_id",), [10.0, 20.0])},
+                coords={"gage_id": ["gage1", "gage2"]}
+            )
+            ds.to_netcdf(ds_dir / "test_dataset.nc")
+            
+            # 2. Create a real temporary GPKG file
+            gdf = gpd.GeoDataFrame({
+                "gage_id": ["gage1", "gage2"],
+                "comid": ["111", "222"]
+            }, geometry=[Point(0,0), Point(1,1)], crs="EPSG:4326")
+            gdf.to_file(ds_dir / "test_dataset_loc.gpkg", driver="GPKG", layer="outlet")
+            
+            # 3. Use an existing config file path for the test
+            path_attr_config = dir_test_data / "attr_config.yaml"
+            
+            # 4. Run the wrapper
+            result = fsutil.combine_resp_gdf_comid_wrap(
+                dir_std_base=base_dir,
+                ds="test_ds",
+                path_attr_config=path_attr_config
+            )
+            
+            self.assertIn('dat_resp', result)
+            self.assertIn('gdf_comid', result)
+            self.assertEqual(result['gdf_comid'].shape[0], 2)
+
+class TestSimpleUtilities(unittest.TestCase):
+    
+    def test_check_attr_rm_dupes(self):
+        # Create a dataframe with a duplicate attribute entry
+        df = pd.DataFrame({
+            'featureID': ['1', '1', '2'],
+            'featureSource': ['src', 'src', 'src'],
+            'data_source': ['ds', 'ds', 'ds'],
+            'attribute': ['A', 'A', 'B'],
+            'value': [10, 10, 20],
+            'dl_timestamp': ['2023-01-01', '2023-01-02', '2023-01-01']
+        })
+        
+        # Test that it drops the older duplicate (keeps 2023-01-02 by default ascending=True)
+        # Note: ascending=True actually keeps the 'first' row after sorting.
+        cleaned_df = fsutil._check_attr_rm_dupes(df, sort_col='dl_timestamp', ascending=False)
+        self.assertEqual(len(cleaned_df), 2)
+        
+    def test_find_common_comid(self):
+        # Pass a dictionary of multiple DataFrames to find intersecting IDs
+        df1 = gpd.GeoDataFrame({'featureID': ['A', 'B', 'C']})
+        df2 = gpd.GeoDataFrame({'featureID': ['B', 'C', 'D']})
+        
+        common = fsutil.find_common_comid({'ds1': df1, 'ds2': df2}, column='featureID')
+        self.assertCountEqual(common, ['B', 'C'])
+
+    def test_standard_path_generators(self):
+        # Quickly hit all the basic Path generation functions
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir) / "fake_dir"
+            
+            p1 = fsutil._std_fs_prep_ds_companion_gpkg_path(base / "data.nc")
+            self.assertEqual(p1.name, "data_loc.gpkg")
+            
+            p2 = fsutil.std_eval_metrs_path(base, "my_ds", "NSE")
+            self.assertEqual(p2.name, "algo_eval_my_ds_NSE.csv")
+            
+            p3 = fsutil.std_test_pred_obs_path(base, "my_ds", "NSE")
+            self.assertEqual(p3.name, "pred_obs_my_ds_NSE.csv")
+
+    def test_other_validation_wrappers(self):
+        # 1. validate_gdf_comid_schema
+        good_gdf = gpd.GeoDataFrame({'comid': ['123'], 'geometry': [Point(0,0)]})
+        bad_gdf = pd.DataFrame({'wrong_col': [1]}) # Not a GeoDataFrame, missing cols
+        
+        fsutil.validate_gdf_comid_schema(good_gdf, arg_val=False) # Happy path (disabled)
+        with self.assertRaises(SystemExit):
+            fsutil.validate_gdf_comid_schema(bad_gdf, arg_val=True) # Fatal crash
+            
+        # 2. validate_df_comids
+        good_attr = pd.DataFrame({'featureID': ['1'], 'attribute': ['A'], 'value': [1.0]})
+        bad_attr = pd.DataFrame({'featureID': [1]}) # Int instead of str
+        
+        fsutil.validate_df_comids(good_attr, arg_val=False)
+        with self.assertRaises(SystemExit):
+             fsutil.validate_df_comids(bad_attr, arg_val=True)
+             
+        # 3. write_validated_prediction_output
+        bad_pred = pd.DataFrame({'bad': ['data']})
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_path = Path(tmpdir) / "out.parquet"
+            with self.assertRaises(SystemExit):
+                fsutil.write_validated_prediction_output(bad_pred, out_path, True, ["NSE"])
+
+class TestValidationUtilities(unittest.TestCase):
+    def setUp(self):
+        # Reuse existing dummy data strategy
+        self.good_df = pd.DataFrame({
+            'comid': ['123', '456'],
+            'attr1': [1.0, 2.0]
+        })
+        self.bad_df = pd.DataFrame({
+            'comid': [123, 456], # Int instead of string!
+            'attr1': ['bad', 'data']
+        })
+
+    def test_validate_input_attributes_exit(self):
+        # 1. Test happy path (no exit)
+        fsutil.validate_input_attributes(self.good_df, arg_val=False) 
+        
+        # 2. Test fatal exit using your existing bad dataframe
+        with self.assertRaises(SystemExit):
+            fsutil.validate_input_attributes(self.bad_df, arg_val=True)
+
+    def test_other_validation_wrappers(self):
+        # 1. validate_gdf_comid_schema
+        good_gdf = gpd.GeoDataFrame({'comid': ['123'], 'geometry': [Point(0,0)]})
+        bad_gdf = pd.DataFrame({'wrong_col': [1]}) # Not a GeoDataFrame, missing cols
+        
+        fsutil.validate_gdf_comid_schema(good_gdf, arg_val=False) # Happy path (disabled)
+        with self.assertRaises(SystemExit):
+            fsutil.validate_gdf_comid_schema(bad_gdf, arg_val=True) # Fatal crash
+            
+        # 2. validate_df_comids
+        good_attr = pd.DataFrame({'featureID': ['1'], 'attribute': ['A'], 'value': [1.0]})
+        bad_attr = pd.DataFrame({'featureID': [1]}) # Int instead of str
+        
+        fsutil.validate_df_comids(good_attr, arg_val=False)
+        with self.assertRaises(SystemExit):
+             fsutil.validate_df_comids(bad_attr, arg_val=True)
+             
+        # 3. write_validated_prediction_output
+        bad_pred = pd.DataFrame({'bad': ['data']})
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_path = Path(tmpdir) / "out.parquet"
+            with self.assertRaises(SystemExit):
+                fsutil.write_validated_prediction_output(bad_pred, out_path, True, ["NSE"])
+
+    # DROP THE NEW TESTS RIGHT HERE!
+    def test_load_validated_pipeline(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            pipe_path = Path(tmpdir) / "model.joblib"
+            
+            # Dump a dummy dictionary using joblib
+            dummy_pipe = {"model_type": "RandomForest", "target": "NSE"}
+            joblib.dump(dummy_pipe, pipe_path)
+            
+            # Happy path (no validation, just loads the file)
+            loaded = fsutil.load_validated_pipeline(pipe_path, arg_val=False)
+            self.assertEqual(loaded["target"], "NSE")
+            
+            # Fatal path: Missing file
+            with self.assertRaises(FileNotFoundError):
+                fsutil.load_validated_pipeline(Path(tmpdir) / "nope.joblib")
+                
+            # Fatal path: Fails Pydantic validation (assuming dummy_pipe is incomplete)
+            with self.assertRaises(SystemExit):
+                fsutil.load_validated_pipeline(pipe_path, arg_val=True)
+
+    def test_write_validated_evaluation_output_exit(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir)
+            bad_df = pd.DataFrame({"random_col": [1, 2]}) # Wrong schema
+            
+            # Triggers the validation exit
+            with self.assertRaises(SystemExit):
+                fsutil.write_validated_evaluation_output(
+                    rslt_eval_df=bad_df, 
+                    dir_out_alg_ds=out_dir, 
+                    ds="my_ds", 
+                    valid_metrics=["NSE"], 
+                    arg_val=True
+                )
+
+class TestTrainTestSplitWrap(unittest.TestCase):
+    def test_split_train_test_comid_wrap(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_dir = Path(tmpdir)
+            ds_dir = base_dir / "test_ds"
+            ds_dir.mkdir()
+            
+            # Create dummy NetCDF
+            ds = xr.Dataset(
+                {"metric1": (("gage_id",), [10.0, 20.0, 30.0, 40.0])},
+                coords={"gage_id": ["g1", "g2", "g3", "g4"]}
+            )
+            ds.to_netcdf(ds_dir / "test_dataset.nc")
+            
+            # Create dummy GPKG
+            gdf = gpd.GeoDataFrame({
+                "gage_id": ["g1", "g2", "g3", "g4"],
+                "comid": ["11", "22", "33", "44"]
+            }, geometry=[Point(0,0), Point(1,1), Point(2,2), Point(3,3)], crs="EPSG:4326")
+            gdf.to_file(ds_dir / "test_dataset_loc.gpkg", driver="GPKG", layer="outlet")
+            
+            path_attr_config = dir_test_data / "attr_config.yaml"
+            
+            # Run the split wrapper
+            result = fsutil.split_train_test_comid_wrap(
+                dir_std_base=base_dir,
+                datasets=["test_ds"],
+                path_attr_config=path_attr_config,
+                id_col='comid',
+                test_size=0.5 # Split the 4 rows perfectly in half
+            )
+            
+            # Validate the output dictionary
+            self.assertIn('dict_gdf_comids', result)
+            self.assertEqual(len(result['sub_test_ids']), 2)
+            self.assertEqual(len(result['sub_train_ids']), 2)
 
 if __name__ == '__main__':
 
