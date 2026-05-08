@@ -21,6 +21,8 @@ from mapie.regression import MapieRegressor
 import fs_algo.utils as utils
 import fs_algo.plots as plots
 
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score, davies_bouldin_score
 import gc
 
 # Set up basic logging configuration
@@ -30,7 +32,8 @@ class AlgoTrainEval:
     def __init__(self, df: pd.DataFrame, attrs: Iterable[str], algo_config: dict,
                  uncertainty: dict,
                  dir_out_alg_ds: str | Path, dataset_id: str,
-                 metr: str, test_size: float = 0.3,rs: int = 32,
+                 metr: str, task_type: str = 'regression',
+                 test_size: float = 0.3,rs: int = 32,
                  test_ids = None,test_id_col:str = 'featureID',
                  verbose: bool = False,
                  confidence_levels: list[int] = [95],
@@ -88,6 +91,7 @@ class AlgoTrainEval:
         self.uncertainty = uncertainty
         self.dir_out_alg_ds = dir_out_alg_ds
         self.metric = metr
+        self.task_type = task_type
         self.test_size = test_size
         self.test_ids = test_ids # No guarantee these remain in the appropriate order
         self.test_id_col = test_id_col
@@ -124,32 +128,41 @@ class AlgoTrainEval:
         Changelog:
         2024-12-02 Add in the explicitly provided comid option
         """
-        # Check for NA values first
-        self.df_non_na = self.df[self.attrs + [self.metric]].dropna()
-        if self.df_non_na.shape[0] < self.df.shape[0]:
-            logging.warning(f"\
-                \n   !!!!!!!!!!!!!!!!!!!\
-                \n   NA VALUES FOUND IN INPUT DATASET!! \
-                \n   DROPPING {self.df.shape[0] - self.df_non_na.shape[0]} ROWS OF DATA. \
-                \n   !!!!!!!!!!!!!!!!!!!")
-                
-        if self.test_ids is not None:
-            # The Truth is in the indices: e.g. `self.df` shares the same indicise as `self.test_ids`` 
-            # Use the manually provided comids for testing, then the remaining data for training
-            logging.info("Using the custom test comids, and letting all remaining comids be used for training.")
-            df_sub_test = self.df.loc[self.test_ids.index]#self.df[self.df[self.test_id_col].isin(self.test_ids)].dropna(subset=self.attrs + [self.metric])
-            df_sub_train = self.df.loc[~self.df.index.isin(df_sub_test.index)]#self.df[~self.df[self.test_id_col].isin(self.test_ids)].dropna(subset=self.attrs + [self.metric])
-            # Assign class objects
-            self.y_test = df_sub_test[self.metric]
-            self.y_train = df_sub_train[self.metric]
-            self.X_test = df_sub_test[self.attrs]
-            self.X_train = df_sub_train[self.attrs]
-        else: # The standard train_test_split (Caution when processing multiple datasets, if total dims differ, then basin splits may differ)
-            if self.verbose:
-                logging.info(f"      Performing train/test split as {round(1-self.test_size,2)}/{self.test_size}")
+        if self.task_type == 'clustering':
+            # Unsupervised: No 'metric' required!
+            self.df_non_na = self.df.dropna(subset=self.attrs)
             X = self.df_non_na[self.attrs]
-            y = self.df_non_na[self.metric]
-            self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(X,y, test_size=self.test_size, random_state=self.rs)
+            if self.verbose:
+                logging.info(f"      Performing clustering split as {round(1-self.test_size,2)}/{self.test_size}")
+            self.X_train, self.X_test = train_test_split(X, test_size=self.test_size, random_state=self.rs)
+            self.y_train, self.y_test = None, None
+        else:
+            # Check for NA values first
+            self.df_non_na = self.df[self.attrs + [self.metric]].dropna()
+            if self.df_non_na.shape[0] < self.df.shape[0]:
+                logging.warning(f"\
+                    \n   !!!!!!!!!!!!!!!!!!!\
+                    \n   NA VALUES FOUND IN INPUT DATASET!! \
+                    \n   DROPPING {self.df.shape[0] - self.df_non_na.shape[0]} ROWS OF DATA. \
+                    \n   !!!!!!!!!!!!!!!!!!!")
+                    
+            if self.test_ids is not None:
+                # The Truth is in the indices: e.g. `self.df` shares the same indicise as `self.test_ids`` 
+                # Use the manually provided comids for testing, then the remaining data for training
+                logging.info("Using the custom test comids, and letting all remaining comids be used for training.")
+                df_sub_test = self.df.loc[self.test_ids.index]#self.df[self.df[self.test_id_col].isin(self.test_ids)].dropna(subset=self.attrs + [self.metric])
+                df_sub_train = self.df.loc[~self.df.index.isin(df_sub_test.index)]#self.df[~self.df[self.test_id_col].isin(self.test_ids)].dropna(subset=self.attrs + [self.metric])
+                # Assign class objects
+                self.y_test = df_sub_test[self.metric]
+                self.y_train = df_sub_train[self.metric]
+                self.X_test = df_sub_test[self.attrs]
+                self.X_train = df_sub_train[self.attrs]
+            else: # The standard train_test_split (Caution when processing multiple datasets, if total dims differ, then basin splits may differ)
+                if self.verbose:
+                    logging.info(f"      Performing train/test split as {round(1-self.test_size,2)}/{self.test_size}")
+                X = self.df_non_na[self.attrs]
+                y = self.df_non_na[self.metric]
+                self.X_train, self.X_test, self.y_train, self.y_test = train_test_split(X,y, test_size=self.test_size, random_state=self.rs)
 
     def all_X_all_y(self):
         """ Combine the train/test splits into a single dataframe/array. 
@@ -414,6 +427,20 @@ class AlgoTrainEval:
                                      'metric': self.metric,
                                      'Uncertainty': {}
                                      }
+            
+        if 'kmeans' in self.algo_config:  # K-MEANS CLUSTERING
+            if self.verbose: logging.info(f"      Performing KMeans Clustering")
+            
+            kmeans = KMeans(n_clusters=self.algo_config['kmeans'].get('n_clusters', 5), 
+                            random_state=self.rs)
+            pipe_kmeans = make_pipeline(StandardScaler(), kmeans)
+            
+            # FIT ON X_TRAIN ONLY
+            pipe_kmeans.fit(self.X_train) 
+            
+            self.algs_dict['kmeans'] = {'algo': kmeans, 'pipeline': pipe_kmeans, 
+                                        'type': 'clustering', 'metric': self.metric, 
+                                        'Uncertainty': {}}
 
     def train_algos_grid_search(self):
         """Train algorithms using GridSearchCV based on the algo config file.
@@ -493,54 +520,59 @@ class AlgoTrainEval:
 
             y_pred = pipe.predict(self.X_test)
             # --- Unconditionally warn if any predictions fall out of the physical range. ---
-            utils._warn_if_out_of_bounds(
-                predictions=y_pred,
-                feature_ids=feature_ids,
-                min_lim=self.min_lim,
-                max_lim=self.max_lim,
-                resp_var=self.metric,
-                correction_is_active=self.uncn_bnd_algo,
-                prediction_type="values"
-            )
-            # Conditionally apply the correction based on flags.
-            if self.uncn_bnd_algo:
-                y_pred = utils.clip_predictions(y_pred, self.min_lim, self.max_lim)
-
-            if 'mapie' in v:
-                mapie_alpha = next((d['alpha'] for d in self.uncertainty.get('mapie', []) if 'alpha' in d), None)
-                y_test_pred, y_test_pis = v['mapie'].predict(self.X_test, alpha=mapie_alpha)
-                
-                # Apply same warn-then-clip logic for prediction intervals.
+            if self.task_type != 'clustering':
                 utils._warn_if_out_of_bounds(
-                    predictions=y_test_pis,
+                    predictions=y_pred,
                     feature_ids=feature_ids,
                     min_lim=self.min_lim,
                     max_lim=self.max_lim,
                     resp_var=self.metric,
                     correction_is_active=self.uncn_bnd_algo,
-                    prediction_type="intervals"
+                    prediction_type="values"
                 )
+                # Conditionally apply the correction based on flags.
                 if self.uncn_bnd_algo:
-                    y_test_pis = utils.clip_pis(y_test_pis, self.min_lim, self.max_lim)
+                    y_pred = utils.clip_predictions(y_pred, self.min_lim, self.max_lim)
+
+                if 'mapie' in v:
+                    mapie_alpha = next((d['alpha'] for d in self.uncertainty.get('mapie', []) if 'alpha' in d), None)
+                    y_test_pred, y_test_pis = v['mapie'].predict(self.X_test, alpha=mapie_alpha)
                     
-                # Rename rows
-                row_labels = ['lower_limit', 'upper_limit']
-                
-                # Rename columns based on mapie_alpha values
-                col_labels = [f'alpha_{alpha:.2f}' for alpha in mapie_alpha]  
-                
-                # Convert to DataFrame
-                y_pis_list = [pd.DataFrame(y_test_pis[i], index=row_labels, columns=col_labels) for i in range(y_test_pis.shape[0])]
-                
-                self.preds_dict[k] = {'y_pred': y_pred,
-                                      'y_pis': y_pis_list,
-                                      'type': v['type'],
-                                      'metric': v['metric']}
+                    # Apply same warn-then-clip logic for prediction intervals.
+                    utils._warn_if_out_of_bounds(
+                        predictions=y_test_pis,
+                        feature_ids=feature_ids,
+                        min_lim=self.min_lim,
+                        max_lim=self.max_lim,
+                        resp_var=self.metric,
+                        correction_is_active=self.uncn_bnd_algo,
+                        prediction_type="intervals"
+                    )
+                    if self.uncn_bnd_algo:
+                        y_test_pis = utils.clip_pis(y_test_pis, self.min_lim, self.max_lim)
+                        
+                    # Rename rows
+                    row_labels = ['lower_limit', 'upper_limit']
+                    
+                    # Rename columns based on mapie_alpha values
+                    col_labels = [f'alpha_{alpha:.2f}' for alpha in mapie_alpha]  
+                    
+                    # Convert to DataFrame
+                    y_pis_list = [pd.DataFrame(y_test_pis[i], index=row_labels, columns=col_labels) for i in range(y_test_pis.shape[0])]
+                    
+                    self.preds_dict[k] = {'y_pred': y_pred,
+                                        'y_pis': y_pis_list,
+                                        'type': v['type'],
+                                        'metric': v['metric']}
+                else:
+                    self.preds_dict[k] = {'y_pred': y_pred,
+                                    'type': v['type'],
+                                    'metric': v['metric']}
             else:
-                self.preds_dict[k] = {'y_pred': y_pred,
-                                 'type': v['type'],
-                                 'metric': v['metric']}
-                    
+                    self.preds_dict[k] = {'y_pred': y_pred,
+                                    'type': v['type'],
+                                    'metric': v['metric']}
+                                
         return self.preds_dict
 
     def evaluate_algos(self) -> dict:
@@ -565,21 +597,30 @@ class AlgoTrainEval:
 
         for k, v in self.preds_dict.items():
             y_pred = v['y_pred']
-            resid = y_pred - self.y_test
-            rmse = float(np.sqrt(np.mean(resid**2)))
-            obs_range = float(np.max(self.y_test) - np.min(self.y_test))
-            rmse_obs = float(rmse / obs_range) if obs_range > 0.0 else np.nan
+            if self.task_type == 'clustering':
+                # Evaluate cluster density and separation
+                self.eval_dict[k] = {
+                    'type': v['type'],
+                    'metric': v['metric'],
+                    'silhouette_score': silhouette_score(self.X_test, y_pred),
+                    'davies_bouldin_score': davies_bouldin_score(self.X_test, y_pred)
+                }
+            else:
+                resid = y_pred - self.y_test
+                rmse = float(np.sqrt(np.mean(resid**2)))
+                obs_range = float(np.max(self.y_test) - np.min(self.y_test))
+                rmse_obs = float(rmse / obs_range) if obs_range > 0.0 else np.nan
 
-            self.eval_dict[k] = {'type': v['type'],
-                            'metric': v['metric'],
-                            'mse': mean_squared_error(self.y_test, y_pred),
-                            'r2': r2_score(self.y_test, y_pred),
-                            'MinResid': float(np.min(resid)),
-                            'MaxResid': float(np.max(resid)),
-                            'AvgResid': float(np.mean(resid)),
-                            'SDResid': float(np.std(resid)),
-                            'RMSE': rmse,
-                            'NRMSE': rmse_obs}
+                self.eval_dict[k] = {'type': v['type'],
+                                'metric': v['metric'],
+                                'mse': mean_squared_error(self.y_test, y_pred),
+                                'r2': r2_score(self.y_test, y_pred),
+                                'MinResid': float(np.min(resid)),
+                                'MaxResid': float(np.max(resid)),
+                                'AvgResid': float(np.mean(resid)),
+                                'SDResid': float(np.std(resid)),
+                                'RMSE': rmse,
+                                'NRMSE': rmse_obs}
 
         return self.eval_dict
 
@@ -844,7 +885,7 @@ def _process_single_metric(args_dict):
             df=args_dict['df_pred_resp'], attrs=args_dict['attrs_sel'], 
             algo_config=args_dict['algo_config'], uncertainty=args_dict['uncertainty_cfg'], 
             dir_out_alg_ds=args_dict['dir_out_alg_ds'], dataset_id=args_dict['ds'],
-            metr=metr, test_size=args_dict['test_size'], rs=args_dict['seed'], 
+            metr=metr, task_type = args_dict['task_type'],test_size=args_dict['test_size'], rs=args_dict['seed'], 
             test_id_col=args_dict['col_locid'], verbose=args_dict['verbose'], 
             confidence_levels=args_dict['confidence_levels'],
             uncn_bnd_algo=args_dict['uncn_bnd_algo'], min_lim=args_dict['min_lim'], 
@@ -904,7 +945,7 @@ def _process_single_metric(args_dict):
             y_pred = train_eval.preds_dict[algo_str].get('y_pred')
             y_obs = train_eval.y_test.values
             
-            if args_dict['make_plots']:
+            if args_dict['make_plots'] and args_dict['task_type'] != 'clustering':
                 # Regression of testing holdout's prediction vs observation
                 if train_eval.preds_dict[algo_str].get('y_pis', None) is not None:
                     y_pis = train_eval.preds_dict[algo_str].get('y_pis')
@@ -923,7 +964,10 @@ def _process_single_metric(args_dict):
             comids_test = train_eval.df[col_locid].iloc[train_eval.X_test.index].values
             test_gdf = args_dict['gdf_comid'][args_dict['gdf_comid'][col_locid].isin(comids_test)].copy()
             
-            df_test = train_eval.df.iloc[train_eval.y_test.index][[col_locid, metr]].rename(columns={metr:'observed'})
+            if args_dict['task_type'] == 'clustering':
+                df_test = pd.DataFrame({col_locid: comids_test, 'observed': np.nan})
+            else:
+                df_test = train_eval.df.iloc[train_eval.y_test.index][[col_locid, metr]].rename(columns={metr:'observed'})
             df_test['prediction'] = y_pred
 
             test_gdf = test_gdf.merge(df_test, left_on=col_locid, right_on=col_locid, how='left')
@@ -938,7 +982,7 @@ def _process_single_metric(args_dict):
                 plots.plot_map_pred_wrap(
                     test_gdf, dir_out_viz_base, ds, metr, algo_str,
                     split_type='test', colname_data='prediction',
-                    epsg_reproj = 4326
+                    epsg_reproj = 4326, task_type=args_dict['task_type']
                 )
                 
                 # Test Prediction Uncertainty Plotting 

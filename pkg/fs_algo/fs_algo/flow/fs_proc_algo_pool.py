@@ -281,6 +281,11 @@ if __name__ == "__main__":
                         )
         plt.clf()
         # %% Train, test, and evaluate
+        task_type = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"].get("task_type", "regression")
+        # Override metrics if clustering (we don't need real metrics)
+        if task_type == 'clustering':
+            metrics = ['cluster_labels']
+
         rslt_eval = dict()
         tasks = []
         # Prepare data for all metrics sequentially to avoid pickling complex xarray objs
@@ -299,68 +304,74 @@ if __name__ == "__main__":
 
             if len(algo_config) == 0:
                 algo_config = algo_config_og.copy()
-            # Subset response data to metric of interest & the comid
-            df_metr_resp = pd.DataFrame({col_locid: dat_resp[col_locid],
-                                         'featureSource': dat_resp['featureSource'],
-                                        metr : dat_resp[metr].data})
-            # Join attribute data and response data
-            df_pred_resp = df_metr_resp.merge(df_attr_wide_dropna, left_on = col_locid, right_on = col_locid)
 
-            if df_pred_resp.isna().any().any(): # Check for NA values and remove them if present to avoid errors during evaluation
-                tot_na_dfpred = df_pred_resp.shape[0] - df_pred_resp.dropna().shape[0]
-                pct_na_dfpred = tot_na_dfpred/df_pred_resp.shape[0]*100
-                logging.info(f"Removing {tot_na_dfpred} NA values, which is {pct_na_dfpred}% of total data")
-                df_pred_resp = df_pred_resp.dropna()
-                if pct_na_dfpred > 10:
-                    logging.warning(f"!!!!More than 10% of data are NA values!!!!")
-
-            # TODO may need to add additional distinguishing strings to dataset_id, e.g. in cases of probabilistic simulation
-            # Package arguments
-            args_dict = {
-                'metr': metr, 'df_pred_resp': df_pred_resp, 'algo_config': copy.deepcopy(algo_config),
-                'attrs_sel': attrs_sel, 'uncertainty_cfg': uncertainty_cfg, 
-                'dir_out_alg_ds': dir_out_alg_ds, 'ds': ds, 'test_size': test_size,
-                'seed': seed, 'col_locid': col_locid, 'verbose': verbose,
-                'confidence_levels': confidence_levels, 'uncn_bnd_algo': uncn_bnd_algo,
-                'min_lim': min_lim, 'max_lim': max_lim, 'make_plots': make_plots,
-                'dir_out_viz_base': dir_out_viz_base, 'dir_out_anlys_base': dir_out_anlys_base,
-                'gdf_comid': gdf_comid
-            }
-            tasks.append(args_dict)
-
-        # 2. Process tasks in strict batches to protect RAM and Disk I/O
-        
-        logging.info(f"Dispatching {len(tasks)} metrics in batches of {chunk_size}...")
-        
-        for batch_num, task_batch in enumerate(itertools.batched(tasks, chunk_size)):
-            logging.info(f"--- Starting Batch {batch_num + 1} ---")
-            
-            # Create a pool EXACTLY the size of the batch
-            with concurrent.futures.ProcessPoolExecutor(max_workers=chunk_size) as executor:
-                results = executor.map(fsalgt._process_single_metric, task_batch)
+            if task_type == 'clustering':
+                # Bypass dat_resp completely. Just use attributes!
+                df_pred_resp = df_attr_wide_dropna.reset_index()
+            else:
                 
-                # Collect the returned dataframes
-                for metr, eval_df in results:
-                    if eval_df is not None:
-                        rslt_eval[metr] = eval_df
+                # Subset response data to metric of interest & the comid
+                df_metr_resp = pd.DataFrame({col_locid: dat_resp[col_locid],
+                                            'featureSource': dat_resp['featureSource'],
+                                            metr : dat_resp[metr].data})
+                # Join attribute data and response data
+                df_pred_resp = df_metr_resp.merge(df_attr_wide_dropna, left_on = col_locid, right_on = col_locid)
+
+                if df_pred_resp.isna().any().any(): # Check for NA values and remove them if present to avoid errors during evaluation
+                    tot_na_dfpred = df_pred_resp.shape[0] - df_pred_resp.dropna().shape[0]
+                    pct_na_dfpred = tot_na_dfpred/df_pred_resp.shape[0]*100
+                    logging.info(f"Removing {tot_na_dfpred} NA values, which is {pct_na_dfpred}% of total data")
+                    df_pred_resp = df_pred_resp.dropna()
+                    if pct_na_dfpred > 10:
+                        logging.warning(f"!!!!More than 10% of data are NA values!!!!")
+
+                # TODO may need to add additional distinguishing strings to dataset_id, e.g. in cases of probabilistic simulation
+                # Package arguments
+                args_dict = {
+                    'metr': metr, 'task_type' : task_type, 'df_pred_resp': df_pred_resp, 'algo_config': copy.deepcopy(algo_config),
+                    'attrs_sel': attrs_sel, 'uncertainty_cfg': uncertainty_cfg, 
+                    'dir_out_alg_ds': dir_out_alg_ds, 'ds': ds, 'test_size': test_size,
+                    'seed': seed, 'col_locid': col_locid, 'verbose': verbose,
+                    'confidence_levels': confidence_levels, 'uncn_bnd_algo': uncn_bnd_algo,
+                    'min_lim': min_lim, 'max_lim': max_lim, 'make_plots': make_plots,
+                    'dir_out_viz_base': dir_out_viz_base, 'dir_out_anlys_base': dir_out_anlys_base,
+                    'gdf_comid': gdf_comid
+                }
+                tasks.append(args_dict)
+
+            # 2. Process tasks in strict batches to protect RAM and Disk I/O
             
-            # 3. Explicit Garbage Collection between batches
-            # This guarantees RAM drops back down to baseline before the next batch spins up
-            logging.info(f"--- Batch {batch_num + 1} Complete. Cleaning up memory... ---")
-            gc.collect()
-
-        # Compile results and write to file
-        if rslt_eval:
-            rslt_eval_df = pd.concat(rslt_eval.values()).reset_index(drop=True)
-
-            # --- VALIDATION and file writing: Result Eval DF ---
-            fsutil.write_validated_evaluation_output(
-                rslt_eval_df=rslt_eval_df, 
-                dir_out_alg_ds=dir_out_alg_ds, 
-                ds=ds, valid_metrics=metrics, arg_val=arg_val
-            )    
+            logging.info(f"Dispatching {len(tasks)} metrics in batches of {chunk_size}...")
+            
+            for batch_num, task_batch in enumerate(itertools.batched(tasks, chunk_size)):
+                logging.info(f"--- Starting Batch {batch_num + 1} ---")
                 
-        dat_resp.close()
+                # Create a pool EXACTLY the size of the batch
+                with concurrent.futures.ProcessPoolExecutor(max_workers=chunk_size) as executor:
+                    results = executor.map(fsalgt._process_single_metric, task_batch)
+                    
+                    # Collect the returned dataframes
+                    for metr, eval_df in results:
+                        if eval_df is not None:
+                            rslt_eval[metr] = eval_df
+                
+                # 3. Explicit Garbage Collection between batches
+                # This guarantees RAM drops back down to baseline before the next batch spins up
+                logging.info(f"--- Batch {batch_num + 1} Complete. Cleaning up memory... ---")
+                gc.collect()
+
+            # Compile results and write to file
+            if rslt_eval:
+                rslt_eval_df = pd.concat(rslt_eval.values()).reset_index(drop=True)
+
+                # --- VALIDATION and file writing: Result Eval DF ---
+                fsutil.write_validated_evaluation_output(
+                    rslt_eval_df=rslt_eval_df, 
+                    dir_out_alg_ds=dir_out_alg_ds, 
+                    ds=ds, valid_metrics=metrics, arg_val=arg_val
+                )    
+                    
+            dat_resp.close()
     #%% Cross-comparison across all datasets: determining where the best metric lives
     if same_test_ids and len(datasets)>1:
         logging.info("Cross-comparison across multiple datasets possible.\n"+

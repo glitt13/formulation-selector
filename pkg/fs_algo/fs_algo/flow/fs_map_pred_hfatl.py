@@ -60,6 +60,7 @@ if __name__ == "__main__":
     algo_cfig._read_algo_config()
     algo_config = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["algo_config"]
     metrics = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["metrics"]
+    task_type = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"].get("task_type", "regression")
 
     attr_cfig = fsutil.AttrConfigAndVars(path_attr_config)
     attr_cfig._read_attr_config()
@@ -153,7 +154,8 @@ if __name__ == "__main__":
                     algo_str=algo_str,
                     split_type=analysis_str,
                     colname_data='prediction',
-                    epsg_reproj=4326
+                    epsg_reproj=4326,
+                    task_type=task_type
                 )
                 
                 #%% PREDICT UNCERTAINTIES (If MAPIE Alpha columns exist)

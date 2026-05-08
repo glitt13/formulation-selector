@@ -673,7 +673,7 @@ def gen_conus_basemap(dir_out_basemap:str | Path, # This should be the data_visu
     
 def plot_map_pred(geo_df:gpd.GeoDataFrame, states:gpd.GeoDataFrame,
                   title:str,metr:str,colname_data:str='prediction',
-                  plot_style:str='auto'
+                  plot_style:str='auto', task_type:str='regression'
                   ):
     """Genereate a map of predicted response variables
 
@@ -699,33 +699,49 @@ def plot_map_pred(geo_df:gpd.GeoDataFrame, states:gpd.GeoDataFrame,
 
     fig, ax = plt.subplots(1, 1, figsize=(20, 24))
     base = states.boundary.plot(ax=ax,color="#555555", linewidth=1)
-    # Points
-    geo_df.plot(column=colname_data, ax=ax, markersize=150, cmap='viridis', legend=False, zorder=2) # delete zorder to plot points behind states boundaries
-    # States
-    states.boundary.plot(ax=ax, color="#555555", linewidth=1, zorder=1, alpha=0.5)  # Plot states boundary again with lower zorder
-    
-    if plot_style == 'auto':
-        plot_style = 'hexbin' if geo_df.shape[0] > 20000 else 'points'
+
+    if task_type == 'clustering':
+        logging.info("Using categorical mapping for cluster labels.")
+        # Map with a discrete colormap (e.g., tab20) and no colorbar
+        geo_df.plot(column=colname_data, ax=ax, categorical=True, cmap='tab20', 
+                    legend=True, markersize=150, zorder=2)
+        states.boundary.plot(ax=ax, color="#555555", linewidth=1, zorder=1, alpha=0.5)
+        
+        # Customize the discrete legend
+        legend = ax.get_legend()
+        if legend:
+            legend.set_title("Clusters", prop={'size': 24})
+            for text in legend.get_texts():
+                text.set_fontsize(20)
+                
+    else:
+        # Points
+        geo_df.plot(column=colname_data, ax=ax, markersize=150, cmap='viridis', legend=False, zorder=2) # delete zorder to plot points behind states boundaries
+        # States
+        states.boundary.plot(ax=ax, color="#555555", linewidth=1, zorder=1, alpha=0.5)  # Plot states boundary again with lower zorder
+        
+        if plot_style == 'auto':
+            plot_style = 'hexbin' if geo_df.shape[0] > 20000 else 'points'
 
 
-    if plot_style == 'hexbin':
-        logging.info(f"Using hexbin mapping for large dataset ({len(geo_df)} points).")
-        # hexbin aggregates spatial data into geographic bins and takes the mean of the values
-        hb = ax.hexbin(
-            x=geo_df.geometry.x, 
-            y=geo_df.geometry.y, 
-            C=geo_df[colname_data], 
-            reduce_C_function=np.mean, 
-            gridsize=150, # Controls resolution/number of hexagons (higher = smaller hexes)
-            cmap='viridis', 
-            vmin=vmin, vmax=vmax, 
-            zorder=2, alpha=0.9, edgecolors='none'
-        )
-        cbar_mappable = hb # Map the colorbar to the hexbin object
-    else: 
-        ms = 150 if len(geo_df) < 10000 else max(0.5, 500000 / len(geo_df))
-        geo_df.plot(column=colname_data, ax=ax, markersize=ms, cmap='viridis', legend=False, zorder=2)
-        cbar_mappable = plt.cm.ScalarMappable(norm=matplotlib.colors.Normalize(vmin=vmin, vmax=vmax), cmap='viridis')
+        if plot_style == 'hexbin':
+            logging.info(f"Using hexbin mapping for large dataset ({len(geo_df)} points).")
+            # hexbin aggregates spatial data into geographic bins and takes the mean of the values
+            hb = ax.hexbin(
+                x=geo_df.geometry.x, 
+                y=geo_df.geometry.y, 
+                C=geo_df[colname_data], 
+                reduce_C_function=np.mean, 
+                gridsize=150, # Controls resolution/number of hexagons (higher = smaller hexes)
+                cmap='viridis', 
+                vmin=vmin, vmax=vmax, 
+                zorder=2, alpha=0.9, edgecolors='none'
+            )
+            cbar_mappable = hb # Map the colorbar to the hexbin object
+        else: 
+            ms = 150 if len(geo_df) < 10000 else max(0.5, 500000 / len(geo_df))
+            geo_df.plot(column=colname_data, ax=ax, markersize=ms, cmap='viridis', legend=False, zorder=2)
+            cbar_mappable = plt.cm.ScalarMappable(norm=matplotlib.colors.Normalize(vmin=vmin, vmax=vmax), cmap='viridis')
 
     ax.tick_params(axis='x', labelsize= 24)
     ax.tick_params(axis='y', labelsize= 24)
@@ -743,26 +759,29 @@ def plot_map_pred(geo_df:gpd.GeoDataFrame, states:gpd.GeoDataFrame,
 
     return fig
 
-def plot_map_pred_wrap(test_gdf,dir_out_viz_base, ds,
-                      metr,algo_str,
-                      split_type='test',
-                      colname_data='prediction',
-                      epsg_reproj=3857):
+def plot_map_pred_wrap(test_gdf:gpd.GeoDataFrame,
+                       dir_out_viz_base:str | os.PathLike, 
+                      ds:str,
+                      metr:str,algo_str:str,
+                      split_type:str='test',
+                      colname_data:str='prediction',
+                      epsg_reproj:int=3857,
+                      task_type:str='regression'):
     """Wrapper for plotting map displays
 
-    :param test_gdf: _description_
-    :type test_gdf: _type_
-    :param dir_out_viz_base: _description_
-    :type dir_out_viz_base: _type_
-    :param ds: _description_
-    :type ds: _type_
-    :param metr: _description_
-    :type metr: _type_
-    :param algo_str: _description_
-    :type algo_str: _type_
-    :param split_type: _description_, defaults to 'test'
+    :param test_gdf: The geodataframe to plotting on maps
+    :type test_gdf: gpd.GeoDataFrame
+    :param dir_out_viz_base: The base directory for storing visualization data
+    :type dir_out_viz_base: str|os.PathLike
+    :param ds: The dataset name
+    :type ds: str
+    :param metr: The response variable of interest
+    :type metr: str
+    :param algo_str: The algorithm shortstring
+    :type algo_str: str
+    :param split_type: The type of data, either algo testing or actual prediction, defaults to 'test'
     :type split_type: str, optional
-    :param colname_data: _description_, defaults to 'prediction'
+    :param colname_data: The standard colname for data values in `test_gdf`, defaults to 'prediction'
     :type colname_data: str, optional
     :param epsg_reproj: The EPSG code for reprojecting data for map display, defaults to 3857
     :type epsg_reproj: int
@@ -793,7 +812,8 @@ def plot_map_pred_wrap(test_gdf,dir_out_viz_base, ds,
     # Generate the map
     plot_title = f"Predicted Values: {metr} - {ds}: {algo_str} algorithm"
     plot_pred_map = plot_map_pred(geo_df=geo_df, states=states,title=plot_title,
-                                  metr=metr,colname_data=colname_data)
+                                  metr=metr,colname_data=colname_data,
+                                  task_type=task_type)
 
     # Save the plot as a .png file
     plot_pred_map.savefig(path_pred_map_plot, dpi=300, bbox_inches='tight')

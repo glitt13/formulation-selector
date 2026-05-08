@@ -144,6 +144,7 @@ class AlgoConfigParser:
             test_size = 0.3
         # Generate dictionary "algo_cfg_dict" with primary training parameters
         algo_cfg_dict = {'algo_config' : algo_config,
+                         'task_type' : algo_cfg.get('task_type', 'regression'),
                             'test_size': algo_cfg.get('test_size', test_size), # Must be between 0 and 1
                             'seed': algo_cfg.get('seed',seed ),
                             'read_type': algo_cfg.get('read_type', 'filename'), #DEFAULT to 'filename'
