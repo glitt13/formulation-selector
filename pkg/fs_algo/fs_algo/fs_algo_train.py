@@ -21,6 +21,8 @@ from mapie.regression import MapieRegressor
 import fs_algo.utils as utils
 import fs_algo.plots as plots
 
+import gc
+
 # Set up basic logging configuration
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -824,3 +826,150 @@ def plot_learning_curve_save_wrap(algo_plot:AlgoEvalPlotLC, train_eval:AlgoTrain
 
         plt.clf()
         plt.close()
+
+#%% fs_proc_algo script catch-all function (paralellized) -----------
+
+
+def _process_single_metric(args_dict):
+    """Worker function to train and evaluate a single metric safely."""
+    metr = args_dict['metr']
+    
+    # Custom logger formatting for the worker to identify which metric is logging
+    log_prefix = f"[{metr}]"
+    logging.info(f"{log_prefix} Starting processing...")
+
+    try:
+        # 1. Instantiate and run AlgoTrainEval
+        train_eval = AlgoTrainEval(
+            df=args_dict['df_pred_resp'], attrs=args_dict['attrs_sel'], 
+            algo_config=args_dict['algo_config'], uncertainty=args_dict['uncertainty_cfg'], 
+            dir_out_alg_ds=args_dict['dir_out_alg_ds'], dataset_id=args_dict['ds'],
+            metr=metr, test_size=args_dict['test_size'], rs=args_dict['seed'], 
+            test_id_col=args_dict['col_locid'], verbose=args_dict['verbose'], 
+            confidence_levels=args_dict['confidence_levels'],
+            uncn_bnd_algo=args_dict['uncn_bnd_algo'], min_lim=args_dict['min_lim'], 
+            max_lim=args_dict['max_lim']
+        )
+        train_eval.train_eval()
+
+        # 2. Save evaluation metrics
+        path_eval_metr = utils.std_eval_metrs_path(args_dict['dir_out_viz_base'], args_dict['ds'], metr)
+        train_eval.eval_df.to_csv(path_eval_metr)
+
+        # 3. Handle Plotting (RF Importance, Learning Curves, Maps, etc.)
+        if args_dict['make_plots']:
+            logging.info(f"{log_prefix} Generating plots...")
+            rfr = _extr_rf_algo(train_eval)
+            if rfr:
+                df_X, y_all = train_eval.all_X_all_y()
+                # Save importances
+                imp = getattr(rfr, "feature_importances_", None)
+                if imp is not None:
+                    fi_df = pd.DataFrame({"feature": df_X.columns, "importance": imp}).sort_values("importance", ascending=False)
+                    fi_df.to_csv(Path(args_dict['dir_out_viz_base']) / args_dict['ds'] / f"rf_feature_importance_{args_dict['ds']}_{metr}.csv", index=False)
+                # Plot importances
+                plots.save_feat_imp_fig_wrap(rfr=rfr, attrs=df_X.columns, dir_out_viz_base=args_dict['dir_out_viz_base'], ds=args_dict['ds'], metr=metr)
+                
+                # Create learning curves for each algorithm
+                algo_plot_lc = AlgoEvalPlotLC(df_X,y_all)
+                plot_learning_curve_save_wrap(algo_plot_lc,train_eval, 
+                                dir_out_viz_base=args_dict['dir_out_viz_base'],
+                                ds=args_dict['ds'],
+                                cv = 5,n_jobs=1,
+                                train_sizes = np.linspace(0.1, 1.0, 10),
+                                scoring = 'neg_mean_squared_error',
+                                ylabel_scoring = "Mean Squared Error (MSE)",
+                                training_uncn = False
+                                )
+                
+                # Calculate global min and max for consistent uncertainty scaling
+                min_err, max_err = float('inf'), float('-inf')
+                for algo_str in train_eval.algs_dict.keys():
+                    if train_eval.preds_dict[algo_str].get('y_pis', None) is not None:
+                        y_pred = train_eval.preds_dict[algo_str]['y_pred']
+                        y_pis = train_eval.preds_dict[algo_str]['y_pis']
+                        for alpha_val in next(d['alpha'] for d in args_dict['uncertainty_cfg'].get('mapie', [])):
+                            lower_err = y_pred - np.array([y_pis[i].loc['lower_limit', f'alpha_{alpha_val:.2f}'] for i in range(len(y_pred))])
+                            upper_err = np.array([y_pis[i].loc['upper_limit', f'alpha_{alpha_val:.2f}'] for i in range(len(y_pred))]) - y_pred
+                            total_err = lower_err + upper_err
+                            min_err, max_err = min(min_err, total_err.min()), max(max_err, total_err.max())
+
+            # ----- Extract y_pred for each algorithm and build output DataFrames -----
+            dict_test_gdf = dict()
+            col_locid = args_dict['col_locid']
+            ds = args_dict['ds']
+            dir_out_viz_base = args_dict['dir_out_viz_base']
+            
+            for algo_str in train_eval.algs_dict.keys():
+                y_pred = train_eval.preds_dict[algo_str].get('y_pred')
+                y_obs = train_eval.y_test.values
+                
+                if args_dict['make_plots']:
+                    # Regression of testing holdout's prediction vs observation
+                    if train_eval.preds_dict[algo_str].get('y_pis', None) is not None:
+                        y_pis = train_eval.preds_dict[algo_str].get('y_pis')
+                        for alpha_val in next(d['alpha'] for d in args_dict['uncertainty_cfg'].get('mapie', [])):
+                            plots.plot_pred_vs_obs_wrap_mapie(
+                                y_pred, y_obs, dir_out_viz_base, ds, metr, algo_str=algo_str,
+                                y_pis=y_pis, alpha_val=alpha_val, split_type=f"testing{args_dict['test_size']}"
+                            )
+                    else:
+                        plots.plot_pred_vs_obs_wrap(
+                            y_pred, y_obs, dir_out_viz_base, ds, metr, 
+                            algo_str=algo_str, split_type=f"testing{args_dict['test_size']}"
+                        )
+                           
+                # PREPARE THE GDF TO ALIGN PREDICTION VALUES BY COMIDS/COORDS
+                comids_test = train_eval.df[col_locid].iloc[train_eval.X_test.index].values
+                test_gdf = args_dict['gdf_comid'][args_dict['gdf_comid'][col_locid].isin(comids_test)].copy()
+                
+                df_test = train_eval.df.iloc[train_eval.y_test.index][[col_locid, metr]].rename(columns={metr:'observed'})
+                df_test['prediction'] = y_pred
+  
+                test_gdf = test_gdf.merge(df_test, left_on=col_locid, right_on=col_locid, how='left')
+                test_gdf.loc[:, 'dataset'] = ds
+                test_gdf.loc[:, 'metric'] = metr
+                test_gdf.loc[:, 'algo'] = algo_str
+                test_gdf.drop_duplicates(subset=[col_locid, 'observed', 'prediction'], inplace=True)
+
+                dict_test_gdf[algo_str] = test_gdf
+
+                if args_dict['make_plots']:
+                    plots.plot_map_pred_wrap(
+                        test_gdf, dir_out_viz_base, ds, metr, algo_str,
+                        split_type='test', colname_data='prediction',
+                        epsg_reproj = 4326
+                    )
+                    
+                    # Test Prediction Uncertainty Plotting 
+                    if train_eval.preds_dict[algo_str].get('y_pis', None) is not None:
+                        y_pis = train_eval.preds_dict[algo_str].get('y_pis')
+                        for alpha_val in next(d['alpha'] for d in args_dict['uncertainty_cfg'].get('mapie', [])):
+                            plots.plot_map_pred_wrap_mapie(
+                                test_gdf, dir_out_viz_base, ds, metr, algo_str,
+                                y_pis=y_pis, alpha_val=alpha_val, min_err=min_err, max_err=max_err,
+                                split_type='test_mapie', colname_data='prediction'
+                            )                        
+                                
+            # Generate analysis path out and SAVE the critical CSV
+            path_pred_obs = utils.std_test_pred_obs_path(args_dict['dir_out_anlys_base'], ds, metr)
+            #df_pred_obs_ds_metr = pd.concat(dict_test_gdf.values())
+            df_pred_obs_ds_metr = pd.concat(dict_test_gdf)
+            df_pred_obs_ds_metr.to_csv(path_pred_obs)
+            logging.info(f"{log_prefix} Wrote prediction-observation dataset to {path_pred_obs}")
+            # ... [Your existing learning curve and map plotting logic goes here] ...
+
+        logging.info(f"{log_prefix} Successfully completed.")
+        return metr, train_eval.eval_df
+
+    except Exception as e:
+        logging.error(f"{log_prefix} FAILED with error: {e}")
+        return metr, None
+
+    finally:
+        # FORCE memory cleanup on the worker before it closes
+        import matplotlib.pyplot as plt
+        plt.close('all')
+        if 'train_eval' in locals():
+            del train_eval
+        gc.collect()
