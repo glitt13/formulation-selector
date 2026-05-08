@@ -423,6 +423,7 @@ class TestFsSaveAlgoDirStruct(unittest.TestCase):
         with self.assertRaises(ValueError):
             fsutil.fs_save_algo_dir_struct(dir_base + '/not_a_dir/')
         print("✅ fs_save_algo_dir_struct creating directory structure for outputs passed.")
+
 class TestOpenResponseDataFs(unittest.TestCase):
     dir_std_base = tempfile.gettempdir()
 
@@ -1022,7 +1023,34 @@ class TestAlgoTrainEvalBasic(unittest.TestCase):
         # Check eval dataframe was created
         self.assertIsInstance(self.algo.eval_df, pd.DataFrame)
         self.assertFalse(self.algo.eval_df.empty)
-    
+    def test_learning_curve_plotting(self):
+        """Test the learning curve generation and plotting logic without mocking I/O."""
+        self.algo.train_eval()
+        
+        # 1. Grab the trained Random Forest pipeline and data
+        pipe_rf = self.algo.algs_dict['rf']['pipeline']
+        df_X, y_all = self.algo.all_X_all_y()
+        
+        # 2. Instantiate the Plotting Object
+        plot_obj = fsalgo.AlgoEvalPlotLC(df_X, y_all)
+        
+        # 3. Generate the data (cv=2 to make it run fast on our tiny dummy dataset)
+        plot_obj.gen_learning_curve(model=pipe_rf, cv=2, n_jobs=1)
+        self.assertTrue(hasattr(plot_obj, 'train_mean_lc')) # Verifies calculation succeeded
+        
+        # 4. Test the wrapper which physically saves the PNG
+        fsalgo.plot_learning_curve_save_wrap(
+            algo_plot=plot_obj,
+            train_eval=self.algo,
+            dir_out_viz_base=self.dir_out_alg_ds, # Use temp dir
+            ds=self.dataset_id,
+            cv=2,
+            n_jobs=1
+        )
+        
+        # Verify the .png file was generated and saved to the temp directory
+        expected_png = self.dir_out_alg_ds / self.dataset_id / f"learning_curve_{self.dataset_id}_{self.metric}_rf.png"
+        self.assertTrue(expected_png.exists(), "Learning curve PNG was not saved!")
 # %%
 
 class TestReadMetadata(unittest.TestCase):
@@ -1537,6 +1565,59 @@ class TestTrainTestSplitWrap(unittest.TestCase):
             self.assertIn('dict_gdf_comids', result)
             self.assertEqual(len(result['sub_test_ids']), 2)
             self.assertEqual(len(result['sub_train_ids']), 2)
+
+class TestProcessSingleMetric(unittest.TestCase):
+    def test_process_single_metric_execution(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            
+            # 1. Build tiny dummy DataFrames
+            df_pred_resp = pd.DataFrame({
+                'comid': [str(i) for i in range(1, 11)],
+                'featureSource': ['COMID'] * 10,
+                'target_metric': list(range(10, 110, 10)),
+                'attr1': list(range(1, 11))
+            })
+            
+            gdf_comid = gpd.GeoDataFrame({
+                'comid': [str(i) for i in range(1, 11)]
+            }, geometry=[Point(0,0)] * 10, crs="EPSG:4326")
+            
+            # 2. Package the arguments dictionary exactly as the ProcessPoolExecutor does
+            args_dict = {
+                'metr': 'target_metric',
+                'df_pred_resp': df_pred_resp,
+                'algo_config': {'rf': [{'n_estimators': [5,11]}]}, # Extremely fast 5-tree RF
+                'attrs_sel': ['attr1'],
+                'uncertainty_cfg': {},
+                'dir_out_alg_ds': tmp_path,
+                'ds': 'test_ds',
+                'test_size': 0.2,
+                'seed': 42,
+                'col_locid': 'comid',
+                'verbose': False,
+                'confidence_levels': [95],
+                'uncn_bnd_algo': False,
+                'min_lim': None,
+                'max_lim': None,
+                'make_plots': False, # Skip plotting to keep this unit test lightning fast
+                'dir_out_viz_base': tmp_path,
+                'dir_out_anlys_base': tmp_path,
+                'gdf_comid': gdf_comid
+            }
+            
+            # 3. Execute the worker function
+            metr, eval_df = fsalgo._process_single_metric(args_dict)
+            
+            # 4. Assertions: Check Returns and File I/O
+            self.assertEqual(metr, 'target_metric')
+            self.assertIsInstance(eval_df, pd.DataFrame)
+            self.assertFalse(eval_df.empty)
+            
+            # Verify the worker successfully wrote the prediction observation CSV to disk
+            expected_csv = tmp_path / "test_ds" / "pred_obs_test_ds_target_metric.csv"
+            self.assertTrue(expected_csv.exists(), "Worker failed to write pred_obs CSV!")
+
 
 if __name__ == '__main__':
 
