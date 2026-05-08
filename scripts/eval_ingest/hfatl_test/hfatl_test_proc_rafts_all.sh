@@ -11,7 +11,7 @@
 # -e: Exit immediately if a command exits with a non-zero status.
 # -u: Treat unset variables as an error and exit immediately.
 # -o pipefail: Ensure errors in piped commands are caught.
-set -euo pipefail
+set -euo pipefail || { echo "..."; exit 1; }
 
 # -----------------------------------------------------------------------------
 # PATH DEFINITIONS
@@ -49,7 +49,7 @@ echo "Attribute grabbing completed successfully!"
 
 # 3. Train the algorithms 
 echo "--> Training & testing algorithms..."
-uv run python "${DIR_PY}/fs_proc_algo_viz.py" "${DIR_CONFIG}/hfatl_algo_config_uncn.yaml" || {
+uv run python "${DIR_PY}/fs_proc_algo_pool.py" "${DIR_CONFIG}/hfatl_algo_config_uncn.yaml" --chunk_size 4 || {
     echo "ERROR: Algorithm training failed. Exiting."
     exit 1
 }
