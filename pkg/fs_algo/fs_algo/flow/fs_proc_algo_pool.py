@@ -1,8 +1,9 @@
-"""Workflow script to train algorithms on catchment attribute data for predicting
-    formulation metrics and/or hydrologic signatures.
+"""Workflow script to train algorithms in parallel on catchment attribute data for predicting
+    formulation metrics and/or hydrologic signatures. The fs_proc_algo_viz.py should perform
+    the exact same processing, but without parallelization.
 
 Example: 
-    >>> python fs_proc_algo_viz.py "/path/to/algo_config.yaml"
+    >>> python fs_proc_algo_pool.py "/path/to/algo_config.yaml"
 
 Changelog/Contributions
 2024 Originally created, GL
@@ -32,8 +33,12 @@ import fs_prep.proc_eval_metrics as pem
 from logging.handlers import MemoryHandler
 import logging
 import sys
-import fs_algo.schemas.schemas as schemas
-import yaml 
+
+import copy
+import gc
+import itertools
+import concurrent.futures
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = 'process the algorithm config file')
@@ -41,10 +46,12 @@ if __name__ == "__main__":
                         help='Path to the YAML configuration file specific for algorithm training')
     parser.add_argument('--validate', action='store_true', default=False, 
                         help='If present, enables schema validation for all input and output data. Defaults to False.')
+    parser.add_argument('--chunk_size', default=4, type=int, help = "Set chunk_size to match your physical CPU cores (e.g., 4, 6, or 8)" )
     args = parser.parse_args()
 
     path_algo_config = Path(args.path_algo_config).expanduser() #Path(f'~/git/formulation-selector/scripts/workflow_configs/legacy/xssa/xssa_algo_config.yaml').expanduser()
     config_dir = path_algo_config.parent
+    chunk_size = args.chunk_size
 
     # --- Conditionally load schemas
     arg_val = args.validate 
@@ -284,8 +291,21 @@ if __name__ == "__main__":
         plt.clf()
         # %% Train, test, and evaluate
         rslt_eval = dict()
+        tasks = []
+        # Prepare data for all metrics sequentially to avoid pickling complex xarray objs
         for metr in metrics:
-            logging.info(f' - Processing {metr}')
+            logging.info(f' - Preparing data for {metr}')
+            # GET MIN/MAX BOUNDS FOR THE CURRENT METRIC
+            min_lim = None
+            max_lim = None
+            metric_bounds = fs_catg_uncn[fs_catg_uncn['var'] == metr]            
+            if not metric_bounds.empty:
+                min_lim = metric_bounds['min_lim'].iloc[0]
+                max_lim = metric_bounds['max_lim'].iloc[0]
+                logging.warning(f"   Applying bounds for '{metr}': min={min_lim}, max={max_lim}")
+            else:
+                logging.warning(f"   No bounds found for '{metr}'. Predictions will not be clipped.")
+
             if len(algo_config) == 0:
                 algo_config = algo_config_og.copy()
             # Subset response data to metric of interest & the comid
@@ -304,182 +324,215 @@ if __name__ == "__main__":
                     logging.warning(f"!!!!More than 10% of data are NA values!!!!")
 
             # TODO may need to add additional distinguishing strings to dataset_id, e.g. in cases of probabilistic simulation
+            # Package arguments
+            args_dict = {
+                'metr': metr, 'df_pred_resp': df_pred_resp, 'algo_config': copy.deepcopy(algo_config),
+                'attrs_sel': attrs_sel, 'uncertainty_cfg': uncertainty_cfg, 
+                'dir_out_alg_ds': dir_out_alg_ds, 'ds': ds, 'test_size': test_size,
+                'seed': seed, 'col_locid': col_locid, 'verbose': verbose,
+                'confidence_levels': confidence_levels, 'uncn_bnd_algo': uncn_bnd_algo,
+                'min_lim': min_lim, 'max_lim': max_lim, 'make_plots': make_plots,
+                'dir_out_viz_base': dir_out_viz_base, 'dir_out_anlys_base': dir_out_anlys_base,
+                'gdf_comid': gdf_comid
+            }
+            tasks.append(args_dict)
 
-            # GET MIN/MAX BOUNDS FOR THE CURRENT METRIC
-            min_lim = None
-            max_lim = None
-            metric_bounds = fs_catg_uncn[fs_catg_uncn['var'] == metr]            
-            if not metric_bounds.empty:
-                min_lim = metric_bounds['min_lim'].iloc[0]
-                max_lim = metric_bounds['max_lim'].iloc[0]
-                logging.warning(f"   Applying bounds for '{metr}': min={min_lim}, max={max_lim}")
-            else:
-                logging.warning(f"   No bounds found for '{metr}'. Predictions will not be clipped.")
-
-            # Instantiate the training, testing, and evaluation class
-            train_eval = fsalgt.AlgoTrainEval(df=df_pred_resp,
-                                        attrs=attrs_sel,
-                                        algo_config=algo_config,
-                                        uncertainty=uncertainty_cfg,
-                                        dir_out_alg_ds=dir_out_alg_ds, dataset_id=ds,
-                                        metr=metr,test_size=test_size, rs = seed,
-                                        test_id_col=col_locid,
-                                        verbose=verbose,
-                                        confidence_levels=confidence_levels,
-                                        uncn_bnd_algo=uncn_bnd_algo,
-                                        min_lim=min_lim,
-                                        max_lim=max_lim
-                                        )
-            train_eval.train_eval() # Train, test, eval wrapper
-
-            # Retrieve evaluation metrics dataframe & write to file
-            rslt_eval[metr] = train_eval.eval_df
-            path_eval_metr = fsutil.std_eval_metrs_path(dir_out_viz_base, ds,metr)
-            train_eval.eval_df.to_csv(path_eval_metr)
-
-            #%% Random Forest Feature Importance
-            y_test = train_eval.y_test
-            df_X, y_all = train_eval.all_X_all_y()
-
-            if make_plots:
-                # See if random forest was trained in the AlgoTrainEval class object:
-                rfr = fsalgt._extr_rf_algo(train_eval)
-                if rfr: # Generate & save the feature importance plot
-                    out_dir = Path(dir_out_viz_base) / ds
-
-                    # Save features importances from the trained RF to csv files
-                    imp = getattr(rfr, "feature_importances_", None)
-                    if imp is not None:
-                        fi_df = pd.DataFrame({"feature": df_X.columns, "importance": imp})
-                        fi_df = fi_df.sort_values("importance", ascending=False)
-                        out_csv = out_dir / f"rf_feature_importance_{ds}_{metr}.csv"
-                        fi_df.to_csv(out_csv, index=False)
-                        logging.info(f"Wrote RF feature importances to {out_csv}")
-
-                    # Plot PNG of Feature Importance
-                    fsplot.save_feat_imp_fig_wrap(rfr=rfr,
-                            attrs=df_X.columns,
-                            dir_out_viz_base=dir_out_viz_base,
-                            ds=ds,metr=metr)
-
-                
-                # Create learning curves for each algorithm
-                algo_plot_lc = fsalgt.AlgoEvalPlotLC(df_X,y_all)
-                fsalgt.plot_learning_curve_save_wrap(algo_plot_lc,train_eval, 
-                                dir_out_viz_base=dir_out_viz_base,
-                                ds=ds,
-                                cv = 5,n_jobs=-1,
-                                train_sizes = np.linspace(0.1, 1.0, 10),
-                                scoring = 'neg_mean_squared_error',
-                                ylabel_scoring = "Mean Squared Error (MSE)",
-                                training_uncn = False
-                                )
-
-            # %% Model testing results visualization
-
-            # Initialize min and max errors
-            if make_plots:
-                # Calculate global min and max for consistent uncertainty scaling across all algorithms (but unique scaling for e/ response variable/metric)
-                min_err = float('inf')  # Initialize with a large value
-                max_err = float('-inf')  # Initialize with a small value
-                for algo_str in train_eval.algs_dict.keys():
-                    if train_eval.preds_dict[algo_str].get('y_pis',None) is not None:
-                        y_pred = train_eval.preds_dict[algo_str].get('y_pred',None)
-                        y_pis = train_eval.preds_dict[algo_str].get('y_pis',None)
-                                        # Calculate the global min and max errors across all algorithms
-                        for alpha_val in next(d['alpha'] for d in uncertainty_cfg.get('mapie', [])):
-                            lower_err = y_pred - np.array([y_pis[i].loc['lower_limit', f'alpha_{alpha_val:.2f}'] for i in range(len(y_pred))])
-                            upper_err = np.array([y_pis[i].loc['upper_limit', f'alpha_{alpha_val:.2f}'] for i in range(len(y_pred))]) - y_pred
-                        
-                            total_err = lower_err + upper_err  # Compute total error for this algorithm
-                        
-                            # Update global min and max across all algorithms
-                            min_err = min(min_err, total_err.min())
-                            max_err = max(max_err, total_err.max())
-
-            # ----- Extract y_pred for each algorithm -----
-            dict_test_gdf = dict()
-            for algo_str in train_eval.algs_dict.keys():
-
-                #%% Evaluation: learning curves
-                y_pred = train_eval.preds_dict[algo_str].get('y_pred')
-                y_obs = train_eval.y_test.values
-                
-                if make_plots:
-                    # Regression of testing holdout's prediction vs observation
-                    if train_eval.preds_dict[algo_str].get('y_pis',None) is not None:
-                        y_pis = train_eval.preds_dict[algo_str].get('y_pis')
-                        for alpha_val in next(d['alpha'] for d in uncertainty_cfg.get('mapie', [])):
-                            fsplot.plot_pred_vs_obs_wrap_mapie(y_pred, y_obs, dir_out_viz_base,
-                                    ds, metr, algo_str=algo_str,
-                                    y_pis = y_pis, alpha_val = alpha_val,
-                                    split_type=f'testing{test_size}')
-                    else:
-                           fsplot.plot_pred_vs_obs_wrap(y_pred, y_obs, dir_out_viz_base,
-                                ds, metr, algo_str=algo_str,split_type=f'testing{test_size}')
-                           
-                # PREPARE THE GDF TO ALIGN PREDICTION VALUES BY COMIDS/COORDS
-                # Get the comids corresponding to the testing data/run QA checks
-                comids_test = train_eval.df[col_locid].iloc[train_eval.X_test.index].values
-                test_gdf = gdf_comid[gdf_comid[col_locid].isin(comids_test)].copy()
-                # The comid-y_pred/y_obs mapping:
-                df_test = train_eval.df.iloc[train_eval.y_test.index][[col_locid,metr]].rename(columns={metr:'observed'})
-                df_test['prediction'] = y_pred
-  
-                # Merge the test_gdf with the prediction dataframe
-                test_gdf = test_gdf.merge(df_test, left_on=col_locid, right_on=col_locid, how='left')
+        # 2. Process tasks in strict batches to protect RAM and Disk I/O
+        
+        logging.info(f"Dispatching {len(tasks)} metrics in batches of {chunk_size}...")
+        
+        for batch_num, task_batch in enumerate(itertools.batched(tasks, chunk_size)):
+            logging.info(f"--- Starting Batch {batch_num + 1} ---")
             
-                # Add details on dataset, response variable, and algorithm
-                test_gdf.loc[:,'dataset'] = ds
-                test_gdf.loc[:,'metric'] = metr
-                test_gdf.loc[:,'algo'] = algo_str
-
-                test_gdf.drop_duplicates(subset=[col_locid,'observed','prediction'],inplace=True)
-
-                dict_test_gdf[algo_str] = test_gdf
-                if make_plots:
-                    fsplot.plot_map_pred_wrap(test_gdf,
-                                    dir_out_viz_base, ds,
-                                        metr,algo_str,
-                                        split_type='test',
-                                        colname_data='prediction',
-                                        epsg_reproj=4326)
-                    
-                    # %% Test Prediction Uncertainty Plotting 
-                    for algo_str in train_eval.algs_dict.keys():
-                        if train_eval.preds_dict[algo_str].get('y_pis',None) is not None:
-                            y_pred = train_eval.preds_dict[algo_str].get('y_pred',None)
-                            y_pis = train_eval.preds_dict[algo_str].get('y_pis',None)
-                                            # Calculate the global min and max errors across all algorithms
-                            for alpha_val in next(d['alpha'] for d in uncertainty_cfg.get('mapie', [])):
-                                # Plot the prediction intervals
-                                fsplot.plot_map_pred_wrap_mapie(test_gdf,
-                                                dir_out_viz_base, ds,
-                                                    metr,algo_str,
-                                                    y_pis = y_pis, alpha_val = alpha_val,
-                                                    min_err = min_err, max_err = max_err,
-                                                    split_type='test_mapie',
-                                                    colname_data='prediction')                        
-                                
-            # Generate analysis path out:
-            path_pred_obs = fsutil.std_test_pred_obs_path(dir_out_anlys_base,ds, metr)
-            # TODO why does test_gdf end up with a size larger than total comids? Should be the split test amount
-            df_pred_obs_ds_metr = pd.concat(dict_test_gdf)
-            df_pred_obs_ds_metr.to_csv(path_pred_obs)
-            logging.info(f"Wrote the prediction-observation-coordinates dataset to file\n{path_pred_obs}")
+            # Create a pool EXACTLY the size of the batch
+            with concurrent.futures.ProcessPoolExecutor(max_workers=chunk_size) as executor:
+                results = executor.map(fsalgt._process_single_metric, task_batch)
                 
-            del train_eval
-        # Compile results and write to file
-        rslt_eval_df = pd.concat(rslt_eval).reset_index(drop=True)
+                # Collect the returned dataframes
+                for metr, eval_df in results:
+                    if eval_df is not None:
+                        rslt_eval[metr] = eval_df
+            
+            # 3. Explicit Garbage Collection between batches
+            # This guarantees RAM drops back down to baseline before the next batch spins up
+            logging.info(f"--- Batch {batch_num + 1} Complete. Cleaning up memory... ---")
+            gc.collect()
 
-        # --- VALIDATION and file writing: Result Eval DF ---
-        fsutil.write_validated_evaluation_output(
-            rslt_eval_df=rslt_eval_df, 
-            dir_out_alg_ds=dir_out_alg_ds, 
-            ds=ds,
-            valid_metrics=metrics,
-            arg_val=arg_val
-        )
+        # Compile results and write to file
+        if rslt_eval:
+            rslt_eval_df = pd.concat(rslt_eval.values()).reset_index(drop=True)
+
+            # --- VALIDATION and file writing: Result Eval DF ---
+            fsutil.write_validated_evaluation_output(
+                rslt_eval_df=rslt_eval_df, 
+                dir_out_alg_ds=dir_out_alg_ds, 
+                ds=ds, valid_metrics=metrics, arg_val=arg_val
+            )    
+
+
+    #         # Instantiate the training, testing, and evaluation class
+    #         train_eval = fsalgt.AlgoTrainEval(df=df_pred_resp,
+    #                                     attrs=attrs_sel,
+    #                                     algo_config=algo_config,
+    #                                     uncertainty=uncertainty_cfg,
+    #                                     dir_out_alg_ds=dir_out_alg_ds, dataset_id=ds,
+    #                                     metr=metr,test_size=test_size, rs = seed,
+    #                                     test_id_col=col_locid,
+    #                                     verbose=verbose,
+    #                                     confidence_levels=confidence_levels,
+    #                                     uncn_bnd_algo=uncn_bnd_algo,
+    #                                     min_lim=min_lim,
+    #                                     max_lim=max_lim
+    #                                     )
+    #         train_eval.train_eval() # Train, test, eval wrapper
+
+    #         # Retrieve evaluation metrics dataframe & write to file
+    #         rslt_eval[metr] = train_eval.eval_df
+    #         path_eval_metr = fsutil.std_eval_metrs_path(dir_out_viz_base, ds,metr)
+    #         train_eval.eval_df.to_csv(path_eval_metr)
+
+    #         #%% Random Forest Feature Importance
+    #         y_test = train_eval.y_test
+    #         df_X, y_all = train_eval.all_X_all_y()
+
+    #         if make_plots:
+    #             # See if random forest was trained in the AlgoTrainEval class object:
+    #             rfr = fsalgt._extr_rf_algo(train_eval)
+    #             if rfr: # Generate & save the feature importance plot
+    #                 out_dir = Path(dir_out_viz_base) / ds
+
+    #                 # Save features importances from the trained RF to csv files
+    #                 imp = getattr(rfr, "feature_importances_", None)
+    #                 if imp is not None:
+    #                     fi_df = pd.DataFrame({"feature": df_X.columns, "importance": imp})
+    #                     fi_df = fi_df.sort_values("importance", ascending=False)
+    #                     out_csv = out_dir / f"rf_feature_importance_{ds}_{metr}.csv"
+    #                     fi_df.to_csv(out_csv, index=False)
+    #                     logging.info(f"Wrote RF feature importances to {out_csv}")
+
+    #                 # Plot PNG of Feature Importance
+    #                 fsplot.save_feat_imp_fig_wrap(rfr=rfr,
+    #                         attrs=df_X.columns,
+    #                         dir_out_viz_base=dir_out_viz_base,
+    #                         ds=ds,metr=metr)
+
+                
+    #             # Create learning curves for each algorithm
+    #             algo_plot_lc = fsalgt.AlgoEvalPlotLC(df_X,y_all)
+    #             fsalgt.plot_learning_curve_save_wrap(algo_plot_lc,train_eval, 
+    #                             dir_out_viz_base=dir_out_viz_base,
+    #                             ds=ds,
+    #                             cv = 5,n_jobs=-1,
+    #                             train_sizes = np.linspace(0.1, 1.0, 10),
+    #                             scoring = 'neg_mean_squared_error',
+    #                             ylabel_scoring = "Mean Squared Error (MSE)",
+    #                             training_uncn = False
+    #                             )
+
+    #         # %% Model testing results visualization
+
+    #         # Initialize min and max errors
+    #         if make_plots:
+    #             # Calculate global min and max for consistent uncertainty scaling across all algorithms (but unique scaling for e/ response variable/metric)
+    #             min_err = float('inf')  # Initialize with a large value
+    #             max_err = float('-inf')  # Initialize with a small value
+    #             for algo_str in train_eval.algs_dict.keys():
+    #                 if train_eval.preds_dict[algo_str].get('y_pis',None) is not None:
+    #                     y_pred = train_eval.preds_dict[algo_str].get('y_pred',None)
+    #                     y_pis = train_eval.preds_dict[algo_str].get('y_pis',None)
+    #                                     # Calculate the global min and max errors across all algorithms
+    #                     for alpha_val in next(d['alpha'] for d in uncertainty_cfg.get('mapie', [])):
+    #                         lower_err = y_pred - np.array([y_pis[i].loc['lower_limit', f'alpha_{alpha_val:.2f}'] for i in range(len(y_pred))])
+    #                         upper_err = np.array([y_pis[i].loc['upper_limit', f'alpha_{alpha_val:.2f}'] for i in range(len(y_pred))]) - y_pred
+                        
+    #                         total_err = lower_err + upper_err  # Compute total error for this algorithm
+                        
+    #                         # Update global min and max across all algorithms
+    #                         min_err = min(min_err, total_err.min())
+    #                         max_err = max(max_err, total_err.max())
+
+    #         # ----- Extract y_pred for each algorithm -----
+    #         dict_test_gdf = dict()
+    #         for algo_str in train_eval.algs_dict.keys():
+
+    #             #%% Evaluation: learning curves
+    #             y_pred = train_eval.preds_dict[algo_str].get('y_pred')
+    #             y_obs = train_eval.y_test.values
+                
+    #             if make_plots:
+    #                 # Regression of testing holdout's prediction vs observation
+    #                 if train_eval.preds_dict[algo_str].get('y_pis',None) is not None:
+    #                     y_pis = train_eval.preds_dict[algo_str].get('y_pis')
+    #                     for alpha_val in next(d['alpha'] for d in uncertainty_cfg.get('mapie', [])):
+    #                         fsplot.plot_pred_vs_obs_wrap_mapie(y_pred, y_obs, dir_out_viz_base,
+    #                                 ds, metr, algo_str=algo_str,
+    #                                 y_pis = y_pis, alpha_val = alpha_val,
+    #                                 split_type=f'testing{test_size}')
+    #                 else:
+    #                        fsplot.plot_pred_vs_obs_wrap(y_pred, y_obs, dir_out_viz_base,
+    #                             ds, metr, algo_str=algo_str,split_type=f'testing{test_size}')
+                           
+    #             # PREPARE THE GDF TO ALIGN PREDICTION VALUES BY COMIDS/COORDS
+    #             # Get the comids corresponding to the testing data/run QA checks
+    #             comids_test = train_eval.df[col_locid].iloc[train_eval.X_test.index].values
+    #             test_gdf = gdf_comid[gdf_comid[col_locid].isin(comids_test)].copy()
+    #             # The comid-y_pred/y_obs mapping:
+    #             df_test = train_eval.df.iloc[train_eval.y_test.index][[col_locid,metr]].rename(columns={metr:'observed'})
+    #             df_test['prediction'] = y_pred
+  
+    #             # Merge the test_gdf with the prediction dataframe
+    #             test_gdf = test_gdf.merge(df_test, left_on=col_locid, right_on=col_locid, how='left')
+            
+    #             # Add details on dataset, response variable, and algorithm
+    #             test_gdf.loc[:,'dataset'] = ds
+    #             test_gdf.loc[:,'metric'] = metr
+    #             test_gdf.loc[:,'algo'] = algo_str
+
+    #             test_gdf.drop_duplicates(subset=[col_locid,'observed','prediction'],inplace=True)
+
+    #             dict_test_gdf[algo_str] = test_gdf
+    #             if make_plots:
+    #                 fsplot.plot_map_pred_wrap(test_gdf,
+    #                                 dir_out_viz_base, ds,
+    #                                     metr,algo_str,
+    #                                     split_type='test',
+    #                                     colname_data='prediction')
+                    
+    #                 # %% Test Prediction Uncertainty Plotting 
+    #                 for algo_str in train_eval.algs_dict.keys():
+    #                     if train_eval.preds_dict[algo_str].get('y_pis',None) is not None:
+    #                         y_pred = train_eval.preds_dict[algo_str].get('y_pred',None)
+    #                         y_pis = train_eval.preds_dict[algo_str].get('y_pis',None)
+    #                                         # Calculate the global min and max errors across all algorithms
+    #                         for alpha_val in next(d['alpha'] for d in uncertainty_cfg.get('mapie', [])):
+    #                             # Plot the prediction intervals
+    #                             fsplot.plot_map_pred_wrap_mapie(test_gdf,
+    #                                             dir_out_viz_base, ds,
+    #                                                 metr,algo_str,
+    #                                                 y_pis = y_pis, alpha_val = alpha_val,
+    #                                                 min_err = min_err, max_err = max_err,
+    #                                                 split_type='test_mapie',
+    #                                                 colname_data='prediction')                        
+                                
+    #         # Generate analysis path out:
+    #         path_pred_obs = fsutil.std_test_pred_obs_path(dir_out_anlys_base,ds, metr)
+    #         # TODO why does test_gdf end up with a size larger than total comids? Should be the split test amount
+    #         df_pred_obs_ds_metr = pd.concat(dict_test_gdf)
+    #         df_pred_obs_ds_metr.to_csv(path_pred_obs)
+    #         logging.info(f"Wrote the prediction-observation-coordinates dataset to file\n{path_pred_obs}")
+                
+    #         del train_eval
+    #     # Compile results and write to file
+    #     rslt_eval_df = pd.concat(rslt_eval).reset_index(drop=True)
+
+    #     # --- VALIDATION and file writing: Result Eval DF ---
+    #     fsutil.write_validated_evaluation_output(
+    #         rslt_eval_df=rslt_eval_df, 
+    #         dir_out_alg_ds=dir_out_alg_ds, 
+    #         ds=ds,
+    #         valid_metrics=metrics,
+    #         arg_val=arg_val
+    #     )
                 
         dat_resp.close()
     #%% Cross-comparison across all datasets: determining where the best metric lives

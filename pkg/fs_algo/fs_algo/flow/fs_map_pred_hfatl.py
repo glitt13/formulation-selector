@@ -24,7 +24,7 @@ import sys
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = 'process the prediction config file')
     parser.add_argument('path_pred_config', type=str, help='Path to the YAML configuration file specific for prediction.')
-    parser.add_argument('analysis_str', type=str, default='') # The string to add on to end of each plotting file name
+    parser.add_argument('--analysis_str', type=str, default='',required=False) # The string to add on to end of each plotting file name
     args = parser.parse_args()
 
     path_pred_config = Path(args.path_pred_config).expanduser() 
