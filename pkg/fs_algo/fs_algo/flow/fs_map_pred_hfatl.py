@@ -93,7 +93,12 @@ if __name__ == "__main__":
 
         path_fs_dat_resp =  fsutil._std_fs_prep_ds_paths(dir_std_base=dir_std_base,ds=ds,mtch_str='*.nc')
         path_gpkg_fs_prep = fsutil._std_fs_prep_ds_companion_gpkg_path(path_fs_dat_resp[0])
-        gdf_all = gpd.read_file(path_gpkg_fs_prep)
+        layers = gpd.list_layers(path_gpkg_fs_prep)
+        lyr = None
+        if len(layers) >0:
+            if layers['name'].str.contains('outlet').any():
+                lyr = 'outlet' # Corresponds w/ fs_retr_nhdp_comids_geom_wrap
+        gdf_all = gpd.read_file(path_gpkg_fs_prep,layer=lyr)
         
         vals = {'dir_std_base':dir_std_base,'ds':ds}
         dir_db_attrs = Path(str(dir_db_attrs).format(**vals))
