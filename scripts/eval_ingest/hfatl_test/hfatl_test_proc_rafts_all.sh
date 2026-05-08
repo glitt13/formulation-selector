@@ -65,7 +65,7 @@ echo "Process predictions completed successfully!"
 
 # 5. Map the predictions
 echo "--> Plotting the process predictions on static map..."
-uv run python "${DIR_PY}/fs_map_pred_hfatl.py.py" "" || {
+uv run python "${DIR_PY}/fs_map_pred_hfatl.py" "" || {
     echo "ERROR: Prediction mapping failed. Exiting."
     exit 1
 }
