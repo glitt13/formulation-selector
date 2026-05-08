@@ -123,6 +123,7 @@ if __name__ == "__main__":
     algo_cfig = fsutil.AlgoConfigParser(path_algo_config)
     algo_cfig._read_algo_config()
 
+    task_type = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"].get("task_type", "regression")
     name_attr_csv = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["name_attr_csv"]
     colname_attr_csv = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["colname_attr_csv"]
 
@@ -235,19 +236,20 @@ if __name__ == "__main__":
 
                 # Perform prediction
                 resp_pred = pipe.predict(df_attr_sub_rmna)
-                # Unconditionally warn if any predictions fall out of the physical range.
-                fsutil._warn_if_out_of_bounds(
-                    predictions=resp_pred,
-                    feature_ids=df_attr_sub_rmna.index,
-                    min_lim=min_lim,
-                    max_lim=max_lim,
-                    resp_var=resp_var,
-                    correction_is_active=uncn_bnd_pred,
-                    prediction_type="values"
-                )
-                # --- Apply bounds to the primary prediction value (resp_pred) ---
-                if uncn_bnd_pred:
-                    resp_pred = fsutil.clip_predictions(resp_pred, min_lim, max_lim)
+                if task_type != 'clustering':
+                    # Unconditionally warn if any predictions fall out of the physical range.
+                    fsutil._warn_if_out_of_bounds(
+                        predictions=resp_pred,
+                        feature_ids=df_attr_sub_rmna.index,
+                        min_lim=min_lim,
+                        max_lim=max_lim,
+                        resp_var=resp_var,
+                        correction_is_active=uncn_bnd_pred,
+                        prediction_type="values"
+                    )
+                    # --- Apply bounds to the primary prediction value (resp_pred) ---
+                    if uncn_bnd_pred:
+                        resp_pred = fsutil.clip_predictions(resp_pred, min_lim, max_lim)
 
                 # Initialize DataFrame for storing results
                 df_pred = pd.DataFrame({'featureID': df_attr_sub_rmna.index, 'prediction': resp_pred, 'resp_var': resp_var, 'dataset': ds, 'algo': algo, 'name_algo': Path(path_algo).name})

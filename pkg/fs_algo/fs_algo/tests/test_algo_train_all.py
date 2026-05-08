@@ -1586,6 +1586,7 @@ class TestProcessSingleMetric(unittest.TestCase):
             # 2. Package the arguments dictionary exactly as the ProcessPoolExecutor does
             args_dict = {
                 'metr': 'target_metric',
+                'task_type': 'regression',
                 'df_pred_resp': df_pred_resp,
                 'algo_config': {'rf': [{'n_estimators': [5,11]}]}, # Extremely fast 5-tree RF
                 'attrs_sel': ['attr1'],
