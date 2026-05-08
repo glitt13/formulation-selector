@@ -59,9 +59,9 @@ if attr_menu:
     # i.e. *_training.parquet and *_prediction.parquet files. These shouldn't be nullable, but the code removes missing values.
 schema_df_attr = DataFrameSchema({
         "featureID": Column(pa.Object, nullable=True),  # featureID can be int (comid) or str (gage_id/custom)
-        "featureSource": Column(str,checks=pa.Check.isin(["COMID", "custom_hfuid"]),nullable=True),
+        "featureSource": Column(str,checks=pa.Check.isin(["COMID", "custom_hfuid","comid","hf_id","custom_hfuid", "hfuid","hfa_id","hfv22_id","hfv30_id","hfv31_id"]),nullable=True),
         "data_source": Column(str,nullable=True), # Do not perform checks on data source because there are infinite possibilities when running custom transforms
-        "dl_timestamp": Column(pa.DateTime,nullable=True),
+        "dl_timestamp": Column(pa.DateTime,nullable=True, required = False),
         "attribute": Column(str, nullable=True), # There are infinite possibilities with custom tfrm, so do not perform checks=pa.Check.isin(valid_attributes)
         "value": Column(float,nullable=True),
     },
@@ -84,11 +84,11 @@ def is_point(series):
 
 
 schema_gdf_comid = DataFrameSchema({
-        'sourceName': Column(str, nullable=True),
+        #'sourceName': Column(str, nullable=True),
         'comid': Column(pa.Object, nullable=True),
-        'measure': Column(float, nullable=True),
-        'reachcode': Column(pa.Object, nullable=True), # Assuming reachcode might be string (like '01010003000003')
-        'name': Column(str, nullable=True),
+        'measure': Column(float, nullable=True, required = False),
+        'reachcode': Column(pa.Object, nullable=True, required = False), # Assuming reachcode might be string (like '01010003000003')
+        'name': Column(str, nullable=True, required = False),
         'X': Column(float, nullable=True),
         'Y': Column(float, nullable=True),
         'gage_id': Column(pa.Object, nullable=False), # A fundamental location identifier
@@ -99,7 +99,7 @@ schema_gdf_comid = DataFrameSchema({
             nullable=False
         ),#Column(str, checks=pa.Check.str_matches(wkt_point_pattern), nullable=False), # The point geometry corresponding to the location identifier
         'featureID': Column(pa.Object, nullable=False), # Allows str or int
-        'featureSource': Column(str, checks=pa.Check.isin(["COMID", "nwissite","comid"] ), nullable=False),
+        'featureSource': Column(str, checks=pa.Check.isin(["COMID", "nwissite","comid","hf_id","custom_hfuid", "hfuid","hfa_id","hfv22_id","hfv30_id","hfv31_id"] ), nullable=False),
     },
     # Keep strict=False to allow for any future unlisted columns added by geopandas/fsutil
     coerce=True,
