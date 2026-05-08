@@ -894,70 +894,70 @@ def _process_single_metric(args_dict):
                             total_err = lower_err + upper_err
                             min_err, max_err = min(min_err, total_err.min()), max(max_err, total_err.max())
 
-            # ----- Extract y_pred for each algorithm and build output DataFrames -----
-            dict_test_gdf = dict()
-            col_locid = args_dict['col_locid']
-            ds = args_dict['ds']
-            dir_out_viz_base = args_dict['dir_out_viz_base']
+        # ----- Extract y_pred for each algorithm and build output DataFrames -----
+        dict_test_gdf = dict()
+        col_locid = args_dict['col_locid']
+        ds = args_dict['ds']
+        dir_out_viz_base = args_dict['dir_out_viz_base']
+        
+        for algo_str in train_eval.algs_dict.keys():
+            y_pred = train_eval.preds_dict[algo_str].get('y_pred')
+            y_obs = train_eval.y_test.values
             
-            for algo_str in train_eval.algs_dict.keys():
-                y_pred = train_eval.preds_dict[algo_str].get('y_pred')
-                y_obs = train_eval.y_test.values
-                
-                if args_dict['make_plots']:
-                    # Regression of testing holdout's prediction vs observation
-                    if train_eval.preds_dict[algo_str].get('y_pis', None) is not None:
-                        y_pis = train_eval.preds_dict[algo_str].get('y_pis')
-                        for alpha_val in next(d['alpha'] for d in args_dict['uncertainty_cfg'].get('mapie', [])):
-                            plots.plot_pred_vs_obs_wrap_mapie(
-                                y_pred, y_obs, dir_out_viz_base, ds, metr, algo_str=algo_str,
-                                y_pis=y_pis, alpha_val=alpha_val, split_type=f"testing{args_dict['test_size']}"
-                            )
-                    else:
-                        plots.plot_pred_vs_obs_wrap(
-                            y_pred, y_obs, dir_out_viz_base, ds, metr, 
-                            algo_str=algo_str, split_type=f"testing{args_dict['test_size']}"
+            if args_dict['make_plots']:
+                # Regression of testing holdout's prediction vs observation
+                if train_eval.preds_dict[algo_str].get('y_pis', None) is not None:
+                    y_pis = train_eval.preds_dict[algo_str].get('y_pis')
+                    for alpha_val in next(d['alpha'] for d in args_dict['uncertainty_cfg'].get('mapie', [])):
+                        plots.plot_pred_vs_obs_wrap_mapie(
+                            y_pred, y_obs, dir_out_viz_base, ds, metr, algo_str=algo_str,
+                            y_pis=y_pis, alpha_val=alpha_val, split_type=f"testing{args_dict['test_size']}"
                         )
-                           
-                # PREPARE THE GDF TO ALIGN PREDICTION VALUES BY COMIDS/COORDS
-                comids_test = train_eval.df[col_locid].iloc[train_eval.X_test.index].values
-                test_gdf = args_dict['gdf_comid'][args_dict['gdf_comid'][col_locid].isin(comids_test)].copy()
-                
-                df_test = train_eval.df.iloc[train_eval.y_test.index][[col_locid, metr]].rename(columns={metr:'observed'})
-                df_test['prediction'] = y_pred
-  
-                test_gdf = test_gdf.merge(df_test, left_on=col_locid, right_on=col_locid, how='left')
-                test_gdf.loc[:, 'dataset'] = ds
-                test_gdf.loc[:, 'metric'] = metr
-                test_gdf.loc[:, 'algo'] = algo_str
-                test_gdf.drop_duplicates(subset=[col_locid, 'observed', 'prediction'], inplace=True)
-
-                dict_test_gdf[algo_str] = test_gdf
-
-                if args_dict['make_plots']:
-                    plots.plot_map_pred_wrap(
-                        test_gdf, dir_out_viz_base, ds, metr, algo_str,
-                        split_type='test', colname_data='prediction',
-                        epsg_reproj = 4326
+                else:
+                    plots.plot_pred_vs_obs_wrap(
+                        y_pred, y_obs, dir_out_viz_base, ds, metr, 
+                        algo_str=algo_str, split_type=f"testing{args_dict['test_size']}"
                     )
-                    
-                    # Test Prediction Uncertainty Plotting 
-                    if train_eval.preds_dict[algo_str].get('y_pis', None) is not None:
-                        y_pis = train_eval.preds_dict[algo_str].get('y_pis')
-                        for alpha_val in next(d['alpha'] for d in args_dict['uncertainty_cfg'].get('mapie', [])):
-                            plots.plot_map_pred_wrap_mapie(
-                                test_gdf, dir_out_viz_base, ds, metr, algo_str,
-                                y_pis=y_pis, alpha_val=alpha_val, min_err=min_err, max_err=max_err,
-                                split_type='test_mapie', colname_data='prediction'
-                            )                        
+                        
+            # PREPARE THE GDF TO ALIGN PREDICTION VALUES BY COMIDS/COORDS
+            comids_test = train_eval.df[col_locid].iloc[train_eval.X_test.index].values
+            test_gdf = args_dict['gdf_comid'][args_dict['gdf_comid'][col_locid].isin(comids_test)].copy()
+            
+            df_test = train_eval.df.iloc[train_eval.y_test.index][[col_locid, metr]].rename(columns={metr:'observed'})
+            df_test['prediction'] = y_pred
+
+            test_gdf = test_gdf.merge(df_test, left_on=col_locid, right_on=col_locid, how='left')
+            test_gdf.loc[:, 'dataset'] = ds
+            test_gdf.loc[:, 'metric'] = metr
+            test_gdf.loc[:, 'algo'] = algo_str
+            test_gdf.drop_duplicates(subset=[col_locid, 'observed', 'prediction'], inplace=True)
+
+            dict_test_gdf[algo_str] = test_gdf
+
+            if args_dict['make_plots']:
+                plots.plot_map_pred_wrap(
+                    test_gdf, dir_out_viz_base, ds, metr, algo_str,
+                    split_type='test', colname_data='prediction',
+                    epsg_reproj = 4326
+                )
+                
+                # Test Prediction Uncertainty Plotting 
+                if train_eval.preds_dict[algo_str].get('y_pis', None) is not None:
+                    y_pis = train_eval.preds_dict[algo_str].get('y_pis')
+                    for alpha_val in next(d['alpha'] for d in args_dict['uncertainty_cfg'].get('mapie', [])):
+                        plots.plot_map_pred_wrap_mapie(
+                            test_gdf, dir_out_viz_base, ds, metr, algo_str,
+                            y_pis=y_pis, alpha_val=alpha_val, min_err=min_err, max_err=max_err,
+                            split_type='test_mapie', colname_data='prediction'
+                        )                        
                                 
-            # Generate analysis path out and SAVE the critical CSV
-            path_pred_obs = utils.std_test_pred_obs_path(args_dict['dir_out_anlys_base'], ds, metr)
-            #df_pred_obs_ds_metr = pd.concat(dict_test_gdf.values())
-            df_pred_obs_ds_metr = pd.concat(dict_test_gdf)
-            df_pred_obs_ds_metr.to_csv(path_pred_obs)
-            logging.info(f"{log_prefix} Wrote prediction-observation dataset to {path_pred_obs}")
-            # ... [Your existing learning curve and map plotting logic goes here] ...
+        # Generate analysis path out and SAVE the critical CSV
+        path_pred_obs = utils.std_test_pred_obs_path(args_dict['dir_out_anlys_base'], ds, metr)
+        #df_pred_obs_ds_metr = pd.concat(dict_test_gdf.values())
+        df_pred_obs_ds_metr = pd.concat(dict_test_gdf)
+        df_pred_obs_ds_metr.to_csv(path_pred_obs)
+        logging.info(f"{log_prefix} Wrote prediction-observation dataset to {path_pred_obs}")
+        # ... [Your existing learning curve and map plotting logic goes here] ...
 
         logging.info(f"{log_prefix} Successfully completed.")
         return metr, train_eval.eval_df
