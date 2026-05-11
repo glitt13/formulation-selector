@@ -18,7 +18,7 @@ set -euo pipefail || { echo "..."; exit 1; }
 # -----------------------------------------------------------------------------
 echo "Using system home directory as basis for all paths: $HOME"
 DIR_REPO="$HOME/git/formulation-selector"
-DIR_CONFIG="${DIR_REPO}/scripts/workflow_configs/00example_configs/hfatl_test"
+DIR_CONFIG="${DIR_REPO}/scripts/workflow_configs/00example_configs/hfatl_test_clust"
 #DIR_PRED="${DIR_REPO}/scripts/prediction/rfc_locs"
 DIR_PREP="${DIR_REPO}/pkg/fs_prep/fs_prep/flow"
 DIR_PY="${DIR_REPO}/pkg/fs_algo/fs_algo/flow"
@@ -29,23 +29,23 @@ echo "Running processing from $DIR_CONFIG"
 # EXECUTION WORKFLOW
 # -----------------------------------------------------------------------------
 
-# 1. Prepare the initial dataset
-echo "Starting execution of hfATLAS parameter regionalization scripts..."
-echo "--> Preparing the initial dataset..."
-uv run python "${DIR_CONFIG}/prep_hfatl_test.py" "${DIR_CONFIG}/hfatl_prep_config.yaml" || {
-    echo "ERROR: Dataset preparation failed. Exiting."
-    exit 1
-}
+# # 1. Prepare the initial dataset
+# echo "Starting execution of hfATLAS parameter regionalization scripts..."
+# echo "--> Preparing the initial dataset..."
+# uv run python "${DIR_CONFIG}/prep_hfatl_test.py" "${DIR_CONFIG}/hfatl_prep_config.yaml" || {
+#     echo "ERROR: Dataset preparation failed. Exiting."
+#     exit 1
+# }
 
-# 2. Run the hfATLAS standardized prep script
-echo "--> Grabbing attributes..."
-uv run python "${DIR_PREP}/fs_hfatlas_to_rafts_prep.py" \
-    --path_prep_config "${DIR_CONFIG}/hfatl_prep_config.yaml" \
-    --name_attr_config "hfatl_attr_config.yaml" || {
-    echo "ERROR: Attribute grabbing failed. Exiting."
-    exit 1
-}
-echo "Attribute grabbing completed successfully!"
+# # 2. Run the hfATLAS standardized prep script
+# echo "--> Grabbing attributes..."
+# uv run python "${DIR_PREP}/fs_hfatlas_to_rafts_prep.py" \
+#     --path_prep_config "${DIR_CONFIG}/hfatl_prep_config.yaml" \
+#     --name_attr_config "hfatl_attr_config.yaml" || {
+#     echo "ERROR: Attribute grabbing failed. Exiting."
+#     exit 1
+# }
+# echo "Attribute grabbing completed successfully!"
 
 # 3. Train the algorithms 
 echo "--> Training & testing algorithms..."

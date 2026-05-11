@@ -1,6 +1,7 @@
 """Workflow script to train algorithms in parallel on catchment attribute data for predicting
     formulation metrics and/or hydrologic signatures. The fs_proc_algo_viz.py should perform
-    the exact same processing, but without parallelization.
+    the exact same processing, but without parallelization or the ability to handle
+    unsupervised clustering algorithms.
 
 Example: 
     >>> python fs_proc_algo_pool.py "/path/to/algo_config.yaml" 4 --validate
@@ -56,7 +57,7 @@ if __name__ == "__main__":
     root_logger = logging.getLogger()
     root_logger.addHandler(memory_handler)
     root_logger.setLevel(logging.INFO) # Set the level to capture INFO messages
-    logging.info(f"Running fs_proc_algo_viz.py with \
+    logging.info(f"Running fs_proc_algo_pool.py with \
                 {path_algo_config.parent / path_algo_config.name} config file")
     
     # ---
@@ -120,7 +121,8 @@ if __name__ == "__main__":
     # ---------- Generate path to the log file & initialize logging -----------
     path_log = pem.std_path_log(dir_input=dir_base, 
                                 path_config=path_algo_config,
-                            script='fs_proc_algo_viz')
+                            script='fs_proc_algo_pool')
+    print(f"Logging to {path_log}")
     logging.basicConfig(level=logging.INFO, 
                         filename=path_log, 
                         format='%(asctime)s - %(levelname)s - %(message)s',
@@ -325,19 +327,19 @@ if __name__ == "__main__":
                     if pct_na_dfpred > 10:
                         logging.warning(f"!!!!More than 10% of data are NA values!!!!")
 
-                # TODO may need to add additional distinguishing strings to dataset_id, e.g. in cases of probabilistic simulation
-                # Package arguments
-                args_dict = {
-                    'metr': metr, 'task_type' : task_type, 'df_pred_resp': df_pred_resp, 'algo_config': copy.deepcopy(algo_config),
-                    'attrs_sel': attrs_sel, 'uncertainty_cfg': uncertainty_cfg, 
-                    'dir_out_alg_ds': dir_out_alg_ds, 'ds': ds, 'test_size': test_size,
-                    'seed': seed, 'col_locid': col_locid, 'verbose': verbose,
-                    'confidence_levels': confidence_levels, 'uncn_bnd_algo': uncn_bnd_algo,
-                    'min_lim': min_lim, 'max_lim': max_lim, 'make_plots': make_plots,
-                    'dir_out_viz_base': dir_out_viz_base, 'dir_out_anlys_base': dir_out_anlys_base,
-                    'gdf_comid': gdf_comid
-                }
-                tasks.append(args_dict)
+            # TODO may need to add additional distinguishing strings to dataset_id, e.g. in cases of probabilistic simulation
+            # Package arguments
+            args_dict = {
+                'metr': metr, 'task_type' : task_type, 'df_pred_resp': df_pred_resp, 'algo_config': copy.deepcopy(algo_config),
+                'attrs_sel': attrs_sel, 'uncertainty_cfg': uncertainty_cfg, 
+                'dir_out_alg_ds': dir_out_alg_ds, 'ds': ds, 'test_size': test_size,
+                'seed': seed, 'col_locid': col_locid, 'verbose': verbose,
+                'confidence_levels': confidence_levels, 'uncn_bnd_algo': uncn_bnd_algo,
+                'min_lim': min_lim, 'max_lim': max_lim, 'make_plots': make_plots,
+                'dir_out_viz_base': dir_out_viz_base, 'dir_out_anlys_base': dir_out_anlys_base,
+                'gdf_comid': gdf_comid,'test_ids': test_ids
+            }
+            tasks.append(args_dict)
 
             # 2. Process tasks in strict batches to protect RAM and Disk I/O
             
