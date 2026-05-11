@@ -30,6 +30,9 @@ import logging
 import fs_prep.proc_eval_metrics as pem
 import numpy as np
 
+import fs_algo.fs_algo_train as fsalgt 
+from fs_algo.fs_algo_train import UniversalDistanceClusterer
+
 # Imports for validation
 import importlib.util
 import sys
@@ -211,7 +214,24 @@ if __name__ == "__main__":
             else:
                 logging.warning(f"   No bounds found for '{resp_var}'. Predictions will not be clipped.")
 
-            for algo in algos:
+            # --- DYNAMIC ALGORITHM DISCOVERY ---
+            dynamic_algos = fsutil.discover_dynamic_algos(
+                search_dir=dir_out_alg_ds,
+                base_algos=algos,
+                metric=resp_var,
+                dataset_id=ds,
+                file_prefix="algo_",
+                file_extension=".joblib"
+            )
+                            
+            if not dynamic_algos:
+                logging.warning(f"No trained models found for {resp_var} in {dir_out_alg_ds}. Skipping.")
+                continue
+                
+            logging.info(f"Dynamically discovered algorithms for {resp_var}: {dynamic_algos}")
+            # ----------------------------------------
+
+            for algo in dynamic_algos:
                 path_algo = fsutil.std_algo_path(dir_out_alg_ds, algo=algo, metric=resp_var, dataset_id=ds)
                 
                 # --- Pipeline loading and validation ---
