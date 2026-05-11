@@ -1,9 +1,13 @@
 # Config for training and testing algorithms that predict formulation metrics or hydrologic signatures based on catchment attributes
 # Note: This alternative configuration of the algo_config file was used in early August 2025 to perform process sensitivity analysis and assess uncertainty bounds.
 task_type: 'clustering' # REQUIRED for unsupervised runs
+save_all_clusters: True # Boolean. Save outputs from all cluster sizes specified in the clustering algorithms? Default False.
 algorithms: # REQUIRED. Refer to AlgoTrainEval.train_algos to see what options are present (e.g. rf, mlp)  
   kmeans:
-    - n_clusters: [5] # Provide a list to trigger GridSearchCV for cluster sizes
+    - n_clusters: [5, 8] # Provide a list to trigger GridSearchCV for cluster sizes
+  gower_agglomerative:
+    - n_clusters: [6, 12]
+
 # ... [Keep the rest of your file identical] ...
   # mlp:  # OPTIONAL. Refer to sklearn.neural_network.MLPRegressor for arguments to pass here. Otherwise defaults will be when 'mlp' is specified here
   #   - hidden_layer_sizes: (4,) # expect a tuple for hidden_layer_sizes, which will be interpreted as a string literal

@@ -109,7 +109,22 @@ if __name__ == "__main__":
             gdf_all['featureID'] = gdf_all['comid']
 
         for metr in resp_vars:
-            for algo_str in pred_cfg.pred_cfg_dict.get('algo_type'):
+            # --- DYNAMIC MAPPING DISCOVERY ---
+            dir_preds_ds = Path(dir_out) / 'algorithm_predictions' / ds
+            dynamic_algos = fsutil.discover_dynamic_algos(
+                search_dir=dir_preds_ds,
+                base_algos=pred_cfg.pred_cfg_dict.get('algo_type'),
+                metric=metr,
+                dataset_id=ds,
+                file_prefix="pred_",
+                file_extension=".parquet"
+            )
+            
+            if not dynamic_algos:
+                logging.warning(f"No prediction files found for {metr} to map. Skipping.")
+                continue
+
+            for algo_str in dynamic_algos:
                 logging.info(f"Generating prediction map for dataset: {ds}\nAlgorithm: {algo_str}\nResponse variable: {metr}")
                 
                 path_pred_in = fsutil.std_pred_path(dir_out=dir_out,algo=algo_str,metric=metr,dataset_id=ds)

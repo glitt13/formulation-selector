@@ -336,6 +336,7 @@ if __name__ == "__main__":
                 'seed': seed, 'col_locid': col_locid, 'verbose': verbose,
                 'confidence_levels': confidence_levels, 'uncn_bnd_algo': uncn_bnd_algo,
                 'min_lim': min_lim, 'max_lim': max_lim, 'make_plots': make_plots,
+                'save_all_clusters': algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"].get('save_all_clusters', False),
                 'dir_out_viz_base': dir_out_viz_base, 'dir_out_anlys_base': dir_out_anlys_base,
                 'gdf_comid': gdf_comid,'test_ids': test_ids
             }

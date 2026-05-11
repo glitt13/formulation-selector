@@ -21,8 +21,12 @@ from mapie.regression import MapieRegressor
 import fs_algo.utils as utils
 import fs_algo.plots as plots
 
-from sklearn.cluster import KMeans
-from sklearn.metrics import silhouette_score, davies_bouldin_score
+from sklearn.cluster import KMeans, AgglomerativeClustering
+from sklearn.metrics import silhouette_score, davies_bouldin_score, pairwise_distances
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.base import BaseEstimator, ClusterMixin
+#from sklearn_extra.cluster import KMedoids
+import gower
 import gc
 import traceback
 
@@ -38,7 +42,8 @@ class AlgoTrainEval:
                  test_ids = None,test_id_col:str = 'featureID',
                  verbose: bool = False,
                  confidence_levels: list[int] = [95],
-                 uncn_bnd_algo: bool = False, min_lim: float = None, max_lim: float = None
+                 uncn_bnd_algo: bool = False, min_lim: float = None, max_lim: float = None,
+                 save_all_clusters: bool = False
                  ):
         """The algorithm training and evaluation class.
 
@@ -84,6 +89,8 @@ class AlgoTrainEval:
         :type min_lim: float, optional
         :param max_lim: The maximum bound for the metric, defaults to None.
         :type max_lim: float, optional
+        :param save_all_clusters: When performing unsupervised clustering, should all cluster numbers be considered? Default False
+        :type save_all_clusters: bool, optional
         """
         # class args
         self.df = df # NOTE: df MUST NEVER CHANGE!! df represents the original data, and is used as an index reference in the algo-train script (e.g. fs_proc_algo_viz.py)
@@ -103,7 +110,8 @@ class AlgoTrainEval:
         self.uncn_bnd_algo = uncn_bnd_algo
         self.min_lim = min_lim
         self.max_lim = max_lim
-
+        self.save_all_clusters = save_all_clusters
+        
         # train/test split
         self.X_train = pd.DataFrame()
         self.X_test = pd.DataFrame()
@@ -443,9 +451,47 @@ class AlgoTrainEval:
             # FIT ON X_TRAIN ONLY
             pipe_kmeans.fit(self.X_train) 
             
-            self.algs_dict['kmeans'] = {'algo': kmeans, 'pipeline': pipe_kmeans, 
+            self.algs_dict[f'kmeans_k{n_clust}'] = {'algo': kmeans, 'pipeline': pipe_kmeans, 
                                         'type': 'clustering', 'metric': self.metric, 
                                         'Uncertainty': {}}
+            
+        if 'gower_agglomerative' in self.algo_config: 
+            if self.verbose: logging.info("      Performing Gower Agglomerative Clustering")
+            from sklearn.cluster import AgglomerativeClustering
+            
+            n_clust = self.algo_config['gower_agglomerative'].get('n_clusters', 5)
+            if isinstance(n_clust, list) and len(n_clust) == 1:
+                n_clust = int(n_clust[0])
+
+            # 1. Use Scikit-Learn's native Agglomerative Clustering
+            # 'average' linkage is highly stable for mixed continuous/categorical hydrologic data
+            base_algo = AgglomerativeClustering(n_clusters=n_clust, metric='precomputed', linkage='average')
+            
+            # 2. Pass it into our Universal Wrapper to calculate Gower's and enable .predict()
+            universal_clusterer = UniversalDistanceClusterer(estimator=base_algo, metric='gower')
+            
+            # 3. Create the pipeline and fit
+            pipe_gower = make_pipeline(universal_clusterer)
+            pipe_gower.fit(self.X_train) 
+            
+            self.algs_dict[f'gower_agglomerative_k{n_clust}'] = {
+                'algo': universal_clusterer, 'pipeline': pipe_gower, 
+                'type': 'clustering', 'metric': self.metric, 'Uncertainty': {}
+            }    
+        # if 'gower_kmedoids' in self.algo_config: 
+        #     from sklearn_extra.cluster import KMedoids
+        #     n_clust = int(self.algo_config['gower_kmedoids'].get('n_clusters', [5])[0])
+
+        #     # Pass KMedoids into our Universal Wrapper
+        #     base_algo = KMedoids(n_clusters=n_clust, metric='precomputed', random_state=self.rs)
+        #     universal_clusterer = UniversalDistanceClusterer(estimator=base_algo, metric='gower')
+            
+        #     # Now it acts exactly like a normal scikit-learn pipeline!
+        #     pipe_gower = make_pipeline(universal_clusterer)
+        #     pipe_gower.fit(self.X_train) 
+            
+        #     self.algs_dict['gower_kmedoids'] = {'algo': universal_clusterer, 'pipeline': pipe_gower, 
+        #                                 'type': 'clustering', 'metric': self.metric, 'Uncertainty': {}}
 
     def train_algos_grid_search(self):
         """Train algorithms using GridSearchCV based on the algo config file.
@@ -455,7 +501,7 @@ class AlgoTrainEval:
                 - `rf` for :class:`sklearn.ensemble.RandomForestRegressor`
                 - `mlp` for :class:`sklearn.neural_network.MLPRegressor`
         """
-
+        # --- SUPERVISED REGRESSION ALGORITHMS ---
         if 'rf' in self.algo_config_grid:  # RANDOM FOREST
             if self.verbose:
                 logging.info(f"      Performing Random Forest Training with Grid Search")
@@ -502,45 +548,80 @@ class AlgoTrainEval:
                                     'metric': self.metric,
                                      'Uncertainty': {}
                                      }
-        if 'kmeans' in self.algo_config_grid:  # K-MEANS CLUSTERING (GRID SEARCH)
-            if self.verbose:
-                logging.info(f"      Performing KMeans Clustering with Grid Search")
             
-            cluster_sizes = self.algo_config_grid['kmeans'].get('n_clusters', [3, 5, 8])
+        # --- CLUSTERING ALGORITHMS ---
+        cluster_algs_to_run = [alg for alg in ['kmeans', 'gower_agglomerative'] if alg in self.algo_config_grid]
+
+        for alg_name in cluster_algs_to_run:
+            if self.verbose:
+                logging.info(f"      Performing {alg_name} Clustering with Grid Search")
+            
+            cluster_sizes = self.algo_config_grid[alg_name].get('n_clusters', [3, 5, 8])
             
             best_score = -2.0
             best_model = None
             best_pipe = None
             
-            # Iterate through the list of cluster sizes
             for k in cluster_sizes:
-                kmeans = KMeans(n_clusters=k, random_state=self.rs)
-                pipe_kmeans = make_pipeline(StandardScaler(), kmeans)
-                pipe_kmeans.fit(self.X_train)
+                # 1. Initialize the correct algorithm
+                if alg_name == 'kmeans':
+                    base_algo = KMeans(n_clusters=k, random_state=self.rs)
+                    pipe = make_pipeline(StandardScaler(), base_algo)
+                elif alg_name == 'gower_agglomerative':
+                    from sklearn.cluster import AgglomerativeClustering
+                    agglom = AgglomerativeClustering(n_clusters=k, metric='precomputed', linkage='average')
+                    universal_clusterer = UniversalDistanceClusterer(estimator=agglom, metric='gower')
+                    pipe = make_pipeline(universal_clusterer)
                 
-                # Evaluate on training data to find the best K using Silhouette Score
-                labels = pipe_kmeans.predict(self.X_train)
+                # 2. Fit the pipeline
+                pipe.fit(self.X_train)
+                labels = pipe.predict(self.X_train)
+                
+                # 3. Calculate Score
                 if len(np.unique(labels)) > 1:
                     score = silhouette_score(self.X_train, labels)
                 else:
-                    score = -1.0 # Heavily penalize if it collapses into a single cluster
-                    
-                # Save the model if it achieves a higher separation score
-                if score > best_score:
-                    best_score = score
-                    best_model = kmeans
-                    best_pipe = pipe_kmeans
-                    
-            if self.verbose:
-                logging.info(f"      Optimal KMeans clusters chosen: {best_model.n_clusters} (Silhouette: {best_score:.3f})")
+                    score = -1.0 # Heavily penalize if it collapses
+                
+                # 4. Save logic based on the user's flag
+                if self.save_all_clusters:
+                    # Save EVERY iteration as a distinct algorithm! (e.g., 'kmeans_k5')
+                    iter_name = f"{alg_name}_k{k}"
+                    self.algs_dict[iter_name] = {
+                        'algo': base_algo if alg_name == 'kmeans' else universal_clusterer,
+                        'pipeline': pipe,
+                        'type': 'clustering',
+                        'metric': self.metric,
+                        'Uncertainty': {}
+                    }
+                    if self.verbose:
+                        logging.info(f"      Saved {iter_name} (Silhouette: {score:.3f})")
+                else:
+                    # Only track the best performing iteration
+                    if score > best_score:
+                        best_score = score
+                        best_model = base_algo if alg_name == 'kmeans' else universal_clusterer
+                        best_pipe = pipe
+            
+            # 5. If not saving all, write the absolute best model to the dictionary
+            if not self.save_all_clusters:
+                if self.verbose:
+                    if hasattr(best_model, 'n_clusters'):
+                        opt_k = best_model.n_clusters
+                    else:
+                        opt_k = best_model.estimator.n_clusters
+                    logging.info(f"      Optimal {alg_name} clusters chosen: {best_model.n_clusters} (Silhouette: {best_score:.3f})")
+                winning_name = f"{alg_name}_k{opt_k}"
+                self.algs_dict[winning_name] = {
+                    'algo': best_model,
+                    'pipeline': best_pipe,
+                    'type': 'clustering',
+                    'metric': self.metric,
+                    'Uncertainty': {}
+                }
+        # --------------------------------
+            
 
-            # Route the best model into the primary dictionary for downstream prediction
-            self.algs_dict['kmeans'] = {'algo': best_model,
-                                    'pipeline': best_pipe,
-                                    'type': 'clustering',
-                                    'metric': self.metric,
-                                    'Uncertainty': {}
-                                    }
 
     def predict_algos(self) -> dict:
         """ Make predictions with trained algorithms   
@@ -786,6 +867,44 @@ class AlgoTrainEval:
         # Generate metadata dataframe
         self.org_metadata_alg() # Must be called after save_algos()
 
+
+class UniversalDistanceClusterer(BaseEstimator, ClusterMixin):
+    """
+    Universal wrapper to handle ANY distance metric and ANY clustering algorithm,
+    while guaranteeing a .predict() method exists for out-of-sample data.
+    """
+    def __init__(self, estimator, metric='gower'):
+        self.estimator = estimator
+        self.metric = metric
+        # We use KNN(k=1) as a universal fallback for out-of-sample cluster assignment
+        self.knn_fallback = KNeighborsClassifier(n_neighbors=1, metric='precomputed')
+
+    def _get_distance(self, X1, X2=None):
+        if self.metric == 'gower':
+            return gower.gower_matrix(np.asarray(X1), np.asarray(X2) if X2 is not None else None)
+        else:
+            return pairwise_distances(X1, X2, metric=self.metric)
+
+    def fit(self, X, y=None):
+        if hasattr(X, "columns"): # Record feature names for sklearn compatibility
+            self.feature_names_in_ = np.array(X.columns, dtype=object)
+        self.X_train_ = np.asarray(X)
+        dist_matrix = self._get_distance(self.X_train_)
+        
+        # Fit the underlying clustering algorithm using the precomputed distances
+        self.labels_ = self.estimator.fit_predict(dist_matrix)
+        
+        # Train the KNN fallback so we can assign new basins to these clusters later
+        self.knn_fallback.fit(dist_matrix, self.labels_)
+        return self
+
+    def predict(self, X):
+        # Calculate distance from new ungaged basins to the training donor basins
+        dist_to_train = self._get_distance(X, self.X_train_)
+        
+        # Use the KNN fallback to assign the new basin to the cluster of its nearest donor
+        return self.knn_fallback.predict(dist_to_train)
+
 def _extr_rf_algo(train_eval:AlgoTrainEval)->RandomForestRegressor:
     """Extract random forest from the algs_dict created by AlgoTrainEval class
 
@@ -943,7 +1062,7 @@ def _process_single_metric(args_dict):
             test_id_col=args_dict['col_locid'], verbose=args_dict['verbose'], 
             confidence_levels=args_dict['confidence_levels'],
             uncn_bnd_algo=args_dict['uncn_bnd_algo'], min_lim=args_dict['min_lim'], 
-            max_lim=args_dict['max_lim']
+            max_lim=args_dict['max_lim'], save_all_clusters=args_dict['save_all_clusters']
         )
         train_eval.train_eval()
 

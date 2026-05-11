@@ -15,3 +15,4 @@ algo_response_vars: # List out the desired response variables (e.g. metrics, hyd
   - 'cluster_labels'
 algo_type: # List out the regressor algorithms desired for prediction (e.g. rf, mlp).  # TODO offer 'all'
   - 'kmeans'
+  - 'gower_agglomerative'
