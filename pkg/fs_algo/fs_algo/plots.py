@@ -6,6 +6,7 @@ import logging
 import matplotlib.pyplot as plt
 import matplotlib
 from matplotlib.figure import Figure
+import matplotlib.patches as mpatches
 import pathlib
 from pathlib import Path
 import seaborn as sns
@@ -16,6 +17,7 @@ import geopandas as gpd
 import requests
 import zipfile
 from typing import Iterable
+
 
 # Set up basic logging configuration
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -675,82 +677,88 @@ def plot_map_pred(geo_df:gpd.GeoDataFrame, states:gpd.GeoDataFrame,
                   title:str,metr:str,colname_data:str='prediction',
                   plot_style:str='auto', task_type:str='regression'
                   ):
-    """Genereate a map of predicted response variables
-
-    :param geo_df: Geodataframe of response variable results
-    :type geo_df: gpd.GeoDataFrame
-    :param states: The states basemap
-    :type states: gpd.GeoDataFrame
-    :param title: Map title
-    :type title: str
-    :param metr: The metric/response variable of interest
-    :type metr: str
-    :param colname_data: The geo_df column name representing data of interest, defaults to 'prediction'
-    :type colname_data: str, optional
-    :param plot_style: 'auto', 'points', or 'hexbin'. Defaults to 'auto'
-    :type plot_style: str, optional
-    :return: Map of predicted response variables
-    :rtype: Figure
-    """
-
+    
     # Calculate vmin and vmax based on the data
     vmin = geo_df[colname_data].min(skipna=True)
     vmax = geo_df[colname_data].max(skipna=True)
 
     fig, ax = plt.subplots(1, 1, figsize=(20, 24))
-    base = states.boundary.plot(ax=ax,color="#555555", linewidth=1)
 
-    if task_type == 'clustering':
-        logging.info("Using categorical mapping for cluster labels.")
-        # Map with a discrete colormap (e.g., tab20) and no colorbar
-        geo_df.plot(column=colname_data, ax=ax, categorical=True, cmap='tab20', 
-                    legend=True, markersize=150, zorder=2)
-        states.boundary.plot(ax=ax, color="#555555", linewidth=1, zorder=1, alpha=0.5)
+    # Determine plot style
+    if plot_style == 'auto':
+        plot_style = 'hexbin' if geo_df.shape[0] > 20000 else 'points'
+
+    # --- 1. HEXBIN PLOTTING ---
+    if plot_style == 'hexbin':
+        logging.info(f"Using hexbin mapping for large dataset ({len(geo_df)} points).")
         
-        # Customize the discrete legend
-        legend = ax.get_legend()
-        if legend:
-            legend.set_title("Clusters", prop={'size': 24})
-            for text in legend.get_texts():
-                text.set_fontsize(20)
-                
-    else:
-        # Points
-        geo_df.plot(column=colname_data, ax=ax, markersize=150, cmap='viridis', legend=False, zorder=2) # delete zorder to plot points behind states boundaries
-        # States
-        states.boundary.plot(ax=ax, color="#555555", linewidth=1, zorder=1, alpha=0.5)  # Plot states boundary again with lower zorder
-        
-        if plot_style == 'auto':
-            plot_style = 'hexbin' if geo_df.shape[0] > 20000 else 'points'
+        if task_type == 'clustering':
+            # Use mode for discrete categories and a discrete colormap
+            reduce_C_func = lambda x: pd.Series(x).mode()[0] if len(x) > 0 else np.nan
+            cmap_choice = 'tab20'
+        else:
+            # Use mean for continuous regression and a continuous colormap
+            reduce_C_func = np.mean
+            cmap_choice = 'viridis'
 
+        hb = ax.hexbin(
+            x=geo_df.geometry.x, 
+            y=geo_df.geometry.y, 
+            C=geo_df[colname_data], 
+            reduce_C_function=reduce_C_func, 
+            gridsize=150, 
+            cmap=cmap_choice, 
+            vmin=vmin, vmax=vmax, 
+            zorder=2, alpha=0.9, edgecolors='none'
+        )
+        cbar_mappable = hb
 
-        if plot_style == 'hexbin':
-            logging.info(f"Using hexbin mapping for large dataset ({len(geo_df)} points).")
-            # hexbin aggregates spatial data into geographic bins and takes the mean of the values
-            hb = ax.hexbin(
-                x=geo_df.geometry.x, 
-                y=geo_df.geometry.y, 
-                C=geo_df[colname_data], 
-                reduce_C_function=np.mean, 
-                gridsize=150, # Controls resolution/number of hexagons (higher = smaller hexes)
-                cmap='viridis', 
-                vmin=vmin, vmax=vmax, 
-                zorder=2, alpha=0.9, edgecolors='none'
-            )
-            cbar_mappable = hb # Map the colorbar to the hexbin object
-        else: 
+        if task_type == 'clustering':
+            unique_clusters = sorted(geo_df[colname_data].dropna().unique())
+            cmap = plt.get_cmap(cmap_choice)
+            norm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
+            
+            # Map the exact color assigned to each cluster and create a patch for it
+            legend_elements = [
+                mpatches.Patch(color=cmap(norm(val)), label=f'Cluster {int(val)}') 
+                for val in unique_clusters
+            ]
+            ax.legend(handles=legend_elements, title="Clusters", prop={'size': 20}, 
+                      title_fontsize=24, loc='lower right')
+
+    # --- 2. POINTS PLOTTING ---
+    else: 
+        if task_type == 'clustering':
+            logging.info("Using categorical point mapping for cluster labels.")
+            geo_df.plot(column=colname_data, ax=ax, categorical=True, cmap='tab20', 
+                        legend=True, markersize=150, zorder=2)
+            
+            # Customize the discrete legend
+            legend = ax.get_legend()
+            if legend:
+                legend.set_title("Clusters", prop={'size': 24})
+                for text in legend.get_texts():
+                    text.set_fontsize(20)
+        else:
+            logging.info("Using continuous point mapping.")
             ms = 150 if len(geo_df) < 10000 else max(0.5, 500000 / len(geo_df))
             geo_df.plot(column=colname_data, ax=ax, markersize=ms, cmap='viridis', legend=False, zorder=2)
             cbar_mappable = plt.cm.ScalarMappable(norm=matplotlib.colors.Normalize(vmin=vmin, vmax=vmax), cmap='viridis')
 
+    # Plot states boundary once for both styles
+    states.boundary.plot(ax=ax, color="#555555", linewidth=1, zorder=1, alpha=0.5)  
+
+    # Formatting
     ax.tick_params(axis='x', labelsize= 24)
     ax.tick_params(axis='y', labelsize= 24)
-    plt.xlabel('Longitude',fontsize = 26) # Fixed: X is Longitude
-    plt.ylabel('Latitude',fontsize = 26)  # Fixed: Y is Latitude
+    plt.xlabel('Longitude',fontsize = 26) 
+    plt.ylabel('Latitude',fontsize = 26)  
     
-    cbar_ax = plt.colorbar(cbar_mappable, ax=ax,fraction=0.02, pad=0.04)
-    cbar_ax.set_label(label=metr,size=24)
-    cbar_ax.ax.tick_params(labelsize=24) 
+    # Only draw the continuous colorbar for regression tasks
+    if task_type != 'clustering':
+        cbar_ax = plt.colorbar(cbar_mappable, ax=ax,fraction=0.02, pad=0.04)
+        cbar_ax.set_label(label=metr,size=24)
+        cbar_ax.ax.tick_params(labelsize=24) 
     
     plt.title(title, fontsize = 28)
     ax.set_xlim(-126, -66)

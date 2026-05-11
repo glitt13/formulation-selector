@@ -24,6 +24,7 @@ import fs_algo.plots as plots
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score, davies_bouldin_score
 import gc
+import traceback
 
 # Set up basic logging configuration
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -431,7 +432,11 @@ class AlgoTrainEval:
         if 'kmeans' in self.algo_config:  # K-MEANS CLUSTERING
             if self.verbose: logging.info(f"      Performing KMeans Clustering")
             
-            kmeans = KMeans(n_clusters=self.algo_config['kmeans'].get('n_clusters', 5), 
+            n_clust = self.algo_config['kmeans'].get('n_clusters', 5)
+            if isinstance(n_clust, list) and len(n_clust) == 1:
+                n_clust = int(n_clust[0])
+
+            kmeans = KMeans(n_clusters=n_clust, 
                             random_state=self.rs)
             pipe_kmeans = make_pipeline(StandardScaler(), kmeans)
             
@@ -497,6 +502,45 @@ class AlgoTrainEval:
                                     'metric': self.metric,
                                      'Uncertainty': {}
                                      }
+        if 'kmeans' in self.algo_config_grid:  # K-MEANS CLUSTERING (GRID SEARCH)
+            if self.verbose:
+                logging.info(f"      Performing KMeans Clustering with Grid Search")
+            
+            cluster_sizes = self.algo_config_grid['kmeans'].get('n_clusters', [3, 5, 8])
+            
+            best_score = -2.0
+            best_model = None
+            best_pipe = None
+            
+            # Iterate through the list of cluster sizes
+            for k in cluster_sizes:
+                kmeans = KMeans(n_clusters=k, random_state=self.rs)
+                pipe_kmeans = make_pipeline(StandardScaler(), kmeans)
+                pipe_kmeans.fit(self.X_train)
+                
+                # Evaluate on training data to find the best K using Silhouette Score
+                labels = pipe_kmeans.predict(self.X_train)
+                if len(np.unique(labels)) > 1:
+                    score = silhouette_score(self.X_train, labels)
+                else:
+                    score = -1.0 # Heavily penalize if it collapses into a single cluster
+                    
+                # Save the model if it achieves a higher separation score
+                if score > best_score:
+                    best_score = score
+                    best_model = kmeans
+                    best_pipe = pipe_kmeans
+                    
+            if self.verbose:
+                logging.info(f"      Optimal KMeans clusters chosen: {best_model.n_clusters} (Silhouette: {best_score:.3f})")
+
+            # Route the best model into the primary dictionary for downstream prediction
+            self.algs_dict['kmeans'] = {'algo': best_model,
+                                    'pipeline': best_pipe,
+                                    'type': 'clustering',
+                                    'metric': self.metric,
+                                    'Uncertainty': {}
+                                    }
 
     def predict_algos(self) -> dict:
         """ Make predictions with trained algorithms   
@@ -598,12 +642,21 @@ class AlgoTrainEval:
         for k, v in self.preds_dict.items():
             y_pred = v['y_pred']
             if self.task_type == 'clustering':
+                # Evaluate cluster density only if at least 2 clusters exist in test set
+                n_clusters_predicted = len(np.unique(y_pred))
+                if n_clusters_predicted > 1:
+                    sil_score = silhouette_score(self.X_test, y_pred)
+                    db_score = davies_bouldin_score(self.X_test, y_pred)
+                else:
+                    sil_score = np.nan
+                    db_score = np.nan
+                    logging.warning(f"Only 1 cluster predicted in the test set. Clustering metrics cannot be calculated.")
                 # Evaluate cluster density and separation
                 self.eval_dict[k] = {
                     'type': v['type'],
                     'metric': v['metric'],
-                    'silhouette_score': silhouette_score(self.X_test, y_pred),
-                    'davies_bouldin_score': davies_bouldin_score(self.X_test, y_pred)
+                    'silhouette_score': sil_score,
+                    'davies_bouldin_score': db_score
                 }
             else:
                 resid = y_pred - self.y_test
@@ -744,7 +797,7 @@ def _extr_rf_algo(train_eval:AlgoTrainEval)->RandomForestRegressor:
     if 'rf' in train_eval.algs_dict.keys():
         rfr = train_eval.algs_dict['rf']['algo']
     else:
-        logging.info("Trained random forest object 'rf' non-existent in the provided AlgoTrainEval class object.",
+        logging.info("Trained random forest object 'rf' non-existent in the provided AlgoTrainEval class object." \
               "Check to make sure the algo processing config file creates a random forest. Then make sure the ")
         rfr = None
     return rfr
@@ -886,6 +939,7 @@ def _process_single_metric(args_dict):
             algo_config=args_dict['algo_config'], uncertainty=args_dict['uncertainty_cfg'], 
             dir_out_alg_ds=args_dict['dir_out_alg_ds'], dataset_id=args_dict['ds'],
             metr=metr, task_type = args_dict['task_type'],test_size=args_dict['test_size'], rs=args_dict['seed'], 
+            test_ids = args_dict.get('test_ids'),
             test_id_col=args_dict['col_locid'], verbose=args_dict['verbose'], 
             confidence_levels=args_dict['confidence_levels'],
             uncn_bnd_algo=args_dict['uncn_bnd_algo'], min_lim=args_dict['min_lim'], 
@@ -899,6 +953,7 @@ def _process_single_metric(args_dict):
 
         # 3. Handle Plotting (RF Importance, Learning Curves, Maps, etc.)
         if args_dict['make_plots']:
+            
             logging.info(f"{log_prefix} Generating plots...")
             rfr = _extr_rf_algo(train_eval)
             if rfr:
@@ -943,7 +998,10 @@ def _process_single_metric(args_dict):
         
         for algo_str in train_eval.algs_dict.keys():
             y_pred = train_eval.preds_dict[algo_str].get('y_pred')
-            y_obs = train_eval.y_test.values
+            if args_dict['task_type'] == 'clustering':
+                y_obs = None
+            else:
+                y_obs = train_eval.y_test.values
             
             if args_dict['make_plots'] and args_dict['task_type'] != 'clustering':
                 # Regression of testing holdout's prediction vs observation
@@ -961,13 +1019,13 @@ def _process_single_metric(args_dict):
                     )
                         
             # PREPARE THE GDF TO ALIGN PREDICTION VALUES BY COMIDS/COORDS
-            comids_test = train_eval.df[col_locid].iloc[train_eval.X_test.index].values
+            comids_test = train_eval.df[col_locid].loc[train_eval.X_test.index].values
             test_gdf = args_dict['gdf_comid'][args_dict['gdf_comid'][col_locid].isin(comids_test)].copy()
             
             if args_dict['task_type'] == 'clustering':
                 df_test = pd.DataFrame({col_locid: comids_test, 'observed': np.nan})
             else:
-                df_test = train_eval.df.iloc[train_eval.y_test.index][[col_locid, metr]].rename(columns={metr:'observed'})
+                df_test = train_eval.df.loc[train_eval.y_test.index][[col_locid, metr]].rename(columns={metr:'observed'})
             df_test['prediction'] = y_pred
 
             test_gdf = test_gdf.merge(df_test, left_on=col_locid, right_on=col_locid, how='left')
@@ -1008,6 +1066,7 @@ def _process_single_metric(args_dict):
 
     except Exception as e:
         logging.error(f"{log_prefix} FAILED with error: {e}")
+        logging.error(traceback.format_exc()) #
         return metr, None
 
     finally:
