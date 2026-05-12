@@ -761,8 +761,13 @@ def plot_map_pred(geo_df:gpd.GeoDataFrame, states:gpd.GeoDataFrame,
         cbar_ax.ax.tick_params(labelsize=24) 
     
     plt.title(title, fontsize = 28)
-    ax.set_xlim(-126, -66)
-    ax.set_ylim(24, 50)
+    bounds = geo_df.total_bounds
+    x_buffer = (bounds[2] - bounds[0]) * 0.05
+    y_buffer = (bounds[3] - bounds[1]) * 0.05
+    if x_buffer == 0: x_buffer = 1.0 
+    if y_buffer == 0: y_buffer = 1.0
+    ax.set_xlim(bounds[0] - x_buffer, bounds[2] + x_buffer)
+    ax.set_ylim(bounds[1] - y_buffer, bounds[3] + y_buffer)
     fig = plt.gcf()
 
     return fig
@@ -833,7 +838,8 @@ def plot_map_pred_wrap(test_gdf:gpd.GeoDataFrame,
 def plot_map_pred_mapie(geo_df:gpd.GeoDataFrame, states,title:str,metr:str,
                         y_pis: list, alpha_val:float,
                         min_err: float, max_err: float,
-                        colname_data:str='performance'):
+                        colname_data:str='performance',
+                        task_type:str='regression'):
     """Genereate a map of predicted response variables
 
     :param geo_df: Geodataframe of response variable results
@@ -877,8 +883,20 @@ def plot_map_pred_mapie(geo_df:gpd.GeoDataFrame, states,title:str,metr:str,
     cbar_ax.set_label(label=metr,size=24)
     cbar_ax.ax.tick_params(labelsize=24)  # Set colorbar tick labels size
     plt.title(title, fontsize = 28)
-    ax.set_xlim(-126, -66)
-    ax.set_ylim(24, 50)
+
+    # Dynamically bound the map to the data points rather than the whole US basemap
+    bounds = geo_df.total_bounds  # Returns [minx, miny, maxx, maxy]
+    
+    # Calculate a 5% spatial buffer so edge points aren't cut off by the plot borders
+    x_buffer = (bounds[2] - bounds[0]) * 0.05
+    y_buffer = (bounds[3] - bounds[1]) * 0.05
+    
+    # Fallback just in case all points share the exact same X or Y coordinate
+    if x_buffer == 0: x_buffer = 1.0 
+    if y_buffer == 0: y_buffer = 1.0
+    
+    ax.set_xlim(bounds[0] - x_buffer, bounds[2] + x_buffer)
+    ax.set_ylim(bounds[1] - y_buffer, bounds[3] + y_buffer)
     
     confidence_interval = (1 - alpha_val) * 100
 
@@ -902,7 +920,9 @@ def plot_map_pred_wrap_mapie(test_gdf,dir_out_viz_base, ds,
                       y_pis: list, alpha_val:float,
                       min_err: float, max_err: float,
                       split_type='test',
-                      colname_data='performance'):
+                      colname_data='performance',
+                      epsg_reproj:int=3857,
+                      task_type:str='regression'):
 
     path_pred_map_plot = std_map_pred_path(dir_out_viz_base,ds,metr,algo_str,split_type)
     new_filename = path_pred_map_plot.stem + f"_alpha{alpha_val:.2f}" + path_pred_map_plot.suffix
@@ -912,13 +932,16 @@ def plot_map_pred_wrap_mapie(test_gdf,dir_out_viz_base, ds,
 
     # Ensure the gdf matches the 4326 epsg used for states:
     test_gdf = test_gdf.to_crs(4326)
+    states = states.to_crs(epsg=epsg_reproj)
+    geo_df = test_gdf.to_crs(epsg=epsg_reproj)
 
     # Generate the map
     plot_title = f"Predicted Values: {metr} - {ds}"
     plot_pred_map = plot_map_pred_mapie(geo_df=test_gdf, states=states,title=plot_title,
                                   metr=metr,y_pis=y_pis, alpha_val=alpha_val,
                                   min_err = min_err, max_err = max_err,
-                                  colname_data=colname_data)
+                                  colname_data=colname_data,
+                                  task_type=task_type)
 
     # Save the plot as a .png file
     plot_pred_map.savefig(path_pred_map_plot_mapie, dpi=300, bbox_inches='tight')
@@ -953,8 +976,16 @@ def plot_best_perf_map(geo_df,states, title, comparison_col = 'dataset'):
 
     # Set title and axis limits
     plt.title(title, fontsize=28)
-    ax.set_xlim(-126, -66)
-    ax.set_ylim(24, 50)
+    # Dynamically bound the map to the data points rather than the whole US basemap
+    bounds = geo_df.total_bounds  # Returns [minx, miny, maxx, maxy]
+    # Calculate a 5% spatial buffer so edge points aren't cut off by the plot borders
+    x_buffer = (bounds[2] - bounds[0]) * 0.05
+    y_buffer = (bounds[3] - bounds[1]) * 0.05
+    # Fallback just in case all points share the exact same X or Y coordinate
+    if x_buffer == 0: x_buffer = 1.0 
+    if y_buffer == 0: y_buffer = 1.0
+    ax.set_xlim(bounds[0] - x_buffer, bounds[2] + x_buffer)
+    ax.set_ylim(bounds[1] - y_buffer, bounds[3] + y_buffer)
 
     # Customize the legend, specifically for the geo_df plot
     legend = ax.get_legend()
