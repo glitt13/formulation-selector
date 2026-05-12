@@ -7,7 +7,9 @@ algorithms: # REQUIRED. Refer to AlgoTrainEval.train_algos to see what options a
     - n_clusters: [5, 8] # Provide a list to trigger GridSearchCV for cluster sizes
   gower_agglomerative:
     - n_clusters: [6, 12]
-
+  # NOTE: Supervised algorithms cannot be configured concurrently with unsupervised approaches.
+  # rf:  # STRONGLY RECOMMENDED. Refer to sklearn.ensemble.RandomForestRegressor for arguments to pass here. Otherwise defaults will be used
+  #   - n_estimators: 300 # For grid search
 # ... [Keep the rest of your file identical] ...
   # mlp:  # OPTIONAL. Refer to sklearn.neural_network.MLPRegressor for arguments to pass here. Otherwise defaults will be when 'mlp' is specified here
   #   - hidden_layer_sizes: (4,) # expect a tuple for hidden_layer_sizes, which will be interpreted as a string literal
