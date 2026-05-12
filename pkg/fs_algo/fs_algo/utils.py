@@ -1338,6 +1338,7 @@ def combine_resp_gdf_comid_wrap(dir_std_base:str|os.PathLike,ds:str,path_attr_co
 
     Changelog:
         2025-05-19 refactor: integrate path_meta for gage_id:featureID-featureSource mapping, GL   
+        2026-05-12 refactor: update logic around NA handling for featureID col of dat_resp, Gemini3Pro
     """
 
     dat_resp = _open_response_data_fs(dir_std_base,ds)
@@ -1387,8 +1388,6 @@ def combine_resp_gdf_comid_wrap(dir_std_base:str|os.PathLike,ds:str,path_attr_co
         
     gdf_comid = gdf_comid.merge(df_meta_map, on='gage_id', how='left')
 
-
-
     # --- response data identifier alignment with comids & na removal --- #
     # Subset gdf to the gage_ids that are present in the standardized response variable
     sub_gdf_comid = gdf_comid[gdf_comid['gage_id'].isin(dat_resp['gage_id'].values)]
@@ -1412,20 +1411,52 @@ def combine_resp_gdf_comid_wrap(dir_std_base:str|os.PathLike,ds:str,path_attr_co
     mapped_feat_source = pd.Series(dat_resp['gage_id'].values).map(gage_to_feat_source_map)
     gage_to_comid_map = sub_gdf_comid.set_index('gage_id')[feature_id_col]
     mapped_comids = pd.Series(dat_resp['gage_id'].values).map(gage_to_comid_map)
-    dat_resp = dat_resp.assign_coords(featureID=("gage_id", mapped_comids.values),
-                                      featureSource=("gage_id",mapped_feat_source))
-
-    idxs_na_comid = list(np.where(sub_gdf_comid['featureID'].isna())[0])
-    gage_id_mask = ~np.isin(np.arange(len(dat_resp['gage_id'])),idxs_na_comid)
-    if len(idxs_na_comid) > 0:
-        gage_ids_missing = dat_resp['gage_id'].isel(gage_id=~gage_id_mask).values
-        logging.info(f"A total of {len(idxs_na_comid)} returned comids are NA values. \
-               \nRemoving the following gage_ids from dataset: \
-              \n{gage_ids_missing}")
-        # Remove the unknown comids now that they've been matched up to the original dims in dat_resp:
-        dat_resp = dat_resp.isel(gage_id=gage_id_mask)# remove NA vals from gage_id coord
-
     
+    # --- Strip PyArrow right before injecting into Xarray ---
+    feat_id_arr = np.array(mapped_comids.values, dtype=object)
+    feat_src_arr = np.array(mapped_feat_source.values, dtype=object)
+    
+    dat_resp = dat_resp.assign_coords(
+        featureID=("gage_id", feat_id_arr),
+        featureSource=("gage_id", feat_src_arr)
+    )
+
+    # Find which locations in the GeoDataFrame have NA values for the feature ID
+    idxs_na_comid = list(np.where(sub_gdf_comid[feature_id_col].isna())[0])
+    
+    # # Create a boolean mask of the locations to KEEP (True = Keep, False = Drop)
+    gage_id_mask = ~np.isin(np.arange(len(dat_resp['gage_id'])), idxs_na_comid)
+    
+    if len(idxs_na_comid) > 0:
+        # Define explicit integer indices based on the mask
+        idx_missing = np.where(~gage_id_mask)[0]
+        idx_keep = np.where(gage_id_mask)[0]
+        
+        # 1. Force the 'gage_id' coordinate array to standard objects/strings
+        dat_resp['gage_id'] = dat_resp['gage_id'].astype('O')
+        
+        # 2. Force the other string coordinates to objects to be safe
+        if 'featureID' in dat_resp.coords:
+            dat_resp['featureID'] = dat_resp['featureID'].astype('O')
+        if 'featureSource' in dat_resp.coords:
+            dat_resp['featureSource'] = dat_resp['featureSource'].astype('O')
+
+        # 3. If any data variables are PyArrow strings, convert them too
+        for var in dat_resp.data_vars:
+            if dat_resp[var].dtype == 'string' or str(dat_resp[var].dtype).startswith('string['):
+                 dat_resp[var] = dat_resp[var].astype('O')
+
+        # --- Force PyArrow strings into standard NumPy arrays ---
+        # Manually subset the NumPy array using our integer mask to get the missing IDs
+        # Now that PyArrow is stripped, Xarray's standard .isel() will work flawlessly
+        gage_ids_missing = dat_resp['gage_id'].isel(gage_id=idx_missing).values
+        logging.info(f"A total of {len(idxs_na_comid)} returned location IDs are NA values. \
+               \nRemoving the following gage_ids from the dataset: \
+              \n{gage_ids_missing}")
+            
+        # Remove NA vals from gage_id coord using explicit integer indexing
+        dat_resp = dat_resp.isel(gage_id=idx_keep)
+
     sub_gdf_comid = sub_gdf_comid.drop_duplicates().dropna(subset=['featureID'],axis=0)
     if any(sub_gdf_comid[feature_id_col].duplicated()):
         logging.info("Note that some duplicated comids found in dataset based on initial location identifier, gage_id")
