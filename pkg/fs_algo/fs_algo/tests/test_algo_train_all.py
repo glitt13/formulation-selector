@@ -1602,6 +1602,7 @@ class TestProcessSingleMetric(unittest.TestCase):
                 'min_lim': None,
                 'max_lim': None,
                 'make_plots': False, # Skip plotting to keep this unit test lightning fast
+                'save_all_clusters': False,
                 'dir_out_viz_base': tmp_path,
                 'dir_out_anlys_base': tmp_path,
                 'gdf_comid': gdf_comid
