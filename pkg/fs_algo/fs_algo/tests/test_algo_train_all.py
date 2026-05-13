@@ -1621,6 +1621,129 @@ class TestProcessSingleMetric(unittest.TestCase):
             self.assertTrue(expected_csv.exists(), "Worker failed to write pred_obs CSV!")
 
 
+class TestAlgoTrainEvalClustering(unittest.TestCase):
+    def setUp(self):
+        # Create dummy data
+        self.df = pd.DataFrame({
+            'comid': [f'id_{i}' for i in range(10)],
+            'attr1': np.random.rand(10),
+            'attr2': np.random.rand(10),
+        })
+        
+        # --- FIX: Wrap the parameter dicts in lists ---
+        self.algo_config = {
+            'kmeans': [{'n_clusters': [2, 3]}],
+            'gower_agglomerative': [{'n_clusters': [2]}]
+        }
+        # ----------------------------------------------
+        
+        self.algo_train_eval = fsalgo.AlgoTrainEval(
+            df=self.df, attrs=['attr1', 'attr2'], algo_config=self.algo_config,
+            uncertainty={}, dir_out_alg_ds='./', dataset_id='test',
+            metr='cluster_labels', task_type='clustering', test_size=0.3, rs=42,
+            test_id_col='comid', save_all_clusters=True
+        )
+
+    def test_clustering_pipeline(self):
+        # This single test will hit split_data, train_algos_grid_search, 
+        # predict_algos, and evaluate_algos for the clustering branches!
+        self.algo_train_eval.train_eval()
+        
+        # Verify the dynamic saving of all k-iterations worked
+        self.assertIn('kmeans_k2', self.algo_train_eval.algs_dict)
+        self.assertIn('kmeans_k3', self.algo_train_eval.algs_dict)
+        self.assertIn('gower_agglomerative_k2', self.algo_train_eval.algs_dict)
+        
+        # Verify evaluation metrics generated successfully
+        eval_dict = self.algo_train_eval.eval_dict
+        self.assertIn('silhouette_score', eval_dict['kmeans_k2'])
+
+    def test_universal_distance_clusterer(self):
+        from sklearn.cluster import AgglomerativeClustering
+        X_train = pd.DataFrame({'a': [0, 0, 10, 10], 'b': [0, 1, 10, 11]})
+        X_test = pd.DataFrame({'a': [0.5, 9.5], 'b': [0.5, 10.5]})
+        
+        base_algo = AgglomerativeClustering(n_clusters=2, metric='precomputed', linkage='average')
+        clusterer = fsalgo.UniversalDistanceClusterer(estimator=base_algo, metric='euclidean')
+        
+        # Test fitting
+        clusterer.fit(X_train)
+        self.assertTrue(hasattr(clusterer, 'labels_'))
+        
+        # Test out-of-sample prediction (the KNN fallback)
+        preds = clusterer.predict(X_test)
+        self.assertEqual(len(preds), 2)
+        self.assertNotEqual(preds[0], preds[1]) # They should be assigned to different clusters
+
+    def test_process_single_metric_exception_handling(self):
+        # Pass an intentionally broken args dictionary (missing 'attrs_sel')
+        bad_args = {
+            'metr': 'bad_metric',
+            # Intentionally causing a KeyError by omitting required arguments
+        }
+        
+        # Ensure it doesn't crash the test runner, but returns the safe failure tuple
+        with self.assertLogs(level='ERROR') as cm:
+            metr, eval_df = fsalgo._process_single_metric(bad_args)
+            
+        self.assertEqual(metr, 'bad_metric')
+        self.assertIsNone(eval_df)
+        self.assertTrue(any("FAILED with error" in log for log in cm.output))
+
+class TestMapieInferenceUtilities(unittest.TestCase):
+    print("Testing MAPIE Inference Utilities")
+
+    def test_infer_mapie_alphas(self):
+        """Test extraction of alpha values from column names."""
+        # 1. Happy path: Multiple alphas out of order with noise
+        cols = ['prediction', 'mapie_lower_0.32', 'mapie_upper_0.32', 'forestci', 'mapie_lower_0.05']
+        alphas = fsutil.infer_mapie_alphas(cols)
+        self.assertEqual(alphas, [0.05, 0.32], "Failed to extract and sort valid alpha floats.")
+
+        # 2. Edge case: No mapie columns exist
+        cols_empty = ['prediction', 'forestci', 'algo_name']
+        self.assertEqual(fsutil.infer_mapie_alphas(cols_empty), [], "Should return empty list when no MAPIE cols exist.")
+
+        # 3. Edge case: Bad format (e.g., string cannot be cast to float)
+        cols_bad = ['mapie_lower_abc', 'mapie_lower_0.10']
+        self.assertEqual(fsutil.infer_mapie_alphas(cols_bad), [0.10], "Failed to gracefully ignore malformed MAPIE column names.")
+        print("✅ test_infer_mapie_alphas passed.")
+
+    def test_infer_mapie_errors(self):
+        """Test error calculation math and missing column handling."""
+        # Setup a dummy dataframe with known math
+        df = pd.DataFrame({
+            'prediction': [10.0, 20.0, 30.0],
+            'mapie_lower_0.05': [8.0, 19.0, 25.0],
+            'mapie_upper_0.05': [12.0, 22.0, 31.0]
+        })
+        
+        # 1. Happy path
+        err_dict = fsutil.infer_mapie_errors(df, alpha_val=0.05, colname_data='prediction')
+        
+        # Check that all keys were generated
+        expected_keys = ['lower_err', 'upper_err', 'total_err', 'min_err', 'max_err']
+        for key in expected_keys:
+            self.assertIn(key, err_dict, f"Missing key {key} in returned dictionary.")
+            
+        # Check the underlying math 
+        # Row 0: pred=10, low=8, up=12 -> lower_err=2, upper_err=2, total_err=4
+        # Row 1: pred=20, low=19, up=22 -> total_err=3
+        # Row 2: pred=30, low=25, up=31 -> total_err=6
+        self.assertEqual(err_dict['lower_err'].iloc[0], 2.0, "Lower error math is incorrect.")
+        self.assertEqual(err_dict['upper_err'].iloc[0], 2.0, "Upper error math is incorrect.")
+        self.assertEqual(err_dict['total_err'].iloc[0], 4.0, "Total error math is incorrect.")
+        
+        # Min/Max total_err across all rows -> min=3.0, max=6.0
+        self.assertEqual(err_dict['min_err'], 3.0, "Global minimum error calculation failed.")
+        self.assertEqual(err_dict['max_err'], 6.0, "Global maximum error calculation failed.")
+
+        # 2. Edge case: Missing alpha columns
+        with self.assertRaises(KeyError) as context:
+            fsutil.infer_mapie_errors(df, alpha_val=0.10)
+        self.assertIn("MAPIE columns for alpha 0.10 not found", str(context.exception))
+        
+        print("✅ test_infer_mapie_errors passed.")
 if __name__ == '__main__':
 
     unittest.main()
