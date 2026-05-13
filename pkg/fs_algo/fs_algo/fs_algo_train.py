@@ -1166,12 +1166,21 @@ def _process_single_metric(args_dict):
                 if train_eval.preds_dict[algo_str].get('y_pis', None) is not None:
                     y_pis = train_eval.preds_dict[algo_str].get('y_pis')
                     for alpha_val in next(d['alpha'] for d in args_dict['uncertainty_cfg'].get('mapie', [])):
-                        plots.plot_map_pred_wrap_mapie(
-                            test_gdf, dir_out_viz_base, ds, metr, algo_str,
-                            y_pis=y_pis, alpha_val=alpha_val, min_err=min_err, max_err=max_err,
-                            split_type='test_mapie', colname_data='prediction',
-                            epsg_reproj=4326,task_type='regression'
-                        )                        
+                        test_gdf[f'mapie_lower_{alpha_val:.2f}'] = [y_pis[i].loc['lower_limit', f'alpha_{alpha_val:.2f}'] for i in range(len(y_pis))]
+                        test_gdf[f'mapie_upper_{alpha_val:.2f}'] = [y_pis[i].loc['upper_limit', f'alpha_{alpha_val:.2f}'] for i in range(len(y_pis))]
+                        
+                        plots.plot_map_pred_wrap_uncn(
+                            test_gdf=test_gdf, 
+                            dir_out_viz_base=dir_out_viz_base, 
+                            ds=ds, 
+                            metr=metr, 
+                            algo_str=algo_str,
+                            alpha_val=alpha_val, 
+                            uncn_col=None,
+                            split_type='test_mapie', 
+                            colname_data='prediction',
+                            epsg_reproj=4326
+                        )                   
                                 
         # Generate analysis path out and SAVE the critical CSV
         path_pred_obs = utils.std_test_pred_obs_path(args_dict['dir_out_anlys_base'], ds, metr)

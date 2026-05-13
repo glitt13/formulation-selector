@@ -466,15 +466,21 @@ if __name__ == "__main__":
                                 y_pis = train_eval.preds_dict[algo_str].get('y_pis',None)
                                                 # Calculate the global min and max errors across all algorithms
                                 for alpha_val in next(d['alpha'] for d in uncertainty_cfg.get('mapie', [])):
-                                    # Plot the prediction intervals
-                                    fsplot.plot_map_pred_wrap_mapie(test_gdf,
-                                                    dir_out_viz_base, ds,
-                                                        metr,algo_str,
-                                                        y_pis = y_pis, alpha_val = alpha_val,
-                                                        min_err = min_err, max_err = max_err,
-                                                        split_type='test_mapie',
-                                                        colname_data='prediction',
-                                                        epsg_reproj=4326)                        
+                                    # --- Flatten MAPIE intervals into columns for the unified plotter ---
+                                    test_gdf[f'mapie_lower_{alpha_val:.2f}'] = [y_pis[i].loc['lower_limit', f'alpha_{alpha_val:.2f}'] for i in range(len(y_pis))]
+                                    test_gdf[f'mapie_upper_{alpha_val:.2f}'] = [y_pis[i].loc['upper_limit', f'alpha_{alpha_val:.2f}'] for i in range(len(y_pis))]
+                                    fsplot.plot_map_pred_wrap_uncn(
+                                        test_gdf=test_gdf,
+                                        dir_out_viz_base=dir_out_viz_base, 
+                                        ds=ds,
+                                        metr=metr,
+                                        algo_str=algo_str,
+                                        alpha_val=alpha_val,
+                                        uncn_col=None,
+                                        split_type='test_mapie',
+                                        colname_data='prediction',
+                                        epsg_reproj=4326
+                                    )                      
                                     
                 # Generate analysis path out:
                 path_pred_obs = fsutil.std_test_pred_obs_path(dir_out_anlys_base,ds, metr)

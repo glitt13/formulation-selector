@@ -835,114 +835,96 @@ def plot_map_pred_wrap(test_gdf:gpd.GeoDataFrame,
     plt.clf()
     plt.close()
 
+def plot_map_pred_uncn(geo_df: gpd.GeoDataFrame, states: gpd.GeoDataFrame, title: str, metr: str,
+                       alpha_val: float = None, uncn_col: str = None,
+                       colname_data: str = 'prediction'):
+    """Generate a map where color = prediction value, and size = uncertainty variance/spread."""
+    
+    # 1. Fetch errors dynamically based on the requested uncertainty method
+    if alpha_val is not None:
+        err_dict = fsutil.infer_mapie_errors(geo_df, alpha_val, colname_data)
+        uncn_series = err_dict['total_err']
+        min_err, max_err = err_dict['min_err'], err_dict['max_err']
+        legend_title = f"{(1 - alpha_val) * 100:.0f}% MAPIE CI Range"
+    elif uncn_col is not None and uncn_col in geo_df.columns:
+        uncn_series = geo_df[uncn_col]
+        min_err, max_err = uncn_series.min(), uncn_series.max()
+        legend_title = "ForestCI Variance"
+    else:
+        raise ValueError("Must provide either a valid alpha_val for MAPIE or a valid uncn_col for ForestCI.")
 
-def plot_map_pred_mapie(geo_df:gpd.GeoDataFrame, states,title:str,metr:str,
-                        y_pis: list, alpha_val:float,
-                        min_err: float, max_err: float,
-                        colname_data:str='performance',
-                        task_type:str='regression'):
-    """Genereate a map of predicted response variables
+    # 2. Normalize marker size (scale from 100 to 400)
+    if max_err > min_err:
+        marker_sizes = 100 + 300 * (uncn_series - min_err) / (max_err - min_err)
+    else:
+        # Fallback if all points have the exact same uncertainty
+        marker_sizes = pd.Series(200, index=geo_df.index)
 
-    :param geo_df: Geodataframe of response variable results
-    :type geo_df: gpd.GeoDataFrame
-    :param states: The states basemap
-    :type states: gpd.GeoDataFrame
-    :param title: Map title
-    :type title: str
-    :param metr: The metric/response variable of interest
-    :type metr: str
-    :param colname_data: The geo_df column name representing data of interest, defaults to 'performance'
-    :type colname_data: str, optional
-    :return: Map of predicted response variables
-    :rtype: Figure
-    """
-
-    # Fetch errors dynamically using the utility
-    err_dict = fsutil.infer_mapie_errors(geo_df, alpha_val, colname_data)
-    # Normalize marker size (scale from 100 to 300) using the exact min/max
-    marker_sizes = 100 + 300 * (err_dict['total_err'] - err_dict['min_err']) / (err_dict['max_err'] - err_dict['min_err'])
-
+    # 3. Plotting Setup
     fig, ax = plt.subplots(1, 1, figsize=(20, 24))
-    base = states.boundary.plot(ax=ax,color="#555555", linewidth=1)
-    # Points
-    geo_df.plot(column=colname_data, ax=ax, markersize=marker_sizes, cmap='viridis', legend=False, zorder=2) # delete zorder to plot points behind states boundaries
-    # States
-    states.boundary.plot(ax=ax, color="#555555", linewidth=1, zorder=1)  # Plot states boundary again with lower zorder
+    states.boundary.plot(ax=ax, color="#555555", linewidth=1)
     
-    # TODO: need to customize the colorbar min and max based on the metric
-    ## cbar = plt.cm.ScalarMappable(norm=matplotlib.colors.Normalize(vmin=0,vmax = 1), cmap='viridis')
-    cbar = plt.cm.ScalarMappable(cmap='viridis')
-    ax.tick_params(axis='x', labelsize= 24)
-    ax.tick_params(axis='y', labelsize= 24)
-    plt.xlabel('Latitude',fontsize = 26)
-    plt.ylabel('Longitude',fontsize = 26)
-    cbar_ax = plt.colorbar(cbar, ax=ax,fraction=0.02, pad=0.04)
-    cbar_ax.set_label(label=metr,size=24)
-    cbar_ax.ax.tick_params(labelsize=24)  # Set colorbar tick labels size
-    plt.title(title, fontsize = 28)
+    # 4. Plot the data: Color by prediction, Size by Uncertainty
+    geo_df.plot(column=colname_data, ax=ax, markersize=marker_sizes, cmap='viridis', legend=False, zorder=2)
+    states.boundary.plot(ax=ax, color="#555555", linewidth=1, zorder=1)
+    
+    # 5. Add Colorbar for the Prediction Value
+    vmin, vmax = geo_df[colname_data].min(), geo_df[colname_data].max()
+    cbar = plt.cm.ScalarMappable(norm=matplotlib.colors.Normalize(vmin=vmin, vmax=vmax), cmap='viridis')
+    cbar_ax = plt.colorbar(cbar, ax=ax, fraction=0.02, pad=0.04)
+    cbar_ax.set_label(label=f"Predicted {metr}", size=24)
+    cbar_ax.ax.tick_params(labelsize=24)
 
-    # Dynamically bound the map to the data points rather than the whole US basemap
-    bounds = geo_df.total_bounds  # Returns [minx, miny, maxx, maxy]
-    
-    # Calculate a 5% spatial buffer so edge points aren't cut off by the plot borders
+    plt.title(title, fontsize=28)
+
+    # 6. Dynamic Map Bounds (with 5% buffer)
+    bounds = geo_df.total_bounds
     x_buffer = (bounds[2] - bounds[0]) * 0.05
     y_buffer = (bounds[3] - bounds[1]) * 0.05
-    
-    # Fallback just in case all points share the exact same X or Y coordinate
     if x_buffer == 0: x_buffer = 1.0 
     if y_buffer == 0: y_buffer = 1.0
-    
     ax.set_xlim(bounds[0] - x_buffer, bounds[2] + x_buffer)
     ax.set_ylim(bounds[1] - y_buffer, bounds[3] + y_buffer)
-    
-    confidence_interval = (1 - alpha_val) * 100
 
-    # Add alpha values as text box
-    plt.gca().text(0.88, 0.05, f'alpha = {alpha_val:.2f}', transform=plt.gca().transAxes,
-                   fontsize=16, verticalalignment='top', bbox=dict(facecolor='white', alpha=0.5))
-
-    # Scale Legend (Two dots for min and max error)
+    # 7. Scale Legend for the Uncertainty Circles
     legend_handles = [
         plt.scatter([], [], s=100, color='gray', label=f'{min_err:.2f}'),
-        plt.scatter([], [], s=300, color='gray', label=f'{max_err:.2f}')
+        plt.scatter([], [], s=400, color='gray', label=f'{max_err:.2f}')
     ]
-    ax.legend(handles=legend_handles, title=f"{confidence_interval:.0f}% Confidence Interval", 
+    ax.legend(handles=legend_handles, title=legend_title, 
               loc='lower left', fontsize=20, title_fontsize=22)
 
-    fig = plt.gcf()
-    return fig
+    return plt.gcf()
 
-def plot_map_pred_wrap_mapie(test_gdf,dir_out_viz_base, ds,
-                      metr,algo_str,
-                      y_pis: list, alpha_val:float,
-                      min_err: float, max_err: float,
-                      split_type='test',
-                      colname_data='performance',
-                      epsg_reproj:int=3857,
-                      task_type:str='regression'):
-
-    path_pred_map_plot = std_map_pred_path(dir_out_viz_base,ds,metr,algo_str,split_type)
-    new_filename = path_pred_map_plot.stem + f"_alpha{alpha_val:.2f}" + path_pred_map_plot.suffix
-    path_pred_map_plot_mapie = path_pred_map_plot.with_name(new_filename)
+def plot_map_pred_wrap_uncn(test_gdf, dir_out_viz_base, ds, metr, algo_str,
+                            alpha_val: float = None, uncn_col: str = None,
+                            split_type='test', colname_data='prediction',
+                            epsg_reproj: int = 3857):
+    """Wrapper to handle file I/O, reprojection, and plotting for uncertainty maps."""
+    
+    # Standardize output filenames
+    path_pred_map_plot = std_map_pred_path(dir_out_viz_base, ds, metr, algo_str, split_type)
+    if alpha_val is not None:
+        new_filename = path_pred_map_plot.stem + f"_mapie_alpha{alpha_val:.2f}" + path_pred_map_plot.suffix
+    else:
+        new_filename = path_pred_map_plot.stem + f"_{uncn_col}" + path_pred_map_plot.suffix
+    path_uncn_plot = path_pred_map_plot.with_name(new_filename)
+    
     dir_out_basemap = path_pred_map_plot.parent.parent
-    states = gen_conus_basemap(dir_out_basemap = dir_out_basemap)
+    states = gen_conus_basemap(dir_out_basemap=dir_out_basemap)
 
-    # Ensure the gdf matches the 4326 epsg used for states:
+    # Safely Reproject
     test_gdf = test_gdf.to_crs(4326)
     states = states.to_crs(epsg=epsg_reproj)
     geo_df = test_gdf.to_crs(epsg=epsg_reproj)
 
-    # Generate the map
-    plot_title = f"Predicted Values: {metr} - {ds}"
-    plot_pred_map = plot_map_pred_mapie(geo_df=test_gdf, states=states,title=plot_title,
-                                  metr=metr,y_pis=y_pis, alpha_val=alpha_val,
-                                  min_err = min_err, max_err = max_err,
-                                  colname_data=colname_data,
-                                  task_type=task_type)
+    plot_title = f"Predicted Values and Uncertainty: {metr} - {ds}"
+    plot_pred_map = plot_map_pred_uncn(geo_df=geo_df, states=states, title=plot_title,
+                                       metr=metr, alpha_val=alpha_val, uncn_col=uncn_col,
+                                       colname_data=colname_data)
 
-    # Save the plot as a .png file
-    plot_pred_map.savefig(path_pred_map_plot_mapie, dpi=300, bbox_inches='tight')
-    logging.info(f"Wrote prediction map to \n{path_pred_map_plot}")
+    plot_pred_map.savefig(path_uncn_plot, dpi=300, bbox_inches='tight')
+    logging.info(f"Wrote uncertainty map to \n{path_uncn_plot}")
     plt.clf()
     plt.close()
 
