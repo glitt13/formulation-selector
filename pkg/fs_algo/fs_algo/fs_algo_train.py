@@ -1169,7 +1169,8 @@ def _process_single_metric(args_dict):
                         plots.plot_map_pred_wrap_mapie(
                             test_gdf, dir_out_viz_base, ds, metr, algo_str,
                             y_pis=y_pis, alpha_val=alpha_val, min_err=min_err, max_err=max_err,
-                            split_type='test_mapie', colname_data='prediction'
+                            split_type='test_mapie', colname_data='prediction',
+                            epsg_reproj=4326,task_type='regression'
                         )                        
                                 
         # Generate analysis path out and SAVE the critical CSV
