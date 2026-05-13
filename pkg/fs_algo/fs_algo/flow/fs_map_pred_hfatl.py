@@ -174,26 +174,63 @@ if __name__ == "__main__":
                 )
                 
                 #%% PREDICT UNCERTAINTIES (If MAPIE Alpha columns exist)
-                mapie_cols = [col for col in gdf_pred.columns if col.startswith('mapie_lower_')]
-                if mapie_cols:
-                    for l_col in mapie_cols:
-                        alpha_val = float(l_col.split('_')[-1])
-                        u_col = f"mapie_upper_{alpha_val:.2f}"
+                mapie_alphas = fsutil.infer_mapie_alphas(gdf_pred.columns)
+
+                if mapie_alphas:
+                    # 2. Reconstruct the y_pis list of DataFrames expected by plots.py
+                    y_pis = []
+                    for _, row in gdf_pred.iterrows():
+                        df_dict = {'lower_limit': [], 'upper_limit': []}
+                        col_names = []
                         
-                        if u_col in gdf_pred.columns:
-                            logging.info(f"Generating MAPIE uncertainty map for alpha={alpha_val}")
-                            # Calculate the interval range to visualize uncertainty spread
-                            gdf_pred[f'uncn_range_{alpha_val}'] = gdf_pred[u_col] - gdf_pred[l_col]
-                            
-                            fsplot.plot_map_pred_wrap(
-                                test_gdf=gdf_pred,
-                                dir_out_viz_base=dir_out_viz_base, 
-                                ds=ds,
-                                metr=f"{metr}_uncertainty",
-                                algo_str=algo_str,
-                                split_type=f"{analysis_str}_alpha{alpha_val}",
-                                colname_data=f'uncn_range_{alpha_val}'
-                            )
+                        for alpha in mapie_alphas:
+                            col_names.append(f"alpha_{alpha:.2f}")
+                            df_dict['lower_limit'].append(row[f'mapie_lower_{alpha:.2f}'])
+                            df_dict['upper_limit'].append(row[f'mapie_upper_{alpha:.2f}'])
+                        
+                        # Build the mini DataFrame for this specific location
+                        df_pis = pd.DataFrame([df_dict['lower_limit'], df_dict['upper_limit']], 
+                                                index=['lower_limit', 'upper_limit'], 
+                                                columns=col_names)
+                        y_pis.append(df_pis)
+
+                    # 3. Iterate through alphas, calculate errors, and call the UNMODIFIED wrapper
+                    for alpha_val in mapie_alphas:
+                        logging.info(f"Generating MAPIE concentric uncertainty map for alpha={alpha_val}")
+                        
+                        # Use the utility to get the global min/max for scaling the circles
+                        err_dict = fsutil.infer_mapie_errors(gdf_pred, alpha_val, colname_data='prediction')
+                        
+                        fsplot.plot_map_pred_wrap_mapie(
+                            test_gdf=gdf_pred,
+                            dir_out_viz_base=dir_out_viz_base, 
+                            ds=ds,
+                            metr=metr,
+                            algo_str=algo_str,
+                            y_pis=y_pis,                  # <-- Passing the reconstructed object!
+                            alpha_val=alpha_val,
+                            min_err=err_dict['min_err'],  # <-- Dynamically scaled
+                            max_err=err_dict['max_err'],  # <-- Dynamically scaled
+                            split_type=f"{analysis_str}_mapie",
+                            colname_data='prediction',    # MUST be 'prediction' so plots.py math works
+                            epsg_reproj=4326,
+                            task_type='regression'
+                        )
+                        
+                #%% PREDICT UNCERTAINTIES (If ForestCI exists)
+                if 'forestci' in gdf_pred.columns:
+                    logging.info("Generating ForestCI uncertainty map")
+                    fsplot.plot_map_pred_wrap(
+                        test_gdf=gdf_pred,
+                        dir_out_viz_base=dir_out_viz_base, 
+                        ds=ds,
+                        metr=f"{metr}_forestci_variance",
+                        algo_str=algo_str,
+                        split_type=f"{analysis_str}_forestci",
+                        colname_data='forestci',
+                        epsg_reproj=4326,
+                        task_type='regression' # Force regression to ensure continuous colormap
+                    )
 
         logging.info(f"Completed prediction map generation for {path_pred_config}")
     logging.shutdown()

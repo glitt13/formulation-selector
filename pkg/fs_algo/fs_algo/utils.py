@@ -1810,6 +1810,49 @@ def validate_input_attributes(
             # Exit here as input data schema failure is critical
             sys.exit(1)
 
+def infer_mapie_alphas(columns: list) -> list[float]:
+    """
+    Dynamically extracts unique MAPIE alpha values from a list of DataFrame columns.
+    
+    :param columns: List of column names (e.g., from df.columns).
+    :return: A sorted list of float alpha values.
+    """
+    alphas = set()
+    for col in columns:
+        if col.startswith('mapie_lower_'):
+            try:
+                alphas.add(float(col.split('_')[-1]))
+            except ValueError:
+                continue
+    return sorted(list(alphas))
+
+def infer_mapie_errors(df: pd.DataFrame, alpha_val: float, colname_data: str = 'prediction') -> dict:
+    """
+    Infer lower, upper, and total MAPIE errors for a specific alpha value.
+    
+    :param df: DataFrame containing the prediction and MAPIE bounds.
+    :param alpha_val: The specific alpha value to calculate errors for.
+    :param colname_data: The name of the central prediction column.
+    :return: Dictionary containing the error series and the global min/max for scaling.
+    """
+    l_col = f"mapie_lower_{alpha_val:.2f}"
+    u_col = f"mapie_upper_{alpha_val:.2f}"
+    
+    if l_col not in df.columns or u_col not in df.columns:
+        raise KeyError(f"MAPIE columns for alpha {alpha_val:.2f} not found in DataFrame.")
+        
+    lower_err = np.abs(df[colname_data] - df[l_col])
+    upper_err = np.abs(df[u_col] - df[colname_data])
+    total_err = lower_err + upper_err
+    
+    return {
+        'lower_err': lower_err,
+        'upper_err': upper_err,
+        'total_err': total_err,
+        'min_err': total_err.min(),
+        'max_err': total_err.max()
+    }
+
 def write_validated_prediction_output(
     df_pred_mrge: pd.DataFrame, 
     path_pred_out: Path, 

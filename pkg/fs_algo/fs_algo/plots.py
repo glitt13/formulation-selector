@@ -17,6 +17,7 @@ import geopandas as gpd
 import requests
 import zipfile
 from typing import Iterable
+import fs_algo.utils as fsutil
 
 
 # Set up basic logging configuration
@@ -856,14 +857,10 @@ def plot_map_pred_mapie(geo_df:gpd.GeoDataFrame, states,title:str,metr:str,
     :rtype: Figure
     """
 
-    # Compute error bars
-    lower_err = np.abs(geo_df[colname_data] - np.array([y_pis[i].loc['lower_limit', f'alpha_{alpha_val:.2f}'] for i in range(len(geo_df[colname_data]))]))
-    upper_err = np.abs(np.array([y_pis[i].loc['upper_limit', f'alpha_{alpha_val:.2f}'] for i in range(len(geo_df[colname_data]))]) - geo_df[colname_data])
-    total_err = lower_err + upper_err
-
-    # Normalize marker size (scale from 100 to 300)
-    # min_err, max_err = total_err.min(), total_err.max()
-    marker_sizes = 100 + 300 * (total_err - min_err) / (max_err - min_err)
+    # Fetch errors dynamically using the utility
+    err_dict = fsutil.infer_mapie_errors(geo_df, alpha_val, colname_data)
+    # Normalize marker size (scale from 100 to 300) using the exact min/max
+    marker_sizes = 100 + 300 * (err_dict['total_err'] - err_dict['min_err']) / (err_dict['max_err'] - err_dict['min_err'])
 
     fig, ax = plt.subplots(1, 1, figsize=(20, 24))
     base = states.boundary.plot(ax=ax,color="#555555", linewidth=1)
