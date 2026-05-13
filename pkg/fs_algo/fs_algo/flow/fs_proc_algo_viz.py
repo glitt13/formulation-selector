@@ -473,7 +473,8 @@ if __name__ == "__main__":
                                                         y_pis = y_pis, alpha_val = alpha_val,
                                                         min_err = min_err, max_err = max_err,
                                                         split_type='test_mapie',
-                                                        colname_data='prediction')                        
+                                                        colname_data='prediction',
+                                                        epsg_reproj=4326)                        
                                     
                 # Generate analysis path out:
                 path_pred_obs = fsutil.std_test_pred_obs_path(dir_out_anlys_base,ds, metr)
