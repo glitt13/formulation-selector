@@ -17,5 +17,5 @@ algo_response_vars: # List out the desired response variables (e.g. metrics, hyd
 algo_type: # List out the regressor algorithms desired for prediction (e.g. rf, mlp).  # TODO offer 'all'
   - 'rf'
 MAPIE_alpha: [0.05, 0.32] # OPTIONAL. Enabled if not empty. Alpha parameter (0 < α < 1) in an array format to calculate MAPIE prediction intervals. If empty, MAPIE is not calculated. Note: 1/α (or 1/(1 - α)) must be lower than the number of samples.
-uncn_bnd_pred: False #True  # Optional. Default False. Should the minimum and maximum bounds be applied when calculating the uncertainty? 
+uncn_bnd_pred: True #True  # Optional. Default False. Should the minimum and maximum bounds be applied when calculating the uncertainty? 
 
