@@ -1720,7 +1720,7 @@ def write_validated_evaluation_output(
     arg_val: bool = False
 ):
     """
-    Validates the final model evaluation results schema and writes the result to a Parquet file.
+    Validates the final model evaluation results schema and writes the result to a csv file.
 
     :param rslt_eval_df: The DataFrame containing model performance metrics.
     :type rslt_eval_df: pd.DataFrame
@@ -1746,10 +1746,10 @@ def write_validated_evaluation_output(
             
     rslt_eval_df['dataset'] = ds
     
-    # Final write to Parquet
-    path_eval_parquet = Path(dir_out_alg_ds)/Path('algo_eval_'+ds+'.parquet')
-    rslt_eval_df.to_parquet(path_eval_parquet)
-    logging.info(f'... Wrote training and testing evaluation to file for {ds} at {path_eval_parquet}')
+    # Final write to csv
+    path_eval_csv = Path(dir_out_alg_ds)/Path(f'algo_eval_{ds}.csv')
+    rslt_eval_df.to_csv(path_eval_csv,index=False)
+    logging.info(f'... Wrote training and testing evaluation to file for {ds} at {path_eval_csv}')
 
 # %% PRED ALGO UTILITIES
 
