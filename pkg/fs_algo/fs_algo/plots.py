@@ -500,7 +500,7 @@ def plot_pred_vs_obs_regr(y_pred: np.ndarray, y_obs: np.ndarray, ds:str, metr:st
     plt.axline(min_vals, max_vals, color='black', linestyle='--')
     plt.ylabel('Predicted {}'.format(metr))
     plt.xlabel('Actual {}'.format(metr))
-    plt.title('Observed vs. RaFTS Predicted Values: {}'.format(ds))
+    plt.title('RaFTS-predicted vs. observed: {}'.format(ds))
     if r2_val is not None:
         plt.text(0.05, 0.95, f'$R^2 = {r2_val:.2f}$', transform = plt.gca().transAxes,
              fontsize=12, verticalalignment='top')
@@ -537,7 +537,7 @@ def plot_pred_vs_obs_wrap(y_pred: np.ndarray, y_obs:np.ndarray, dir_out_viz_base
     plt.close()
 
 def plot_pred_vs_obs_regr_mapie(y_pred: np.ndarray, y_obs: np.ndarray, ds:str,
-                                metr:str, y_pis: list, alpha_val:float)->Figure:
+                                metr:str, y_pis: list, alpha_val:float, r2_val:float=None)->Figure:
     """Plot the observed vs. predicted module performance
 
     :param y_pred: The predicted response variable
@@ -570,18 +570,22 @@ def plot_pred_vs_obs_regr_mapie(y_pred: np.ndarray, y_obs: np.ndarray, ds:str,
     plt.axline(min_vals, max_vals, color='black', linestyle='--')
     plt.ylabel('Predicted {}'.format(metr))
     plt.xlabel('Actual {}'.format(metr))
-    plt.title('Observed vs. RaFTS Predicted Values: {}'.format(ds))
+    plt.title('RaFTS-predicted vs. observed: {}'.format(ds))
 
     # Add alpha values as text box
     plt.gca().text(0.05, 0.95, f'alpha = {alpha_val:.2f}', transform=plt.gca().transAxes,
                    fontsize=10, verticalalignment='top', bbox=dict(facecolor='white', alpha=0.5))
+    
+    if r2_val is not None:
+        plt.gca().text(0.05, 0.98, f'$R^2 = {r2_val:.2f}$', transform=plt.gca().transAxes,
+                       fontsize=12, verticalalignment='top', bbox=dict(facecolor='white', alpha=0.5))
 
     fig = plt.gcf()
     return fig
 
 def plot_pred_vs_obs_wrap_mapie(y_pred: np.ndarray, y_obs:np.ndarray, dir_out_viz_base:str|Path,
                            ds:str, metr:str, algo_str:str,y_pis: list, alpha_val:float,
-                           split_type:str=''):
+                           split_type:str='',r2_val:float=None):
     """Wrapper to create & save predicted vs. observed regression plot
 
     :param y_pred: The predicted response variable
@@ -600,7 +604,7 @@ def plot_pred_vs_obs_wrap_mapie(y_pred: np.ndarray, y_obs:np.ndarray, dir_out_vi
     :type split_type: str, optional
     """
     # Generate figure
-    fig_regr = plot_pred_vs_obs_regr_mapie(y_pred, y_obs, ds, metr, y_pis, alpha_val)
+    fig_regr = plot_pred_vs_obs_regr_mapie(y_pred, y_obs, ds, metr, y_pis, alpha_val, r2_val)
     # Generate filepath for saving figure
     path_regr_plot = std_regr_pred_obs_path_mapie(dir_out_viz_base, ds,
                             metr,algo_str,alpha_val,split_type)
