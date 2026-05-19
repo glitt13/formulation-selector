@@ -303,7 +303,7 @@ def std_form_id(col_schema_df:pd.DataFrame)->str:
                         '_v',
                         col_schema_df.loc[0, 'formulation_ver'], 
                         '_',
-                        col_schema_df['dataset_name']
+                        col_schema_df.loc[0,'dataset_name']
                     ]
                 )
             )
