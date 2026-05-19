@@ -1122,6 +1122,8 @@ def _process_single_metric(args_dict):
             else:
                 y_obs = train_eval.y_test.values
             
+            r2_val = train_eval.eval_dict[algo_str].get('r2', None)
+
             if args_dict['make_plots'] and args_dict['task_type'] != 'clustering':
                 # Regression of testing holdout's prediction vs observation
                 if train_eval.preds_dict[algo_str].get('y_pis', None) is not None:
@@ -1129,12 +1131,14 @@ def _process_single_metric(args_dict):
                     for alpha_val in next(d['alpha'] for d in args_dict['uncertainty_cfg'].get('mapie', [])):
                         plots.plot_pred_vs_obs_wrap_mapie(
                             y_pred, y_obs, dir_out_viz_base, ds, metr, algo_str=algo_str,
-                            y_pis=y_pis, alpha_val=alpha_val, split_type=f"testing{args_dict['test_size']}"
+                            y_pis=y_pis, alpha_val=alpha_val, split_type=f"testing{args_dict['test_size']}",
+                            r2_val=r2_val
                         )
                 else:
                     plots.plot_pred_vs_obs_wrap(
                         y_pred, y_obs, dir_out_viz_base, ds, metr, 
-                        algo_str=algo_str, split_type=f"testing{args_dict['test_size']}"
+                        algo_str=algo_str, split_type=f"testing{args_dict['test_size']}",
+                        r2_val=r2_val
                     )
                         
             # PREPARE THE GDF TO ALIGN PREDICTION VALUES BY COMIDS/COORDS

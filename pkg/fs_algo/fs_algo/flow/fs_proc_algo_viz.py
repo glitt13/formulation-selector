@@ -396,7 +396,8 @@ if __name__ == "__main__":
                         if train_eval.preds_dict[algo_str].get('y_pis',None) is not None:
                             y_pred = train_eval.preds_dict[algo_str].get('y_pred',None)
                             y_pis = train_eval.preds_dict[algo_str].get('y_pis',None)
-                                            # Calculate the global min and max errors across all algorithms
+
+                            # Calculate the global min and max errors across all algorithms
                             for alpha_val in next(d['alpha'] for d in uncertainty_cfg.get('mapie', [])):
                                 lower_err = y_pred - np.array([y_pis[i].loc['lower_limit', f'alpha_{alpha_val:.2f}'] for i in range(len(y_pred))])
                                 upper_err = np.array([y_pis[i].loc['upper_limit', f'alpha_{alpha_val:.2f}'] for i in range(len(y_pred))]) - y_pred
@@ -414,7 +415,7 @@ if __name__ == "__main__":
                     #%% Evaluation: learning curves
                     y_pred = train_eval.preds_dict[algo_str].get('y_pred')
                     y_obs = train_eval.y_test.values
-                    
+                    r2_val = train_eval.eval_dict[algo_str].get('r2', None)
                     if make_plots and task_type != 'clustering':
                         # Regression of testing holdout's prediction vs observation
                         if train_eval.preds_dict[algo_str].get('y_pis',None) is not None:
@@ -423,10 +424,10 @@ if __name__ == "__main__":
                                 fsplot.plot_pred_vs_obs_wrap_mapie(y_pred, y_obs, dir_out_viz_base,
                                         ds, metr, algo_str=algo_str,
                                         y_pis = y_pis, alpha_val = alpha_val,
-                                        split_type=f'testing{test_size}')
+                                        split_type=f'testing{test_size}',r2_val=r2_val)
                         else:
                             fsplot.plot_pred_vs_obs_wrap(y_pred, y_obs, dir_out_viz_base,
-                                    ds, metr, algo_str=algo_str,split_type=f'testing{test_size}')
+                                    ds, metr, algo_str=algo_str,split_type=f'testing{test_size}',r2_val=r2_val)
                             
                     # PREPARE THE GDF TO ALIGN PREDICTION VALUES BY COMIDS/COORDS
                     # Get the comids corresponding to the testing data/run QA checks
