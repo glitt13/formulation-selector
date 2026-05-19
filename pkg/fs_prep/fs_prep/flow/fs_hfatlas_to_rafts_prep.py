@@ -81,6 +81,12 @@ if __name__ == "__main__":
     path_meta_fstr = [x for x in attr_cfig.attr_config.get('file_io') if 'path_meta' in x][0]['path_meta']
     # The hfatlas attribute column names of interest:
     attrs_sel = attr_cfig.attrs_cfg_dict.get("attrs_sel")
+    # Determine the identifier column, or assume it's 'divide_id'
+    attr_select_list = attr_cfig.attr_config.get('attr_select', [])
+    map_id_col = next(
+        (x.get('hfatl_id_col') for x in attr_select_list if isinstance(x, dict) and 'hfatl_id_col' in x), 
+        "divide_id"
+    )
 
     # TODO add path_hfatl to attr_config parser
     home_dir = Path.home()
@@ -129,7 +135,7 @@ if __name__ == "__main__":
         # Hydrofabric cols, location id cols, & data source
         hf_layer = fio.get("hf_fp_layer", "flowpaths") # In hf v2.2, the flowpath layer that maps divide_ids & VPUs
         hf_id_col = fio.get("hf_fp_id_col", "id") # Flowpath layer's id column
-        map_id_col = fio.get("map_id_col", "divide_id") # TODO should this differ from fio.get('gage_id')? A: probably. 
+        #map_id_col = fio.get("map_id_col", "divide_id") # TODO should this differ from fio.get('gage_id')? A: probably. 
         map_id_type = fio.get("map_id_type", "hf_id")
         vpu_id_col = fio.get("vpu_id_col", "vpuid") # Column name for vpu id in the hydrofabric f"{hf_layer}"
         vpu_mapped = fio.get('vpu_mapped', False) # Should output data be organized by vpu? vpu_mapped = True
