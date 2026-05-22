@@ -2081,14 +2081,35 @@ def generate_algo_points_gpkg_wrap(
     formatted_ids = ", ".join([f"'{div_id}'" for div_id in div_ids])
     where_clause = f"{map_id_col} IN ({formatted_ids})"
 
-    # Read ONLY the requested rows
-    sub_fp_gdf = gpd.read_file(
-        path_hf_gpkg, 
-        layer=hf_layer, 
-        where=where_clause,
-        engine="pyogrio" 
-    )
-
+    gdfs_to_concat = []
+    # ---> NEW: Strategy to handle both directories and single files <---
+    if path_hf_gpkg.is_dir():
+        logging.info(f"Directory detected. Scanning {path_hf_gpkg} for GPKG files...")
+        for gpkg_file in path_hf_gpkg.glob("*.gpkg"):
+            try:
+                # Read ONLY the requested rows for each file
+                gdf = gpd.read_file(gpkg_file, layer=hf_layer, where=where_clause, engine="pyogrio")
+                if not gdf.empty:
+                    gdfs_to_concat.append(gdf)
+            except Exception as e:
+                logging.debug(f"Skipped {gpkg_file.name} or layer '{hf_layer}' not found: {e}")
+    elif path_hf_gpkg.is_file():
+        logging.info(f"Single GPKG file detected: {path_hf_gpkg.name}")
+        # Read ONLY the requested rows
+        sub_fp_gdf = gpd.read_file(
+            path_hf_gpkg, 
+            layer=hf_layer, 
+            where=where_clause,
+            engine="pyogrio" 
+        )
+        if not sub_fp_gdf.empty:
+            gdfs_to_concat.append(sub_fp_gdf)
+    else:
+        raise FileNotFoundError(f"Hydrofabric path is neither a file nor directory: {path_hf_gpkg}")
+    
+    # Combine the read geometries
+    sub_fp_gdf = pd.concat(gdfs_to_concat, ignore_index=True)
+    sub_fp_gdf = gpd.GeoDataFrame(sub_fp_gdf, geometry='geometry', crs=gdfs_to_concat[0].crs)
     sub_fp_gdf.to_crs(epsg=epsg, inplace=True)
 
     if vpu_id_col not in sub_fp_gdf.columns:
@@ -2190,6 +2211,37 @@ def hfatl_hf_cmbo_wrap(df_hfatlas:pd.DataFrame, gdf_hf:gpd.GeoDataFrame,
     
     logging.info(f"Wrote parquet files grouped by VPU to {save_path.parent.parent}")
     return df_long
+
+def std_dir_ds_agg(dir_db_attrs: str, ds:str) -> Path:
+        """Standardized directory for a basin-aggregated dataset of attributes.
+        Intended for aggregating hydrofabric attributes by divide to larger scales
+
+        :param dir_db_attrs: The base directory with {ds} f-string placeholder
+        :type dir_db_attrs: str
+        :param ds: The dataset string
+        :type ds: str
+        :return: Directory of the dataset attributes aggregated by basin
+        :rtype: Path
+        :seealso: fs_agg_hfatl_basin.py for creation context
+        """
+        ds_agg_str = ds + '_agg_hfatl'
+        dir_db_attrs_agg_save = Path(str(dir_db_attrs).format(ds=ds_agg_str))
+        dir_db_attrs_agg_save.mkdir(parents=True, exist_ok=True)
+        return dir_db_attrs_agg_save
+
+def std_path_agg_ds(dir_db_attrs_agg_save: Path, ds: str) -> Path:
+    """Standardized path for a basin-aggregated dataset of attributes.
+        Intended for aggregating hydrofabric attributes by divide to larger scales
+
+    :param dir_db_attrs_agg_save: Directory of the dataset attributes aggregated by basin from std_dir_ds_agg
+    :type dir_db_attrs_agg_save: Path
+    :param ds: The dataset string
+    :type ds: str
+    :return: _description_
+    :rtype: Path
+    """
+    out_path = dir_db_attrs_agg_save / f"{ds}_agg_hfatlas.parquet"
+    return out_path
 
 def generate_vpu_attr_filepath(dir_db_attrs: Path, dataset_name: str, vpuid: str) -> Path:
     """Creates a standardized filepath grouped by dataset and VPU identifier.
