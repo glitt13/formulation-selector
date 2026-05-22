@@ -2,6 +2,7 @@
 
 Intended to run after the initial prep script that generates the response variable .nc file.
 
+In cases where divides need to be aggregated to a larger scale, fs_agg_hfatl_basin.py should be run immediately before this script.
 
 Example: 
     >>> uv run python fs_hfatlas_to_rafts_prep.py --path_prep_config "~/git/formulation-selector/scripts/eval_ingest/hfatl_test2/hfatl_prep_config.yaml" --name_attr_config "hfatl_attr_config.yaml"
@@ -69,7 +70,7 @@ if __name__ == "__main__":
     path_attr_config = fsutil.build_cfig_path(path_known_config = path_prep_config, path_or_name_cfig = args.name_attr_config)
     attr_cfig = fsutil.AttrConfigAndVars(path_attr_config)
     attr_cfig._read_attr_config()
-    
+    home_dir =  fsutil._define_home_dir(attr_cfig.attr_config)
     # Define directories/datasets from the attribute config file
     dir_db_attrs = attr_cfig.attrs_cfg_dict.get('dir_db_attrs')
     dir_std_base = attr_cfig.attrs_cfg_dict.get('dir_std_base')
@@ -89,7 +90,7 @@ if __name__ == "__main__":
     )
 
     # TODO add path_hfatl to attr_config parser
-    home_dir = Path.home()
+    
     paths_raw = [
         x.get('paths_hfatl') 
         for x in attr_cfig.attr_config.get('attr_select', []) 
@@ -143,9 +144,9 @@ if __name__ == "__main__":
         # Define path of the response variable dataset
         path_fs_dat_resp =  fsutil._std_fs_prep_ds_paths(dir_std_base=dir_std_base,ds=ds,mtch_str='*.nc')
         if len(path_fs_dat_resp) > 1:
-                error_str = f"The following directory contains too many .nc files: {path_fs_dat_resp}"
-                logging.error(error_str)
-                raise ValueError(error_str)
+            error_str = f"The following directory contains too many .nc files: {path_fs_dat_resp}"
+            logging.error(error_str)
+            raise ValueError(error_str)
         
         # Define path of the standardized .gpkg file write of combined attributes & geometry (alternative to metadata parquet)
         # TODO should we also consider prediction locations here?
@@ -170,9 +171,23 @@ if __name__ == "__main__":
         paths_str = "\n    ".join(str(p) for p in paths_hfatl)
         logging.info(f"Loading hfATLAS predictors from \n{paths_str}")
         
-        # Run attribute read & clean wrapper function
-        df_hfatlas = fsutil.read_hfatlas_wrap_dask(paths_hfatl, attrs_sel, 
-                              map_id_col)
+        # Check if the aggregated attributes are defined in the config file and have been created via fs_agg_hfatl_basin.py
+        path_hf_gpkg_basins = raw_config.get('path_hf_basins_gpkg', None)
+        if path_hf_gpkg_basins:
+            dir_db_attrs_agg_save = fsutil.std_dir_ds_agg(dir_db_attrs, ds)
+            out_path = fsutil.std_path_agg_ds(dir_db_attrs_agg_save=dir_db_attrs_agg_save, ds = ds)
+            if Path(out_path).exists():
+                logging.info(f"Aggregated attributes file found for {ds} at {out_path}. Loading this file instead of performing hfATLAS to RaFTS conversion.")
+                df_hfatlas_agg = pd.read_parquet(out_path)
+                # Re-defining dataset source & id col for training dataset prep
+                paths_hfatl = [out_path]
+                #map_id_col = gage_id
+        try: # Run attribute read & clean wrapper function
+            df_hfatlas = fsutil.read_hfatlas_wrap_dask(paths_hfatl, attrs_sel, 
+                                map_id_col)
+        except: # The gage_id could work instead - this work for the case of path_hf_gpkg_basins from fs_agg_hfatl_basin.py
+            df_hfatlas = fsutil.read_hfatlas_wrap_dask(paths_hfatl, attrs_sel, 
+                                                    gage_id)                         
 
         # Read in the hydrofabric flowpath w/ vpuid and standardize cols
         gdf_hf = fsutil.generate_algo_points_gpkg_wrap(div_ids = df_hfatlas[map_id_col], 
