@@ -81,8 +81,10 @@ class TestHfAtlasToRaftsPrep(unittest.TestCase):
         self.assertEqual(pt2.x, 2.0)
         self.assertEqual(pt2.y, 2.0)
         
-        self.assertIsNone(fsutil.get_middle_vertex(Point(0, 0))) # Fallback check
-
+        pt3 = fsutil.get_middle_vertex(Point(0, 0))
+        self.assertEqual(pt3.x, 0.0)
+        self.assertEqual(pt3.y, 0.0)
+        
     def test_read_hfatlas_wrap_dask(self):
         """Test PyArrow metadata reading, renaming, and Dask merging directly from disk."""
         attrs_sel = ["TOT_AET", "ELEV"]
