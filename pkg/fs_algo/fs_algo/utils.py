@@ -593,10 +593,19 @@ def fs_read_attr_comid(dir_db_attrs:str | os.PathLike, comids_resp:list | Iterab
             pattern = re.compile('|'.join(map(re.escape,substrings)))
             all_files = [file for file in Path(dir_db_attrs).iterdir() if file.is_file()]
             matching_files = [file for file in all_files if pattern.search(str(file))]
-            # Read in all matching filenames and proceed
-            attr_ddf_subloc = dd.read_parquet(matching_files,
-                                            engine='pyarrow',
-                                            partitioning=partitioning)
+
+            if not matching_files: # NOTE: This was recommended by Gemini3.1Pro and may need further testing.
+                logging.warning("No files matched the 'filename' pattern. Falling back to reading 'all' partitions.")
+                comids_resp_str = [str(s) for s in comids_resp]
+                all_attr_ddf = dd.read_parquet(dir_db_attrs, storage_options = storage_options,
+                                                engine='pyarrow', partitioning=partitioning)
+                attr_ddf_subloc = all_attr_ddf[all_attr_ddf['featureID'].isin(comids_resp_str)]
+            else: # The historic approach
+                # Read in all matching filenames and proceed
+                attr_ddf_subloc = dd.read_parquet(matching_files,
+                                                engine='pyarrow',
+                                                partitioning=partitioning)
+
         else:
             # Initialize attr_ddf_sub
             attr_ddf_sub = None
