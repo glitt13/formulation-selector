@@ -1,0 +1,22 @@
+# hfatl_prep_config.yaml
+# Prepare the dataset metrics based on the hfATLAS integration test workflow
+col_schema:
+  - 'gage_id': 'divide_id'
+  - 'featureID': 'hf_id_{gage_id}' # Python f-string format. Must use '{gage_id}'
+  - 'featureSource': 'hf_test_source' 
+  - 'metric_cols': 'nse|kge' # Example metrics
+  - 'metric_mappings': 'NSE|KGE'
+file_io:
+  - 'home_dir': '~'
+  - 'path_data': '{home_dir}/noaa/regionalization/data/tests/testdata_20250901/hydrofabric/tabular-data/hydroatlas_vars.parquet' # Example raw data path
+  - 'dir_save': '{home_dir}/noaa/regionalization/data/tests/input' 
+  - 'save_type': 'netcdf'
+  - 'save_loc': 'local'
+formulation_metadata:  
+  - 'dataset_name': 'test_hfatl_ds'
+  - 'formulation_base': 'hf_test_model'
+  - 'temporal_res': 'daily'
+  - 'target_var': 'Q'
+  - 'start_date': '1971-01-01'
+  - 'end_date':  '1990-12-31'
+  - 'cal_status': 'Y'

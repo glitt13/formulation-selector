@@ -1,0 +1,32 @@
+# hfatl_attr_config.yaml
+# Config for grabbing catchment attributes from the pure Python hfATLAS workflow
+col_schema:
+  - featureID: 'hf_id_{gage_id}' 
+  - featureSource: 'hf_test_source' 
+file_io:
+  - save_loc: 'local'
+  - home_dir: '~'
+  - dir_base: '{home_dir}/noaa/regionalization/data/tests/input'
+  - dir_std_base: '{dir_base}/user_data_std'
+  - dir_db_attrs: '{dir_base}/attributes/{ds}' # Note the {ds} f-string for VPU partitioning
+  - ds_type: 'training'
+  - write_type: 'parquet'
+  - path_meta: "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.{write_type}"
+  - name_prep_config: 'hfatl_prep_config.yaml' # REQUIRED for linking to the formulation
+formulation_metadata:
+  - datasets:
+    - 'test_hfatl_ds'
+  - formulation_base: 'hf_test_model'
+# NEW: Hydrofabric native configurations!
+hydrofabric_io:
+  - path_hf_gpkg: '{home_dir}/noaa/regionalization/data/tests/testdata_20250901/hydrofabric/hydrofabric.gpkg' # Path to local hydrofabric geometry
+  - hf_layer: 'flowpaths'
+  - hf_map_id_col: 'divide_id' # The ID in the GPKG that matches the Parquet data
+  - hf_vpu_id_col: 'vpuid'
+attr_select:
+  - paths_ha:
+    - "{home_dir}/noaa/regionalization/data/tests/testdata_20250901/hydrofabric/tabular-data/hydroatlas_vars.parquet"
+  - ha_vars:  # Explicit variables to pull from the hfATLAS parquet
+    - 'pet_mm_s01'
+    - 'cly_pc_sav'
+    - 'cly_pc_uav'

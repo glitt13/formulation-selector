@@ -1,0 +1,17 @@
+# hfatl_pred_config.yaml
+# Prediction configuration for hfATLAS test
+name_attr_config: 'hfatl_attr_config.yaml'
+name_algo_config: 'hfatl_algo_config.yaml'
+name_prep_config: 'hfatl_prep_config.yaml'
+ds_type: 'prediction'
+write_type: 'parquet'
+path_meta: "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.{write_type}"
+pred_file_comid_colname: 'featureID'
+algo_response_vars:
+  - 'cluster_labels' # Or 'NSE', 'KGE' depending on your algo config
+algo_type:
+  - 'rf'
+  - 'kmeans'
+  - 'gower_agglomerative'
+MAPIE_alpha: [0.05, 0.32]
+uncn_bnd_pred: False
