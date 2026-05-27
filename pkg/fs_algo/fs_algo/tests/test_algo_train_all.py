@@ -300,9 +300,10 @@ class TestFsRetrNhdpComids(unittest.TestCase):
         gage_ids = ["01031500", "08070000"]
 
         result = fsutil.fs_retr_nhdp_comids_geom(featureSource, featureID, gage_ids)
+        result_comids = [str(x) for x in result['comid'].tolist()]
 
         # Assertions
-        self.assertListEqual(result['comid'].tolist(), ['1722317', '1520007'])
+        self.assertListEqual(result_comids, ['1722317', '1520007'])
         self.assertEqual(result.columns.tolist(), ['comid','gage_id', 'geometry'])
         print("✅ test_fs_retr_nhdp_comids test passed.")
 
@@ -1625,9 +1626,9 @@ class TestAlgoTrainEvalClustering(unittest.TestCase):
     def setUp(self):
         # Create dummy data
         self.df = pd.DataFrame({
-            'comid': [f'id_{i}' for i in range(10)],
-            'attr1': np.random.rand(10),
-            'attr2': np.random.rand(10),
+            'comid': [f'id_{i}' for i in range(30)],
+            'attr1': np.random.rand(30),
+            'attr2': np.random.rand(30),
         })
         
         # --- FIX: Wrap the parameter dicts in lists ---
