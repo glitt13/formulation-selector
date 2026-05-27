@@ -10,7 +10,7 @@ uv run python fs_agg_hfatl_basin.py --path_prep_config "regn_prep_config.yaml" -
 Changelog/contributions
     2026-05-22 Created with Gemini3.1Pro
 """
-
+# TODO add _std_fs_prep_ds_companion_gpkg_path and ensure geometry is written to file
 import argparse
 import pandas as pd
 import geopandas as gpd
@@ -69,6 +69,11 @@ if __name__ == "__main__":
     gage_id_col_cfg = col_schema_df.get('gage_id', pd.Series(["gage_id"])).loc[0]
     
     regex_compiled = re.compile(gpkg_pattern,re.IGNORECASE)
+
+    dir_db_gpkg = Path(col_schema_df.get('dir_db_gpkg')[0].format(home_dir=str(home_dir)))
+    hf_layer = col_schema_df.get('hf_fp_layer', pd.Series(["flowpaths"])).loc[0]
+    vpu_id_col = col_schema_df.get('vpu_id_col', pd.Series(["vpuid"])).loc[0]
+    dir_std_base = Path(attr_cfig.attrs_cfg_dict.get('dir_std_base'))
 
     # B. Attr Config
     dir_db_attrs = attr_cfig.attrs_cfg_dict.get('dir_db_attrs')
@@ -226,7 +231,7 @@ if __name__ == "__main__":
     # Rename column to featureID
     df_long = df_long.rename(columns={gage_id_col_cfg: 'featureID'})
     
-    # ---> THE FIX: Apply the 'USGS-{gage_id}' format so it matches the downstream queries! <---
+    # Apply the featureID_format (e.g'USGS-{gage_id}') to match downstream queries
     df_long['featureID'] = df_long['featureID'].astype(str).apply(lambda gid: featureID_format.format(gage_id=gid))
     
     # Append standard RaFTS tracking columns
@@ -239,7 +244,7 @@ if __name__ == "__main__":
     
     final_columns = ['vpuid', 'featureID', 'featureSource', 'data_source', 'dl_timestamp', 'attribute', 'value']
     df_long = df_long[final_columns]
-    
+
     # ==========================================
     # 6. EXPORT DIRECTLY TO ALGORITHM DATABASE
     # ==========================================
@@ -255,5 +260,41 @@ if __name__ == "__main__":
     # Drop vpuid right before saving, as the directory structure implies the VPU
     df_long.drop(columns=['vpuid']).to_parquet(out_path, index=False)
     
+
+    logging.info("Generating standard algorithm points GPKG companion file...")
+    
+    # Resolve the companion GPKG path based on the response dataset (.nc)
+    path_fs_dat_resp = fsutil._std_fs_prep_ds_paths(dir_std_base=dir_std_base, ds=ds, mtch_str='*.nc')
+    path_gpkg_fs_prep = fsutil._std_fs_prep_ds_companion_gpkg_path(path_fs_dat_resp[0])
+
+    path_gpkg_fs_prep.parent.mkdir(parents=True, exist_ok=True)
+
+    # Execute the requested spatial wrapper
+    gdf_hf = fsutil.generate_algo_points_gpkg_wrap(
+        div_ids=df_mapping[map_divide_id_col], 
+        path_hf_gpkg=path_hf_basins_gpkg,  # Use the subset basin path parsed earlier
+        dir_db_gpkg=dir_db_gpkg,
+        path_gpkg_fs_prep=None, 
+        hf_layer=hf_layer,
+        map_id_col=map_divide_id_col,
+        featureSource=featureSource,
+        vpu_id_col=vpu_id_col, # epsg = 4326
+    )
+
+    # Merge the mapping dataframe to get the real gage_ids back
+    gdf_hf = gdf_hf.merge(df_mapping, on=map_divide_id_col, how='inner')
+    
+    # Overwrite the placeholder columns populated by the wrapper
+    gdf_hf['gage_id'] = gdf_hf[gage_id_col_cfg]
+    gdf_hf['featureID'] = gdf_hf[gage_id_col_cfg]
+    gdf_hf['comid'] = gdf_hf[gage_id_col_cfg]
+    
+    # Save the corrected companion file
+    gdf_hf.to_file(path_gpkg_fs_prep, driver="GPKG", layer='outlet')
+    logging.info(f"Saved corrected GPKG geometry companion to: {path_gpkg_fs_prep}")
+
+    #logging.info(f"Saved GPKG geometry companion to: {path_gpkg_fs_prep}")
+
     logging.info(f"✅ Success! Analysis-ready aggregated attributes for {df_aggregated.shape[0]} basins saved to:")
     logging.info(f"   {out_path}")
+
