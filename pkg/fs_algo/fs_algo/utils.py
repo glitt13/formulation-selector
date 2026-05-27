@@ -809,7 +809,7 @@ def _find_feat_srce_id(dat_resp: Optional[xr.core.dataset.Dataset] = None,
         # TODO need to map gage_id to location identifier in attribute data!
 
     return [featureSource, featureID]
-
+    
 def fs_retr_nhdp_comids_geom(featureSource:str,featureID:str,gage_ids: Iterable[str] 
                              ) -> gpd.geodataframe.GeoDataFrame:    
     """Retrieve response variable's comids & point geom, querying the shortest distance in the flowline
@@ -1225,14 +1225,12 @@ def find_common_comid(dict_gdf_comids:Dict[str,gpd.GeoDataFrame], column='featur
     common_comid = list(common_comid)
     return common_comid
 
-
-def fs_retr_nhdp_comids_geom_wrap(path_save_gpkg:str|os.PathLike,
-                                  gage_ids:Iterable,
-                                featureSource:str='nwissite', featureID:str='USGS-{gage_id}'
-                                ) ->gpd.GeoDataFrame:
-    """Read or generate a geodataframe that queries NHDplus for comid and coordinate based
-    on provided gage_id, or compatible featureSource/featureID pairing
-
+def fs_retr_nhdp_comids_geom_wrap(path_save_gpkg: str | os.PathLike,
+                                  gage_ids: Iterable,
+                                  featureSource: str = 'nwissite', 
+                                  featureID: str = 'USGS-{gage_id}') -> gpd.GeoDataFrame:
+    """Read or generate a geodataframe that queries NHDplus for comid and coordinate.
+    
     :param path_save_gpkg: filepath where data are saved. This limits the number of hits to the NHDplus database
     :type path_save_gpkg: str | os.PathLike
     :param gage_ids: The identifiers of interest, e.g. the USGS gage id numbers
@@ -1249,36 +1247,56 @@ def fs_retr_nhdp_comids_geom_wrap(path_save_gpkg:str|os.PathLike,
     :seealso: :func:`combine_resp_gdf_comid_wrap` A wrapper function that calls this function
     :seealso: :func:`_std_fs_prep_ds_companion_gpkg_path` The standardized path to use for path_save_gpkg
     :seealso: :mod:`proc.attr.hydfab`:func:`fs_retr_nhdp_comids_geom_wrap` The corresponding R function
+
+    Changelog / Contributions:
+     2024/2025 originally created?
+     2026-05-27 refactor to allow skipping missing locs when not working with nwissite/comid data, Gemini3Pro
     """
+    
     path_save_gpkg = Path(path_save_gpkg)
+    gage_ids_str = [str(g) for g in gage_ids]
+
     if path_save_gpkg.exists(): # Maybe we can skip the database connection!
-        # Read the intermediate file & check if any gage_ids need comids:
-        gdf_comid_in = gpd.read_file(path_save_gpkg,layer='outlet')
-        cmmn_ids = np.intersect1d(gdf_comid_in['gage_id'], gage_ids)
-        if len(cmmn_ids) == len(gage_ids): # All gage_ids accounted for
-            gdf_comid = gdf_comid_in.copy()
-            # TODO could consider check to try and fill in missing comid data here...
-            # TODO MUST ensure these searches/fill ins ultimately maintain same sequence as gage_ids
-            # if gdf_comid_in['comid'].isna().sum() >0:
-            #     need_gage_ids = gdf_comid_in['gage_id'][gdf_comid_in['comid'].isna()]
-            #     gid_chck = fs_retr_nhdp_comids_geom(featureSource=featureSource,
-            #                                         featureID=featureID,
-            #                                         gage_ids=need_gage_ids.values)
+        # Read the intermediate offline file
+        gdf_comid_in = gpd.read_file(path_save_gpkg, layer='outlet')
+        
+        # Ensure safe string comparison
+        if 'gage_id' in gdf_comid_in.columns:
+            existing_gages = gdf_comid_in['gage_id'].astype(str).tolist()
         else:
-            # Grab the comid and associated coords/geodataframe 
-            gdf_comid = fs_retr_nhdp_comids_geom(featureSource=featureSource,
-                                                        featureID=featureID,
-                                                        gage_ids=gage_ids)
-            # Write to file
-            gdf_comid.to_file(path_save_gpkg, layer = 'outlet',driver='GPKG')
+            existing_gages = []
+
+        cmmn_ids = np.intersect1d(existing_gages, gage_ids_str)
+        
+        # If all requested gages are in the file, OR if we are using an offline featureSource
+        if len(cmmn_ids) == len(gage_ids_str) or featureSource not in ['nwissite', 'comid']:  # All gage_ids accounted for
+            if len(cmmn_ids) != len(gage_ids_str):
+                logging.warning(f"Offline GPKG is missing {len(gage_ids_str) - len(cmmn_ids)} requested gages. "
+                                f"Bypassing NLDI API query because featureSource is '{featureSource}'.")
+            return gdf_comid_in.copy()
+            
+        else:
+            # Legacy NLDI Web API Logic - ONLY fetch the missing ones
+            need_gage_ids = list(set(gage_ids_str) - set(existing_gages))
+            logging.info(f"Fetching {len(need_gage_ids)} missing geometries from NLDI API...")
+            
+            gdf_new = fs_retr_nhdp_comids_geom(featureSource=featureSource,
+                                               featureID=featureID,
+                                               gage_ids=need_gage_ids)
+                                               
+            # Combine the old good data with the new web data and save
+            gdf_comid = pd.concat([gdf_comid_in, gdf_new], ignore_index=True)
+            gdf_comid.to_file(path_save_gpkg, layer='outlet', driver='GPKG')
+            return gdf_comid
+            
     else:
-        # Grab the comid and associated coords/geodataframe 
+        # File doesn't exist at all, query everything via Web API
+        logging.info("Companion GPKG not found. Querying NLDI API for all geometries...")
         gdf_comid = fs_retr_nhdp_comids_geom(featureSource=featureSource,
-                                                    featureID=featureID,
-                                                    gage_ids=gage_ids)
-        # Write to file
-        gdf_comid.to_file(path_save_gpkg, layer = 'outlet',driver='GPKG')
-    return(gdf_comid)
+                                             featureID=featureID,
+                                             gage_ids=gage_ids)
+        gdf_comid.to_file(path_save_gpkg, layer='outlet', driver='GPKG')
+        return gdf_comid
 
 def _read_metadata(path_attr_config:str|os.PathLike, ds:str) -> pd.DataFrame:
     """Read the metadata file for the dataset of interest
@@ -1338,7 +1356,8 @@ def combine_resp_gdf_comid_wrap(dir_std_base:str|os.PathLike,ds:str,path_attr_co
 
     Changelog:
         2025-05-19 refactor: integrate path_meta for gage_id:featureID-featureSource mapping, GL   
-        2026-05-12 refactor: update logic around NA handling for featureID col of dat_resp, Gemini3Pro
+        2026-05-12 refactor: update logic around NA handling for featureID col of dat_resp; allow fewer locs than provided in response vars Gemini3Pro
+        2026-05-27 refactor: update mapper_df logic by dropping duplicate gage_id, Gemini3Pro
     """
 
     dat_resp = _open_response_data_fs(dir_std_base,ds)
@@ -1390,15 +1409,28 @@ def combine_resp_gdf_comid_wrap(dir_std_base:str|os.PathLike,ds:str,path_attr_co
 
     # --- response data identifier alignment with comids & na removal --- #
     # Subset gdf to the gage_ids that are present in the standardized response variable
-    sub_gdf_comid = gdf_comid[gdf_comid['gage_id'].isin(dat_resp['gage_id'].values)]
+    resp_gage_strs = [str(g) for g in dat_resp['gage_id'].values]
+    gdf_comid['gage_id_str'] = gdf_comid['gage_id'].astype(str) # Force safe string comparison
+    
+    sub_gdf_comid = gdf_comid[gdf_comid['gage_id_str'].isin(resp_gage_strs)].copy()
+    sub_gdf_comid = sub_gdf_comid.drop(columns=['gage_id_str'])
+
     if sub_gdf_comid.shape[0] != len(dat_resp['gage_id']):
         logging.warning(f"Warning: The number of gage_ids in the response variable ({len(dat_resp['gage_id'])}) does not match the number of gage_ids in the geodataframe ({sub_gdf_comid.shape[0]}).")
-        # TODO consider dropping the gage_ids that are not present in the geodataframe
+        valid_gage_strs = set(sub_gdf_comid['gage_id'].astype(str))
+            
+        # Create a boolean mask of which items to keep
+        keep_mask = [str(g) in valid_gage_strs for g in dat_resp['gage_id'].values]
+        
+        # Apply the mask to the xarray dataset
+        dat_resp = dat_resp.isel(gage_id=keep_mask)
+        
+        logging.info(f"Response dataset successfully reduced to {len(dat_resp['gage_id'])} locations.")
         if sub_gdf_comid.shape[0] < len(dat_resp['gage_id']):
-            logging.error(f"The number of gage_ids in the response variable ({len(dat_resp['gage_id'])}) is less than the number of gage_ids in the geodataframe ({sub_gdf_comid.shape[0]}).")
-            raise ValueError(f"The number of gage_ids in the response variable ({len(dat_resp['gage_id'])}) is less than the number of gage_ids in the geodataframe ({sub_gdf_comid.shape[0]}).")
-            # TODO consider dropping the gage_ids that are not present in the geodataframe
-    
+            # This was a hard error when using the proc.attr.hydfab retrieval. This is now a warning for hfATLAS applications.
+            warn_msg = f"The number of gage_ids in the geodataframe ({sub_gdf_comid.shape[0]}) is less than the number of gage_ids in the response variable ({len(dat_resp['gage_id'])})."
+            logging.warning(warn_msg)
+            
     if('featureID' in sub_gdf_comid.columns):
         feature_id_col = 'featureID'
     elif('comid' in sub_gdf_comid.columns):
@@ -1406,10 +1438,12 @@ def combine_resp_gdf_comid_wrap(dir_std_base:str|os.PathLike,ds:str,path_attr_co
     else:
         logging.error("The geodataframe does not contain a column named 'featureID' or 'comid'.")
         raise ValueError(f"The geodataframe does not contain a column named 'featureID' or 'comid'.")
+    mapper_df = sub_gdf_comid.drop_duplicates(subset=['gage_id'])
 
-    gage_to_feat_source_map = sub_gdf_comid.set_index('gage_id')['featureSource']
+    gage_to_feat_source_map = mapper_df.set_index('gage_id')['featureSource']
     mapped_feat_source = pd.Series(dat_resp['gage_id'].values).map(gage_to_feat_source_map)
-    gage_to_comid_map = sub_gdf_comid.set_index('gage_id')[feature_id_col]
+    
+    gage_to_comid_map = mapper_df.set_index('gage_id')[feature_id_col]
     mapped_comids = pd.Series(dat_resp['gage_id'].values).map(gage_to_comid_map)
     
     # --- Strip PyArrow right before injecting into Xarray ---
@@ -2039,11 +2073,18 @@ def clean_hfatlas_columns(df: pd.DataFrame) -> pd.DataFrame:
     return df.rename(columns=new_cols)
 
 
-
 def get_middle_vertex(geom) -> Point:
-    """Returns the middle existing coordinate/vertex from a line."""
+    """Returns the middle existing coordinate/vertex from a line, or a guaranteed internal point for a polygon."""
+    if isinstance(geom, (pd.Series, gpd.GeoSeries)):
+        # Recursively apply this exact function to every item in the column
+        return geom.apply(get_middle_vertex)
+
     if geom is None or geom.is_empty:
         return None
+        
+    if geom.geom_type in ['Polygon', 'MultiPolygon']:
+        # representative_point() guarantees the point is safely inside the polygon boundaries
+        return geom.representative_point()
         
     # 1. Extract all coordinates into a single list
     if geom.geom_type == 'LineString':
@@ -2052,7 +2093,10 @@ def get_middle_vertex(geom) -> Point:
         # Flatten the coordinates from all line segments into one list
         coords = [coord for line in geom.geoms for coord in line.coords]
     else:
-        return None # Fallback for non-line geometries
+        # Fallback for point geometries or unknown types
+        if geom.geom_type == 'Point':
+            return geom
+        return None 
         
     # 2. Find the middle index
     mid_index = len(coords) // 2
@@ -2071,9 +2115,32 @@ def generate_algo_points_gpkg_wrap(
     vpu_id_col: str = 'vpuid',
     epsg: int = 4326
 ) -> gpd.GeoDataFrame:
+    """Generates a standardized dataset-specific .gpkg of points for the provided divide_ids using a smart caching and extraction strategy.
+      This function is designed to efficiently handle both single GPKG files and directories containing multiple GPKG files, 
+      reading only the necessary rows based on the provided divide_ids.
+      It also ensures that the resulting GeoDataFrame is standardized with the expected columns and CRS, 
+      and can be written to a specified output path for use in downstream processing.
+    :param div_ids: A pandas Series of divide_ids for which to extract points.
+    :type div_ids: pd.Series
+    :param path_hf_gpkg: Path to the hydrofabric GPKG file or directory containing multiple GPKG files.
+    :type path_hf_gpkg: str | Path
+    :param dir_db_gpkg: Path to the directory where the standardized dataset-specific GPKG will be written (if path_gpkg_fs_prep is provided).
+    :type dir_db_gpkg: str | Path
+    :param path_gpkg_fs_prep: Optional path to write the standardized dataset-specific GPKG of points for downstream use. If None, the GPKG will not be written to disk.
+    :type path_gpkg_fs_prep: str | Path, optional
+    :param hf_layer: The layer name in the hydrofabric GPKG to read from, defaults to 'flowpaths'.
+    :type hf_layer: str, optional
+    :param map_id_col: The column name in the hydrofabric GPKG that corresponds to the divide_ids, defaults to 'divide_id'.
+    :type map_id_col: str, optional
+    :param featureSource: The value to assign to the 'featureSource' column in the resulting GeoDataFrame, defaults to 'hf_id'.
+    :type featureSource: str, optional
+    :param vpu_id_col: The column name in the hydrofabric GPKG  that corresponds to the VPUID, defaults to 'vpuid'.
+    :type vpu_id_col: str, optional    
+    :seealso: fs_agg_hfatl_basin.py
+    :seealso: fs_hfatlas_to_rafts_prep.py
     """
-    Standardized a dataset-specific .gpkg of points using a smart caching and extraction strategy
-    """
+    # Standardized a dataset-specific .gpkg of points using a smart caching and extraction strategy
+
     path_hf_gpkg = Path(path_hf_gpkg)
     dir_db_gpkg = Path(dir_db_gpkg)
 
@@ -2082,7 +2149,7 @@ def generate_algo_points_gpkg_wrap(
     where_clause = f"{map_id_col} IN ({formatted_ids})"
 
     gdfs_to_concat = []
-    # ---> NEW: Strategy to handle both directories and single files <---
+    # Strategy to handle both directories and single files <---
     if path_hf_gpkg.is_dir():
         logging.info(f"Directory detected. Scanning {path_hf_gpkg} for GPKG files...")
         for gpkg_file in path_hf_gpkg.glob("*.gpkg"):
@@ -2090,7 +2157,11 @@ def generate_algo_points_gpkg_wrap(
                 # Read ONLY the requested rows for each file
                 gdf = gpd.read_file(gpkg_file, layer=hf_layer, where=where_clause, engine="pyogrio")
                 if not gdf.empty:
-                    gdfs_to_concat.append(gdf)
+                    gdfs_to_concat.append(gdf.iloc[[0]]) # Read only the first row
+                else: # Try without layer
+                    gdf = gpd.read_file(gpkg_file, where=where_clause,engine="pyogrio")
+                    if not gdf.empty:
+                        gdfs_to_concat.append(gdf.iloc[[0]]) # Read only the first row
             except Exception as e:
                 logging.debug(f"Skipped {gpkg_file.name} or layer '{hf_layer}' not found: {e}")
     elif path_hf_gpkg.is_file():
@@ -2109,7 +2180,15 @@ def generate_algo_points_gpkg_wrap(
     
     # Combine the read geometries
     sub_fp_gdf = pd.concat(gdfs_to_concat, ignore_index=True)
-    sub_fp_gdf = gpd.GeoDataFrame(sub_fp_gdf, geometry='geometry', crs=gdfs_to_concat[0].crs)
+    try:
+        crs_gdf = gdfs_to_concat[0].crs
+        active_col = gdfs_to_concat[0].active_geometry_name
+    except:
+        crs_gdf = sub_fp_gdf.crs
+        active_col = sub_fp_gdf.active_geometry_name
+    sub_fp_gdf = gpd.GeoDataFrame(sub_fp_gdf, geometry=active_col, crs=crs_gdf)
+    if sub_fp_gdf.active_geometry_name != 'geometry':
+        sub_fp_gdf = sub_fp_gdf.rename_geometry('geometry')
     sub_fp_gdf.to_crs(epsg=epsg, inplace=True)
 
     if vpu_id_col not in sub_fp_gdf.columns:
@@ -2280,3 +2359,4 @@ def resolve_fstrings(val, context_dict, max_depth=3):
             return new_val
         val = new_val
     return val
+# %%
