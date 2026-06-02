@@ -2,8 +2,8 @@
 
 # RaFTS processing the regionalization testing dataset with hfATLAS data
 # Instructions:
-# Make this script executable using: chmod +x regn_test_proc_rafts_all.sh
-# Run by calling in terminal: ./regn_test_proc_rafts_all.sh
+# Make this script executable using: chmod +x regn_sac_agg_proc.sh
+# Run by calling in terminal: ./regn_sac_agg_proc.sh
 
 # -----------------------------------------------------------------------------
 # ERROR HANDLING
