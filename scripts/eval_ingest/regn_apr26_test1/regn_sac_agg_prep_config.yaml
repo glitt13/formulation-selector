@@ -22,7 +22,7 @@ file_io: # May define {home_dir} for python's '{home_dir}/string_path'.format(ho
   - 'vpu_mapped': 'True' # Boolean str. Should output attribute data be organized by vpu? True recommended for large datasets, e.g. entire CONUS scale.
   - 'dir_db_gpkg': "{home_dir}/noaa/regionalization/data/input/gpkg/hfatl/"
 formulation_metadata:  
-  - 'dataset_name': 'regn_apr26_test1' # Required. 
+  - 'dataset_name': 'regn_apr26_sac' # Required. 
   - 'formulation_base': 'sacsnow17pet' # Required. Basename of formulation. the rr, sp, and gw will be added to this if 'formulation_id' is left empty
   - 'formulation_id':  # Optional alternative in lieu of generating a formulation_id based on 'formulation_base'. Should leave empty if automatic formulation_id generation desired.
   - 'formulation_ver': # Optional. The version of the formulation

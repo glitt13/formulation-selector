@@ -28,7 +28,7 @@ file_io: # May define {home_dir} for python's '{home_dir}/string_path'.format(ho
   - name_prep_config: 'regn_sac_agg_prep_config.yaml' # Required when running the hfatlas-based workflow
 formulation_metadata:
   - datasets: # Required. Must match directory name inside dir_std_base. May be a list of items, or simply sublist 'all' to select everything inside dir_std_base for attribute grabbing.
-    - 'regn_apr26_test1' # Required. In this example case, it's a sublist of just one thing.
+    - 'regn_apr26_sac' # Required. In this example case, it's a sublist of just one thing.
   - formulation_base: 'sacsnow17pet' # Informational. Unique name of formulation. Optional.
 attr_select: # Required. The names of variable sublistings are standardized with _vars, e.g. ha_vars, usgs_vars, sc_vars
   - hfatl_id_col: 'gage_id'
