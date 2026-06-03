@@ -22,6 +22,10 @@ library(data.table)
 library(factoextra)
 dir_dat <- "~/noaa/regionalization/data/output/algorithm_predictions/xSSA_proc_sens_wt_loc_sel_ngencerf"
 path_gpkg <- "~/noaa/regionalization/data/input/user_data_std/xSSA_proc_sens_wt_loc_sel_ngencerf2025/xSSA_proc_sens_wt_loc_sel_Raven_blended_loc.gpkg"#"~/noaa/regionalization/data/input/user_data_std/xSSA_proc_sens_wt_loc_sel/headwaterbasins_ngen_cerf/xSSA_proc_sens_wt_loc_sel_Raven_blended_loc.gpkg"
+dir_base_insens <- "~/noaa/regionalization/data/analyses/insensitivities/"
+if(!dir.exists(dir_base_insens)){
+  dir.create(dir_base_insens, recursive = TRUE)
+}
 df_gpkg <- sf::st_read(path_gpkg, layer = 'outlet')
 
 use_pred_for_mapping <- FALSE
@@ -68,8 +72,9 @@ gage_ids_calib <- list.files("~/noaa/hydrofabric/hf22_apr26cal/selected_subsets_
   base::gsub(pattern=".gpkg",replacement="") %>%
   base::gsub(pattern="gage_",replacement="")
 
-
+# ============================================================================ #
 # ---------------------- Identify insensitive locations ---------------------- #
+# ============================================================================ #
 ls_sub_calib <- list()
 for(fn in fns){
   df <- arrow::read_parquet(file.path(dir_dat,fn))
@@ -106,14 +111,35 @@ dt_calib <- data.table::rbindlist(ls_sub_calib)
 insens_calib <- dt_calib[dt_calib$prediction < thr_sens]
 insens_metrs <- unique(insens_calib$metric)
 
+ls_insens <- list()
+ls_sens <- list()
 for(im in insens_metrs){
-  dt_metr <- dt_calib %>% subset(metric == im)
+  dt_metr <- dt_calib %>% subset(metric == im) %>% select(c("gage_id","name","metric", "prediction"))
   insens_locs <- dt_metr %>% subset(prediction<thr_sens)
   sens_locs <- dt_metr %>% subset(prediction>=thr_sens)
   print(glue::glue("{im} num sensitive > {thr_sens}: {nrow(sens_locs)}"))
+  ls_insens[[im]] <- insens_locs
+  ls_sens[[im]] <- sens_locs
+
+
 }
 
-# TODO - create a small test dataset based on different clusters in process senstivities
+# Basic requirement: gage_id and metric column to represent the insensitive locations & process category
+dt_insens <- data.table::rbindlist(ls_insens)
+write.csv(dt_insens,file = file.path(dir_base_insens,glue::glue("ngencerf2025_thr{thr_sens}.csv")),row.names = FALSE)
+
+
+
+
+
+
+
+# TODO read in parameter mapping df for each formulation
+# ============================================================================ #
+# ============================================================================ #
+# ============================================================================ #
+# Create small test dataset based on different clusters in process sensitivities
+# ============================================================================ #
 # From dt_calib:
 
 sub_dt_xssa <- dt_calib[,c("gage_id","metric","prediction")] %>% as.data.table()
