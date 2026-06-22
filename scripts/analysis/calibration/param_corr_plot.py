@@ -61,7 +61,7 @@ for path_params in param_files:
     plt.close()
 
     path_out_plot_sign = dir_out_plots / f"param_corr_significant_{formulation_name}.png"
-    mask = df_corr <= 0.4
+    mask = abs(df_corr) <= 0.4
     plt.figure(figsize=(16, 12))
     sns.heatmap(
         df_corr, 
