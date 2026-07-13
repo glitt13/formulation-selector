@@ -172,6 +172,8 @@ km_result <- kmeans(cluster_data, centers = 6, nstart = 25)
 # (Convert to factor so ggplot treats them as distinct categories, not a continuous gradient)
 dt_xssa_wide[, cluster_group := as.factor(km_result$cluster)]
 
+
+
 # 3. Plot the clusters using fviz_cluster
 # This automatically performs PCA to squash all your metrics into 2 dimensions
 p_cluster <- fviz_cluster(km_result,
@@ -338,6 +340,10 @@ distant_dt <- data.table(
 
 print(distant_dt)
 
+
+pca_res <- prcomp(cluster_data)
+pca_df <- as.data.frame(pca_res$x)
+pca_df$gage_id <- dt_xssa_wide$gage_id
 # Assuming pca_df is already created from the previous plotting step
 distant_points_pca <- pca_df[distant_dt$data_row_index, ]
 
@@ -367,7 +373,24 @@ us_basemap <- st_set_crs(us_basemap, 4326)
 
 # 2. Filter and merge your spatial dataframe (gdf)
 # We use 'merge' to attach the cluster_group assignments to the geometries
-gdf_distant <- merge(df_gpkg, distant_dt, by.x = "gage_id", by.y = "distant_gage_id")
+distant = FALSE
+if(distant){
+  gdf_distant <- merge(df_gpkg, distant_dt, by.x = "gage_id", by.y = "distant_gage_id")
+  titl <- "CONUS Mapping: Maximally Dispersed Cluster Elements"
+  subtitl <- "Gage locations representing the geometric boundary extremes of each cluster"
+} else {
+  #gage_ids_sel <- c("04273700","01493500","09499000","13186000","12210000","14301000","01118000", "14216500","09404343")
+  #gage_ids_sel <- c("04273700","01493500","09499000","13186000","12210000","14301000",small_dt_improv$gage_id)
+  gage_ids_sel <- c("04273700","01493500","09499000","13186000","12210000","14301000","08315480", "05275000", "0810464660")
+  gdf_distant <- df_gpkg[df_gpkg$gage_id %in% gage_ids_sel,]
+  df_sel_clst <- as.data.frame(km_result$cluster[gage_ids_sel])
+  names(df_sel_clst) <- "cluster_group"
+  df_sel_clst$gage_id <- names(km_result$cluster[gage_ids_sel])
+  df_sel_clst$cluster_group <- as.factor(as.integer(df_sel_clst$cluster_group))
+  gdf_distant <- merge(gdf_distant, df_sel_clst, by="gage_id")
+
+}
+
 gdf_distant <- st_as_sf(gdf_distant, sf_column_name = "geom", crs = 4326)
 
 # 3. Create the multi-layer map
@@ -403,8 +426,8 @@ p_distant_map <- ggplot() +
   scale_color_brewer(palette = "Set1") +
   scale_fill_brewer(palette = "Set1") +
   theme_minimal() +
-  labs(title = "CONUS Mapping: Maximally Dispersed Cluster Elements",
-       subtitle = "Gage locations representing the geometric boundary extremes of each cluster",
+  labs(title = titl,
+       subtitle = subtitl,
        x = NULL,
        y = NULL,
        color = "Cluster",
@@ -417,4 +440,105 @@ print(p_distant_map)
 # TODO how does this tie-in with probable-winner?
 
 df_gpkg[grep("FL",df_gpkg$name),]
+###############################################################################
+############# Checking the drainage area/total divides ##################
+path_gpkg <- "~/noaa/regionalization/data/input/user_data_std/xSSA_proc_sens_wt_loc_sel_ngencerf2025/xSSA_proc_sens_wt_loc_sel_Raven_blended_loc.gpkg"#"~/noaa/regionalization/data/input/user_data_std/xSSA_proc_sens_wt_loc_sel/headwaterbasins_ngen_cerf/xSSA_proc_sens_wt_loc_sel_Raven_blended_loc.gpkg"
+
+library(glue)
+library(sf)
+library(dplyr)
+if(!dir.exists(dir_base_insens)){
+  dir.create(dir_base_insens, recursive = TRUE)
+}
+df_gpkg <- sf::st_read(path_gpkg, layer = 'outlet')
+gage_ids_sel <- c("04273700","01493500","09499000","13186000","12210000","14301000",)
+# Add the extra 3 locations corresponding to poor performance (and new spatial locs)
+#gage_ids_sel <- c("04273700","01493500","09499000","13186000","12210000","14301000","01118000", "14216500","09404343")
+gage_ids_sel <- c("04273700","01493500","09499000","13186000","12210000","14301000","08315480", "05275000", "0810464660")
+sub_df_gpkg <- df_gpkg[df_gpkg$gage_id %in% gage_ids_sel,]
+
+dir_hf <- "~/noaa/hydrofabric/hf22_apr26cal/selected_subsets_edited_geom/sites_new_ngsh_edited_geom/"
+fns_hf <- list.files(dir_hf)
+sel_fns_hf <- glue::glue("gage_{gage_ids_sel}.gpkg")
+
+ls_areas <- list()
+for(selfn in sel_fns_hf){
+  gpkg <- sf::st_read(file.path(dir_hf, selfn),layer='divides') %>% suppressMessages()
+  print(glue::glue("{selfn} Areasqkm: {sum(gpkg$areasqkm)}"))
+  ls_areas[[selfn]] <- data.frame(gpkg = selfn,
+                                  areasqkm = sum(gpkg$areasqkm),
+                                  n_divs = nrow(gpkg))
+
+}
+
+
+
+data.table::rbindlist(ls_areas)
+
+####Add a few more locations that have corresponded to better NWMv3 performance
+need_to_improve <- c("01073500",
+                     "01118000",
+                     "01162500",
+                     "01390450",
+                     "01616500",
+                     "02140991",
+                     "02343225",
+                     "04208000",
+                     "04234000",
+                     "05275000",
+                     "05383950",
+                     "05411850",
+                     "05413500",
+                     "05426000",
+                     "05447500",
+                     "05567500",
+                     "05570000",
+                     "06809210",
+                     "07164600",
+                     "07348700",
+                     "07372200",
+                     "08013000",
+                     "810464660",
+                     "08152900",
+                     "08315480",
+                     "09404343",
+                     "14216500"
+                     ) %>% as.character()
+idxs_improve <- unlist(lapply(need_to_improve, function(x) grep(x, fns_hf)))
+fns_improve <- fns_hf[idxs_improve]
+ls_areas_imprv <- list()
+for(fnimp in fns_improve){
+  gpkg <- sf::st_read(file.path(dir_hf, fnimp),layer='divides') %>% suppressMessages()
+  print(glue::glue("{selfn} Areasqkm: {sum(gpkg$areasqkm)}"))
+  ls_areas_imprv[[fnimp]] <- data.frame(gpkg = fnimp,
+                                  areasqkm = sum(gpkg$areasqkm),
+                                  n_divs = nrow(gpkg))
+
+
+}
+dt_improv <- data.table::rbindlist(ls_areas_imprv)
+dt_improv$gage_id <- base::gsub("gage_","",dt_improv$gpkg) %>% base::gsub(pattern=".gpkg",replacement="")
+
+small_dt_improv <- dt_improv[dt_improv$n_divs <200,]
+
+# Now work with the clusters and pick three from different groups
+km_result_sub_clst <- km_result$cluster[small_dt_improv$gage_id]
+km_result_sub_clst %>% unique()
+df_sub_clst <- as.data.frame(km_result_sub_clst)
+df_sub_clst$gage_id <- names(km_result_sub_clst)
+df_sub_clst_improv <- base::merge(small_dt_improv, df_sub_clst, by = 'gage_id')
+df_sub_clst_improv[order(df_sub_clst_improv$areasqkm),]
+
+
+
+
+# Choices in locations:
+sel_clst_improv <- c("01118000", "14216500","09404343")
+df_sub_clst_improv[df_sub_clst_improv$gage_id %in% sel_clst_improv,c("gage_id","areasqkm","n_divs","km_result_sub_clst")] %>% rename(clust_num = km_result_sub_clst)
+
+
+names(km_result_sub_clst)
+# REVISED choice on locations after looking at map locations:
+sel_clst_improv <- c("08315480", "05275000", "0810464660")
+df_sub_clst_improv[df_sub_clst_improv$gage_id %in% sel_clst_improv,c("gage_id","areasqkm","n_divs","km_result_sub_clst")] %>% rename(clust_num = km_result_sub_clst)
 
