@@ -127,7 +127,6 @@ if __name__ == "__main__":
 
         # 2. Extract specific variables of interest
         path_hf_gpkg = Path(fio.get("path_hf_gpkg"))
-        dir_db_gpkg = Path(fio.get("dir_db_gpkg"))
         
         # featureID & featureSource:
         featureSource = fio.get('featureSource', 'hf_id')
@@ -192,7 +191,6 @@ if __name__ == "__main__":
         # Read in the hydrofabric flowpath w/ vpuid and standardize cols
         gdf_hf = fsutil.generate_algo_points_gpkg_wrap(div_ids = df_hfatlas[map_id_col], 
                                                 path_hf_gpkg=path_hf_gpkg,
-                                                dir_db_gpkg=dir_db_gpkg,
                                                 path_gpkg_fs_prep=path_gpkg_fs_prep, # Only for writing to file
                                                 hf_layer=hf_layer,
                                                 map_id_col=map_id_col,

@@ -107,7 +107,6 @@ class TestHfAtlasToRaftsPrep(unittest.TestCase):
         result_gdf = fsutil.generate_algo_points_gpkg_wrap(
             div_ids=div_ids,
             path_hf_gpkg=self.path_hf_gpkg,
-            dir_db_gpkg=self.test_path,
             path_gpkg_fs_prep=path_out_gpkg,
             hf_layer="flowpaths",
             map_id_col="divide_id",
@@ -207,7 +206,6 @@ class TestHfAtlasToRaftsPrep(unittest.TestCase):
             result_gdf = fsutil.generate_algo_points_gpkg_wrap(
                 div_ids=pd.Series(["div1"]),
                 path_hf_gpkg=path_pts_gpkg,
-                dir_db_gpkg=self.test_path,
                 path_gpkg_fs_prep=None, # Hit the branch that skips saving the output file
                 hf_layer="flowpaths",
                 map_id_col="divide_id"

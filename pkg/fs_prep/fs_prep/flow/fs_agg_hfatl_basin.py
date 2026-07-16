@@ -70,7 +70,6 @@ if __name__ == "__main__":
     
     regex_compiled = re.compile(gpkg_pattern,re.IGNORECASE)
 
-    dir_db_gpkg = Path(col_schema_df.get('dir_db_gpkg')[0].format(home_dir=str(home_dir)))
     hf_layer = col_schema_df.get('hf_fp_layer', pd.Series(["flowpaths"])).loc[0]
     vpu_id_col = col_schema_df.get('vpu_id_col', pd.Series(["vpuid"])).loc[0]
     dir_std_base = Path(attr_cfig.attrs_cfg_dict.get('dir_std_base'))
@@ -273,7 +272,6 @@ if __name__ == "__main__":
     gdf_hf = fsutil.generate_algo_points_gpkg_wrap(
         div_ids=df_mapping[map_divide_id_col], 
         path_hf_gpkg=path_hf_basins_gpkg,  # Use the subset basin path parsed earlier
-        dir_db_gpkg=dir_db_gpkg,
         path_gpkg_fs_prep=None, 
         hf_layer=hf_layer,
         map_id_col=map_divide_id_col,

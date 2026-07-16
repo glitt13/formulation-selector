@@ -2116,7 +2116,6 @@ def get_middle_vertex(geom) -> Point:
 def generate_algo_points_gpkg_wrap(
     div_ids: pd.Series,
     path_hf_gpkg: str | Path, 
-    dir_db_gpkg: str | Path,
     path_gpkg_fs_prep: str | Path = None,
     hf_layer: str = 'flowpaths',
     map_id_col: str = 'divide_id',
@@ -2133,8 +2132,6 @@ def generate_algo_points_gpkg_wrap(
     :type div_ids: pd.Series
     :param path_hf_gpkg: Path to the hydrofabric GPKG file or directory containing multiple GPKG files.
     :type path_hf_gpkg: str | Path
-    :param dir_db_gpkg: Path to the directory where the standardized dataset-specific GPKG will be written (if path_gpkg_fs_prep is provided).
-    :type dir_db_gpkg: str | Path
     :param path_gpkg_fs_prep: Optional path to write the standardized dataset-specific GPKG of points for downstream use. If None, the GPKG will not be written to disk.
     :type path_gpkg_fs_prep: str | Path, optional
     :param hf_layer: The layer name in the hydrofabric GPKG to read from, defaults to 'flowpaths'.
@@ -2151,7 +2148,6 @@ def generate_algo_points_gpkg_wrap(
     # Standardized a dataset-specific .gpkg of points using a smart caching and extraction strategy
 
     path_hf_gpkg = Path(path_hf_gpkg)
-    dir_db_gpkg = Path(dir_db_gpkg)
 
     # Read just the divide-ids of interest from the flowpath layer of the hydrofabric GPKG
     formatted_ids = ", ".join([f"'{div_id}'" for div_id in div_ids])

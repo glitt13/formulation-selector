@@ -175,7 +175,6 @@ class TestHfAtlasRaftsWorkflow(unittest.TestCase):
         gdf_hf_points = fsutil.generate_algo_points_gpkg_wrap(
             div_ids=pd.Series(div_ids),
             path_hf_gpkg=dummy_hf_path, 
-            dir_db_gpkg=self.dir_base,
             path_gpkg_fs_prep=gpkg_loc_path,
             hf_layer='flowpaths',
             map_id_col='divide_id',
