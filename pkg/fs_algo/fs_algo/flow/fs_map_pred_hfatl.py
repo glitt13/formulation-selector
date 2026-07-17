@@ -43,7 +43,6 @@ if __name__ == "__main__":
     pred_cfg._read_pred_config()
     
     #%% PREDICTION FILE'S COMIDS
-    #path_meta_pred = pred_cfg.pred_cfg_dict.get('path_meta')
     comid_pred_col = pred_cfg.pred_cfg_dict.get('pred_file_comid_colname')
     write_type = pred_cfg.pred_cfg_dict.get('write_type')
     ds_type = pred_cfg.pred_cfg_dict.get('ds_type')
@@ -89,8 +88,6 @@ if __name__ == "__main__":
     
     for ds in datasets: 
         print(f"Mapping predictions for {ds} dataset")
-        #path_pred_locs = fsutil.build_pred_locs_path(path_meta_template=path_meta_pred, dir_std_base=dir_std_base, ds=ds,ds_type=ds_type, write_type=write_type)
-        #comids_pred = fsutil._read_pred_comid(path_pred_locs, comid_pred_col)
 
         path_fs_dat_resp =  fsutil._std_fs_prep_ds_paths(dir_std_base=dir_std_base,ds=ds,mtch_str='*.nc')
         path_gpkg_fs_prep = fsutil._std_fs_prep_ds_companion_gpkg_path(path_fs_dat_resp[0])

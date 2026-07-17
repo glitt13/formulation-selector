@@ -952,7 +952,7 @@ def fs_save_algo_dir_struct(dir_base: str | os.PathLike ) -> dict:
     dir_out.mkdir(exist_ok=True)
 
     # The trained algorithm directory
-    dir_out_alg_base = Path(dir_out/Path('trained_algorithms'))
+    dir_out_alg_base = Path(dir_out / Path('trained_algorithms'))
     dir_out_alg_base.mkdir(exist_ok=True)
 
     # TODO consider compatibility with std_pred_path
