@@ -45,9 +45,6 @@ if __name__ == "__main__":
     logging.info("Parsing configurations...")
 
     # A. Prep Config
-    with open(path_prep_config, 'r') as file:
-        prep_cfg = yaml.safe_load(file)
-    
     attr_cfig = fsutil.AttrConfigAndVars(path_attr_config)
     attr_cfig._read_attr_config()
     home_dir =  fsutil._define_home_dir(attr_cfig.attr_config)
@@ -66,8 +63,15 @@ if __name__ == "__main__":
     map_divide_id_col = col_schema_df.get('map_divide_id_col', pd.Series(["divide_id"])).loc[0]
     dataset_name = col_schema_df.get('dataset_name', pd.Series(["aggregated"])).loc[0]
     
-    gage_id_col_cfg = col_schema_df.get('gage_id', pd.Series(["gage_id"])).loc[0]
-    
+    if 'gage_id_col_gpkg' in col_schema_df.columns:
+        gage_id_col_gpkg = col_schema_df.get('gage_id_col_gpkg', pd.Series(["gage_id_col_gpkg"])).loc[0]
+    elif 'gage_id' in col_schema_df.columns: # try the default used in the raw response variable datasets
+        gage_id_col_gpkg = col_schema_df.get('gage_id', pd.Series(["gage_id"])).loc[0]
+        logging.info("Consider adding 'gage_id_col_gpkg' entry to prep config")
+        print("Consider adding 'gage_id_col_gpkg' entry to prep config")
+    else:
+        logging.error("Expecting 'gage_id_col_gpkg' or 'gage_id' entries in the prep config.")
+
     regex_compiled = re.compile(gpkg_pattern,re.IGNORECASE)
 
     hf_layer = col_schema_df.get('hf_fp_layer', pd.Series(["flowpaths"])).loc[0]
@@ -112,21 +116,21 @@ if __name__ == "__main__":
             
             # Read just the ID and area columns to save RAM
             gdf = gpd.read_file(gpkg_path, layer=divides_layer, columns=[map_divide_id_col], engine="pyogrio")
-            gdf[gage_id_col_cfg] = gage_id
+            gdf[gage_id_col_gpkg] = gage_id
             mapping_dfs.append(pd.DataFrame(gdf.drop(columns='geometry', errors='ignore')))
             
     elif path_hf_basins_gpkg.is_file():
         # Scenario 2: Single consolidated GPKG file
         logging.info("Single file detected. Reading consolidated mapping...")
         gdf = gpd.read_file(path_hf_basins_gpkg, layer=divides_layer, engine="pyogrio")
-        if gage_id_col_cfg not in gdf.columns:
-            raise ValueError(f"Consolidated GPKG is missing the required gage ID column: '{gage_id_col_cfg}'")
-        mapping_dfs.append(pd.DataFrame(gdf[[map_divide_id_col, gage_id_col_cfg]]))
+        if gage_id_col_gpkg not in gdf.columns:
+            raise ValueError(f"Consolidated GPKG is missing the required gage ID column: '{gage_id_col_gpkg}'")
+        mapping_dfs.append(pd.DataFrame(gdf[[map_divide_id_col, gage_id_col_gpkg]]))
     else:
         raise FileNotFoundError(f"Hydrofabric path is neither a file nor directory: {path_hf_basins_gpkg}")
 
     df_mapping = pd.concat(mapping_dfs, ignore_index=True).drop_duplicates()
-    logging.info(f"Successfully mapped {df_mapping.shape[0]} divides to {df_mapping[gage_id_col_cfg].nunique()} unique gages.")
+    logging.info(f"Successfully mapped {df_mapping.shape[0]} divides to {df_mapping[gage_id_col_gpkg].nunique()} unique gages.")
 
     # ==========================================
     # 3. LOAD RAW HFATLAS ATTRIBUTES
@@ -165,37 +169,6 @@ if __name__ == "__main__":
     # # ==========================================
     # # 5. AGGREGATE
     # # ==========================================
-    # logging.info("Merging mapping and computing aggregations...")
-    # df_merged = pd.merge(df_mapping, df_raw_attrs, on=map_divide_id_col, how='inner')
-
-    # # Build the aggregation dictionary safely
-    # agg_dict = {
-    #     col: 'mean' 
-    #     for col in data_cols 
-    #     if col not in ['area_sqkm', 'areasqkm'] and col in df_merged.columns
-    # }
-    
-    # # Explicitly sum area if it exists
-    # for area_col in ['area_sqkm', 'areasqkm']:
-    #     if area_col in df_merged.columns:
-    #         agg_dict[area_col] = 'sum'
-
-    # # Perform the aggregation grouped by the gage_id!
-    # df_aggregated = df_merged.groupby(gage_id_col_cfg).agg(agg_dict).reset_index()
-
-    # # ==========================================
-    # # 6. EXPORT
-    # # ==========================================
-    # dir_db_attrs_agg_save.mkdir(parents=True, exist_ok=True)
-    # out_path = fsutil.std_path_agg_ds(dir_db_attrs_agg_save=dir_db_attrs_agg_save, ds = ds)
-
-    # df_aggregated.to_parquet(out_path, index=False)
-    # logging.info(f"✅ Success! Aggregated dataset containing {df_aggregated.shape[0]} basins saved to:")
-    # logging.info(f"   {out_path}")
-
-# ==========================================
-    # 5. AGGREGATE AND REFORMAT TO RaFTS SCHEMA
-    # ==========================================
     logging.info("Merging mapping and computing aggregations...")
     df_merged = pd.merge(df_mapping, df_raw_attrs, on=map_divide_id_col, how='inner')
 
@@ -212,7 +185,7 @@ if __name__ == "__main__":
             agg_dict[area_col] = 'sum'
 
     # Perform the aggregation grouped by the gage_id!
-    df_aggregated = df_merged.groupby(gage_id_col_cfg).agg(agg_dict).reset_index()
+    df_aggregated = df_merged.groupby(gage_id_col_gpkg).agg(agg_dict).reset_index()
 
     logging.info("Reshaping aggregated attributes to RaFTS standard long-format schema...")
     
@@ -222,13 +195,13 @@ if __name__ == "__main__":
     
     # Melt from Wide to Long
     df_long = df_aggregated.melt(
-        id_vars=[gage_id_col_cfg], 
+        id_vars=[gage_id_col_gpkg], 
         var_name='attribute', 
         value_name='value'
     )
     
     # Rename column to featureID
-    df_long = df_long.rename(columns={gage_id_col_cfg: 'featureID'})
+    df_long = df_long.rename(columns={gage_id_col_gpkg: 'featureID'})
     
     # Apply the featureID_format (e.g'USGS-{gage_id}') to match downstream queries
     df_long['featureID'] = df_long['featureID'].astype(str).apply(lambda gid: featureID_format.format(gage_id=gid))
@@ -279,13 +252,16 @@ if __name__ == "__main__":
         vpu_id_col=vpu_id_col, # epsg = 4326
     )
 
+    if gage_id_col_gpkg in gdf_hf.columns and gage_id_col_gpkg in df_mapping.columns:
+        gdf_hf = gdf_hf.drop(columns=[gage_id_col_gpkg])
+
     # Merge the mapping dataframe to get the real gage_ids back
     gdf_hf = gdf_hf.merge(df_mapping, on=map_divide_id_col, how='inner')
     
     # Overwrite the placeholder columns populated by the wrapper
-    gdf_hf['gage_id'] = gdf_hf[gage_id_col_cfg]
-    gdf_hf['featureID'] = gdf_hf[gage_id_col_cfg]
-    gdf_hf['comid'] = gdf_hf[gage_id_col_cfg]
+    gdf_hf['gage_id'] = gdf_hf[gage_id_col_gpkg]
+    gdf_hf['featureID'] = gdf_hf[gage_id_col_gpkg]
+    gdf_hf['comid'] = gdf_hf[gage_id_col_gpkg]
     
     # Save the corrected companion file
     gdf_hf.to_file(path_gpkg_fs_prep, driver="GPKG", layer='outlet')
