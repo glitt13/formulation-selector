@@ -2,7 +2,10 @@
 
 Intended to run after the initial prep script that generates the response variable .nc file.
 
-In cases where divides need to be aggregated to a larger scale, fs_agg_hfatl_basin.py should be run immediately before this script.
+This script is designed for modeling at the native divide level. It assumes that every modeled location in 
+the dataset corresponds directly to a single hydrofabric divide (e.g., a 1:1 relationship).
+
+In cases where divides need to be aggregated to a larger scale, fs_agg_hfatl_basin.py should be run instead.
 
 Example: 
     >>> uv run python fs_hfatlas_to_rafts_prep.py --path_prep_config "~/git/formulation-selector/scripts/workflow_configs/00example_configs/hfatl_test2/hfatl_prep_config.yaml" --name_attr_config "hfatl_attr_config.yaml"
