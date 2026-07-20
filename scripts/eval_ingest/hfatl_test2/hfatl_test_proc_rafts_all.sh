@@ -29,23 +29,23 @@ echo "Running processing from $DIR_CONFIG"
 # EXECUTION WORKFLOW
 # -----------------------------------------------------------------------------
 
-# # 1. Prepare the initial dataset
-# echo "Starting execution of hfATLAS parameter regionalization scripts..."
-# echo "--> Preparing the initial dataset..."
-# uv run python "${DIR_CONFIG}/prep_hfatl_test.py" "${DIR_CONFIG}/hfatl_prep_config.yaml" || {
-#     echo "ERROR: Dataset preparation failed. Exiting."
-#     exit 1
-# }
+# 1. Prepare the initial dataset
+echo "Starting execution of hfATLAS parameter regionalization scripts..."
+echo "--> Preparing the initial dataset..."
+uv run python "${DIR_CONFIG}/prep_hfatl_test.py" "${DIR_CONFIG}/hfatl_prep_config.yaml" || {
+    echo "ERROR: Dataset preparation failed. Exiting."
+    exit 1
+}
 
-# # 2. Run the hfATLAS standardized prep script
-# echo "--> Grabbing attributes..."
-# uv run python "${DIR_PREP}/fs_hfatlas_to_rafts_prep.py" \
-#     --path_prep_config "${DIR_CONFIG}/hfatl_prep_config.yaml" \
-#     --name_attr_config "hfatl_attr_config.yaml" || {
-#     echo "ERROR: Attribute grabbing failed. Exiting."
-#     exit 1
-# }
-# echo "Attribute grabbing completed successfully!"
+# 2. Run the hfATLAS standardized prep script
+echo "--> Grabbing attributes..."
+uv run python "${DIR_PREP}/fs_hfatlas_to_rafts_prep.py" \
+    --path_prep_config "${DIR_CONFIG}/hfatl_prep_config.yaml" \
+    --name_attr_config "hfatl_attr_config.yaml" || {
+    echo "ERROR: Attribute grabbing failed. Exiting."
+    exit 1
+}
+echo "Attribute grabbing completed successfully!"
 
 # 3. Train the algorithms 
 echo "--> Training & testing algorithms..."
