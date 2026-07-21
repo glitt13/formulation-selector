@@ -31,14 +31,14 @@ echo "Running processing from $DIR_CONFIG"
 # 1. Prepare the initial dataset
 echo "Starting execution of hfATLAS parameter regionalization scripts..."
 echo "--> Preparing the initial dataset..."
-uv run python "${DIR_CONFIG}/prep_xssaus_metrics.py" "${DIR_CONFIG}/xssangencerf_prep_config.yaml" || {
+uv run --project "${DIR_REPO}/pkg" python "${DIR_CONFIG}/prep_xssaus_metrics.py" "${DIR_CONFIG}/xssangencerf_prep_config.yaml" || {
     echo "ERROR: Dataset preparation failed. Exiting."
     exit 1
 }
 
 # 2 Aggregate they hydrofabric based on the gage_id (CAMELS basins subset)
 echo "--> Aggregating the hydrofabric attributes based on the gage_id (CAMELS basins subset)..."
-uv run python "${DIR_PREP}/fs_agg_hfatl_basin.py" \
+uv run --project "${DIR_REPO}/pkg" python "${DIR_PREP}/fs_agg_hfatl_basin.py" \
     --path_prep_config "${DIR_CONFIG}/xssangencerf_prep_config.yaml" \
     --path_attr_config "${DIR_CONFIG}/xssangencerf_attr_config.yaml" || {
     echo "ERROR: Hydrofabric aggregation failed. Exiting."
@@ -49,7 +49,7 @@ echo "Hydrofabric aggregation completed successfully!"
 
 # 3. Train the algorithms 
 echo "--> Training & testing algorithms..."
-uv run python "${DIR_PY}/fs_proc_algo_pool.py" "${DIR_CONFIG}/xssangencerf_algo_config.yaml" --chunk_size 4 || {
+uv run --project "${DIR_REPO}/pkg" python "${DIR_PY}/fs_proc_algo_pool.py" "${DIR_CONFIG}/xssangencerf_algo_config.yaml" --chunk_size 4 || {
     echo "ERROR: Algorithm training failed. Exiting."
     exit 1
 }

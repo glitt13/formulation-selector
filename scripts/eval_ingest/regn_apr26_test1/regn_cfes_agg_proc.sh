@@ -32,14 +32,14 @@ echo "Running processing from $DIR_CONFIG"
 # # 1. Prepare the initial dataset
 echo "Starting execution of hfATLAS parameter regionalization scripts..."
 echo "--> Preparing the initial dataset..."
-uv run python "${DIR_CONFIG}/prep_regn_test_agg.py" "${DIR_CONFIG}/regn_cfes_agg_prep_config.yaml" || {
+uv run --project "${DIR_REPO}/pkg" python "${DIR_CONFIG}/prep_regn_test_agg.py" "${DIR_CONFIG}/regn_cfes_agg_prep_config.yaml" || {
     echo "ERROR: Dataset preparation failed. Exiting."
     exit 1
 }
 
 # # 2. Run the hfATLAS standardized prep script
 echo "--> Grabbing attributes..."
-uv run python "${DIR_PREP}/fs_hfatlas_to_rafts_prep.py" \
+uv run --project "${DIR_REPO}/pkg" python "${DIR_PREP}/fs_hfatlas_to_rafts_prep.py" \
     --path_prep_config "${DIR_CONFIG}/regn_cfes_agg_prep_config.yaml" \
     --name_attr_config "regn_cfes_attr_config.yaml" || {
     echo "ERROR: Attribute grabbing failed. Exiting."
@@ -49,7 +49,7 @@ uv run python "${DIR_PREP}/fs_hfatlas_to_rafts_prep.py" \
 
 # 3. Train the algorithms 
 echo "--> Training & testing algorithms..."
-uv run python "${DIR_PY}/fs_proc_algo_pool.py" "${DIR_CONFIG}/regn_cfes_algo_config_uncn.yaml" --chunk_size 4 || {
+uv run --project "${DIR_REPO}/pkg" python "${DIR_PY}/fs_proc_algo_pool.py" "${DIR_CONFIG}/regn_cfes_algo_config_uncn.yaml" --chunk_size 4 || {
     echo "ERROR: Algorithm training failed. Exiting."
     exit 1
 }
@@ -57,7 +57,7 @@ echo "Algorithm training completed successfully!"
 
 # 4. Perform the prediction
 echo "--> Performing process predictions..."
-uv run python "${DIR_PY}/fs_pred_algo.py" "${DIR_CONFIG}/regn_cfes_pred_config_uncn.yaml" || {
+uv run --project "${DIR_REPO}/pkg" python "${DIR_PY}/fs_pred_algo.py" "${DIR_CONFIG}/regn_cfes_pred_config_uncn.yaml" || {
     echo "ERROR: Process predictions failed. Exiting."
     exit 1
 }
@@ -65,7 +65,7 @@ echo "Process predictions completed successfully!"
 
 # 5. Map the predictions
 echo "--> Plotting the process predictions on static map..."
-uv run python "${DIR_PY}/fs_map_pred_hfatl.py" "${DIR_CONFIG}/regn_cfes_pred_config_uncn.yaml" || {
+uv run --project "${DIR_REPO}/pkg" python "${DIR_PY}/fs_map_pred_hfatl.py" "${DIR_CONFIG}/regn_cfes_pred_config_uncn.yaml" || {
     echo "ERROR: Prediction mapping failed. Exiting."
     exit 1
 }
