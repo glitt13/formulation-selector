@@ -425,6 +425,10 @@ class PredConfigParser:
         algo_type = pred_cfg.get("algo_type", [])
         mapie_alpha = pred_cfg.get("MAPIE_alpha", None)
         uncn_bnd_pred = pred_cfg.get("uncn_bnd_pred", False)
+        path_gpkg_pred = pred_cfg.get('path_gpkg_pred',None)
+        pred_gpkg_lyr = pred_cfg.get('pred_gpkg_lyr', None)
+        pred_gpkg_id_col = pred_cfg.get('pred_gpkg_id_col',None)
+
 
         # Compile dictionary
         self.pred_cfg_dict = {
@@ -446,6 +450,9 @@ class PredConfigParser:
             'mapie_alpha': mapie_alpha,
             'uncn_bnd_pred': uncn_bnd_pred,
             'path_pred_config': self.path_pred_config,
+            'path_gpkg_pred':path_gpkg_pred,
+            'pred_gpkg_lyr':pred_gpkg_lyr,
+            'pred_gpkg_id_col':pred_gpkg_id_col,
         }   
 
 def _make_home_dir(home_dir_read:str|os.PathLike=[])-> os.PathLike:
@@ -1191,6 +1198,16 @@ def _read_pred_comid(path_pred_locs: str | os.PathLike, comid_pred_col:str ) -> 
             raise ValueError(f"Could not successfully read in {path_pred_locs} & select col {comid_pred_col}")
     elif '.parquet' in Path(path_pred_locs).suffix:
         try:
+            df_pred = pd.read_parquet(path_pred_locs)
+            is_tuple_format = df_pred.columns.str.match(r"^\('.*', '.*'\)$")
+            if is_tuple_format.all(): # Perform column name cleaning 
+                df_pred = clean_hfatlas_columns(df_pred)
+            comids_pred = df_pred[comid_pred_col].drop_duplicates().values
+        except:
+            logging.error(f"Could not successfully read in {path_pred_locs} & select col {comid_pred_col}")
+            raise ValueError(f"Could not successfully read in {path_pred_locs} & select col {comid_pred_col}")
+    elif Path(path_pred_locs).is_dir(): 
+        try: # If a directory is provided, this assumes it only contains .parquet files
             df_pred = pd.read_parquet(path_pred_locs)
             is_tuple_format = df_pred.columns.str.match(r"^\('.*', '.*'\)$")
             if is_tuple_format.all(): # Perform column name cleaning 
@@ -1972,12 +1989,18 @@ def validate_df_comids(
 
 # --------------------------------------------------------------------------- #
 # --------------------------------- hfATLAS --------------------------------- #
-def read_hfatlas_wrap_dask(paths_hfatl: Union[Path, str, List[Union[Path, str]]], attrs_sel: list, 
-                           map_id_col: str = "divide_id") -> pd.DataFrame: 
+def read_hfatlas_wrap_dask(paths_hfatl: Union[Path, str, List[Union[Path, str]]], attrs_sel: list = None, 
+                           map_id_col: str = "divide_id", query_clean: bool = False) -> pd.DataFrame: 
     """
     Highly efficient Dask/PyArrow implementation to read and merge requested attributes.
     Peeks at Parquet metadata to resolve pint-aware tuples before lazy-loading data.
+
+    Changelog:
+     2026-07-21 fix: enforce map_id_col dtype read as str, GL
     """
+    if attrs_sel is None:
+        attrs_sel = []
+
     if not isinstance(paths_hfatl, list):
         paths_hfatl = [paths_hfatl]
         
@@ -2018,6 +2041,9 @@ def read_hfatlas_wrap_dask(paths_hfatl: Union[Path, str, List[Union[Path, str]]]
             else:
                 col_mapping[raw_col] = raw_col
 
+        if query_clean and not attrs_sel:
+            attrs_sel = [c for c in col_mapping.keys() if c != map_id_col]
+
         # Determine which requested attributes actually exist in this file
         available_clean_cols = [col for col in attrs_sel if col in col_mapping]
             
@@ -2034,6 +2060,9 @@ def read_hfatlas_wrap_dask(paths_hfatl: Union[Path, str, List[Union[Path, str]]]
         ddf = dd.read_parquet(file, columns=raw_cols_to_load, engine='pyarrow')
         ddf = ddf.rename(columns=rename_dict)
         
+        # Enforce string type inside the lazy Dask graph BEFORE indexing/merging
+        ddf[map_id_col] = ddf[map_id_col].astype(str)
+
         # Set the index to map_id_col to optimize Dask merges
         ddf = ddf.set_index(map_id_col)
         ddfs_to_merge.append(ddf)
@@ -2052,6 +2081,16 @@ def read_hfatlas_wrap_dask(paths_hfatl: Union[Path, str, List[Union[Path, str]]]
     # 5. COMPUTE phase: Execute the graph and bring the final, slimmed-down table into Pandas RAM
     logging.info("Executing computations and pulling to memory...")
     combined_df = combined_ddf.compute().reset_index()
+
+    # Enforce string dtype on the location identifier to prevent downstream bugs
+    if map_id_col in combined_df.columns:
+        col_dtype = combined_df[map_id_col].dtype
+        # Pandas represents strings as either 'object' or the newer 'string' extension type
+        if not pd.api.types.is_object_dtype(col_dtype) and not pd.api.types.is_string_dtype(col_dtype):
+            warn_str = f"Location identifier column '{map_id_col}' was read as {col_dtype}. Coercing to string to prevent downstream ID-matching errors."
+            logging.warning(warn_str)
+            print(warn_str)
+            combined_df[map_id_col] = combined_df[map_id_col].astype(str)
 
     # Check for missing columns across the entire batch
     miss_cols = [col for col in attrs_sel if col not in found_attrs]
