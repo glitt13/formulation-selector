@@ -18,6 +18,7 @@ import requests
 import zipfile
 from typing import Iterable
 import fs_algo.utils as fsutil
+import os
 
 
 # Set up basic logging configuration
@@ -707,8 +708,8 @@ def plot_map_pred(geo_df:gpd.GeoDataFrame, states:gpd.GeoDataFrame,
             cmap_choice = 'viridis'
 
         hb = ax.hexbin(
-            x=geo_df.geometry.x, 
-            y=geo_df.geometry.y, 
+            x=geo_df.geometry.centroid.x, 
+            y=geo_df.geometry.centroid.y, 
             C=geo_df[colname_data], 
             reduce_C_function=reduce_C_func, 
             gridsize=150, 
