@@ -8,6 +8,7 @@ Example:
     2025-08-21 added logging, GL
     2025-10-10 refactor to renamed fs_algo modules, GL
     2026-05-01 adapted to support dynamic ID joins for hfATLAS and mapie uncertainties
+    2026-07-21 add custom pred gpkg capability, GL
 """
 import argparse
 import pandas as pd
@@ -41,15 +42,14 @@ if __name__ == "__main__":
 
     pred_cfg = fsutil.PredConfigParser(path_pred_config)
     pred_cfg._read_pred_config()
-    
-    #%% PREDICTION FILE'S COMIDS
-    comid_pred_col = pred_cfg.pred_cfg_dict.get('pred_file_comid_colname')
-    write_type = pred_cfg.pred_cfg_dict.get('write_type')
-    ds_type = pred_cfg.pred_cfg_dict.get('ds_type')
-    
-    #%% prediction config
+
+
+    #%% prediction config var extract
     resp_vars = pred_cfg.pred_cfg_dict.get('algo_response_vars')
     algos = pred_cfg.pred_cfg_dict.get('algo_type')
+    path_gpkg_pred = pred_cfg.pred_cfg_dict.get('path_gpkg_pred',None)
+    pred_gpkg_lyr = pred_cfg.pred_cfg_dict.get('pred_gpkg_lyr', None)
+    pred_gpkg_id_col = pred_cfg.pred_cfg_dict.get('pred_gpkg_id_col',None)
 
     #%%  READ CONTENTS FROM THE ATTRIBUTE CONFIG
     path_attr_config = fsutil.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_attr_config',None))
@@ -66,7 +66,7 @@ if __name__ == "__main__":
 
     dir_base = attr_cfig.attrs_cfg_dict.get('dir_base')
     dir_std_base = attr_cfig.attrs_cfg_dict.get('dir_std_base')
-    dir_db_attrs = attr_cfig.attrs_cfg_dict.get('dir_db_attrs')
+    # dir_db_attrs = attr_cfig.attrs_cfg_dict.get('dir_db_attrs')
     datasets = attr_cfig.attrs_cfg_dict.get('datasets')
 
     dirs_std_dict = fsutil.fs_save_algo_dir_struct(dir_base)
@@ -88,7 +88,7 @@ if __name__ == "__main__":
     
     for ds in datasets: 
         print(f"Mapping predictions for {ds} dataset")
-
+        vals = {'dir_std_base':dir_std_base,'ds':ds,}
         path_fs_dat_resp =  fsutil._std_fs_prep_ds_paths(dir_std_base=dir_std_base,ds=ds,mtch_str='*.nc')
         path_gpkg_fs_prep = fsutil._std_fs_prep_ds_companion_gpkg_path(path_fs_dat_resp[0])
         layers = gpd.list_layers(path_gpkg_fs_prep)
@@ -96,14 +96,22 @@ if __name__ == "__main__":
         if len(layers) >0:
             if layers['name'].str.contains('outlet').any():
                 lyr = 'outlet' # Corresponds w/ fs_retr_nhdp_comids_geom_wrap
-        gdf_all = gpd.read_file(path_gpkg_fs_prep,layer=lyr)
-        
-        vals = {'dir_std_base':dir_std_base,'ds':ds}
-        dir_db_attrs = Path(str(dir_db_attrs).format(**vals))
+        if path_gpkg_pred:
+            path_gpkg_pred = Path(str(path_gpkg_pred).format(**vals))
+            gdf_all = gpd.read_file(path_gpkg_pred,layer=pred_gpkg_lyr,
+                                    columns=[pred_gpkg_id_col], engine='pyogrio')
+            gdf_all['featureID'] = gdf_all[pred_gpkg_id_col]
+        else:
+            logging.warning(f"Falling back on reading the gpkg used in the response variable preparation, \
+            which may not be appropriate!! {path_gpkg_fs_prep}")
+            gdf_all = gpd.read_file(path_gpkg_fs_prep,layer=lyr)
 
         # Keep original columns, but ensure we have standard names for plotting logic
         if 'featureID' not in gdf_all.columns and 'comid' in gdf_all.columns:
             gdf_all['featureID'] = gdf_all['comid']
+        
+        if 'featureID' not in gdf_all.columns:
+            logging.error(f'Expecting featureID column to be in the gdf_all geodataframe')
 
         for metr in resp_vars:
             # --- DYNAMIC MAPPING DISCOVERY ---
@@ -166,7 +174,7 @@ if __name__ == "__main__":
                     algo_str=algo_str,
                     split_type=analysis_str,
                     colname_data='prediction',
-                    epsg_reproj=4326,
+                    epsg_reproj=3857,
                     task_type=task_type
                 )
                 
@@ -182,7 +190,7 @@ if __name__ == "__main__":
                         ds=ds, metr=metr, algo_str=algo_str,
                         alpha_val=alpha_val, uncn_col=None,
                         split_type=analysis_str, colname_data='prediction',
-                        epsg_reproj=4326
+                        epsg_reproj=3857
                     )
 
                 #%% PREDICT UNCERTAINTIES (If ForestCI exists)
@@ -194,8 +202,9 @@ if __name__ == "__main__":
                         ds=ds, metr=metr, algo_str=algo_str,
                         alpha_val=None, uncn_col='forestci',
                         split_type=analysis_str, colname_data='prediction',
-                        epsg_reproj=4326
+                        epsg_reproj=3857
                     )
-
+        logging.info(f"Prediction map plots stored inside {dir_out_viz_base}")
         logging.info(f"Completed prediction map generation for {path_pred_config}")
+        
     logging.shutdown()
