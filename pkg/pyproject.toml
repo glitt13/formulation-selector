@@ -20,6 +20,7 @@ fs_prep = { workspace = true }
 
 [dependency-groups]
 dev = [
+    "ipykernel>=6.31.0",
     "pytest>=9.0.3",
     "pytest-cov>=7.1.0",
 ]
