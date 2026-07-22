@@ -20,7 +20,6 @@ file_io: # May define {home_dir} for python's '{home_dir}/string_path'.format(ho
   - 'hf_fp_id_col': "id" # The column name in the flowpaths layer corresponding to the flowpath outlet of the divide
   - 'vpu_id_col': "vpuid" # The column name in the hydrofabric flowpaths layer
   - 'vpu_mapped': 'True' # Boolean str. Should output attribute data be organized by vpu? True recommended for large datasets, e.g. entire CONUS scale.
-  - 'dir_db_gpkg': "{home_dir}/noaa/regionalization/data/input/gpkg/hfatl/"
 formulation_metadata:  
   - 'dataset_name': 'test_hfatl0' # Required. 
   - 'formulation_base': 'test_regnl' # Required. Basename of formulation. the rr, sp, and gw will be added to this if 'formulation_id' is left empty
