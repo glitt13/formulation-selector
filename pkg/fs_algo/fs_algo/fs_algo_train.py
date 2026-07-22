@@ -23,9 +23,8 @@ import fs_algo.plots as plots
 
 from sklearn.cluster import KMeans, AgglomerativeClustering
 from sklearn.metrics import silhouette_score, davies_bouldin_score, pairwise_distances
-from sklearn.neighbors import KNeighborsClassifier
+from sklearn.neighbors import KNeighborsClassifier, NearestNeighbors
 from sklearn.base import BaseEstimator, ClusterMixin
-#from sklearn_extra.cluster import KMedoids
 import gower
 import gc
 import traceback
@@ -1209,3 +1208,56 @@ def _process_single_metric(args_dict):
         if 'train_eval' in locals():
             del train_eval
         gc.collect()
+
+def assign_donors_to_receivers(
+    df_donors: pd.DataFrame, 
+    df_receivers: pd.DataFrame, 
+    attrs: list, 
+    metric: str = 'euclidean',
+    cluster_col: str = 'prediction',
+    id_col: str = 'featureID'
+) -> pd.DataFrame:
+    """
+    Pairs each receiver basin with the most similar donor basin within its assigned cluster.
+    """
+    pairing_results = []
+    unique_clusters = df_receivers[cluster_col].dropna().unique()
+    
+    for cluster_id in unique_clusters:
+        donors_in_clust = df_donors[df_donors[cluster_col] == cluster_id].reset_index(drop=True)
+        receivers_in_clust = df_receivers[df_receivers[cluster_col] == cluster_id].reset_index(drop=True)
+        
+        if donors_in_clust.empty:
+            logging.warning(f"No donors found for Cluster {cluster_id}. {len(receivers_in_clust)} receivers unassigned.")
+            continue
+            
+        X_donor = donors_in_clust[attrs]
+        X_recv = receivers_in_clust[attrs]
+        
+        # Calculate Nearest Neighbor
+        if metric == 'gower':
+            dist_matrix = gower.gower_matrix(np.asarray(X_recv), np.asarray(X_donor))
+            closest_donor_indices = np.argmin(dist_matrix, axis=1)
+            distances = np.min(dist_matrix, axis=1)
+        else:
+            nn = NearestNeighbors(n_neighbors=1, metric=metric)
+            nn.fit(X_donor)
+            distances, closest_donor_indices = nn.kneighbors(X_recv)
+            distances = distances.flatten()
+            closest_donor_indices = closest_donor_indices.flatten()
+            
+        # Record the pairings
+        clust_pairings = pd.DataFrame({
+            'receiver_id': receivers_in_clust[id_col],
+            'donor_id': donors_in_clust.loc[closest_donor_indices, id_col].values,
+            'cluster_id': cluster_id,
+            'distance_to_donor': distances
+        })
+        pairing_results.append(clust_pairings)
+        
+    if pairing_results:
+        return pd.concat(pairing_results, ignore_index=True)
+    else:
+        return pd.DataFrame()
+
+
