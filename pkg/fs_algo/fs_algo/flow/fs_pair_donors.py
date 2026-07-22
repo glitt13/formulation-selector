@@ -5,12 +5,8 @@ assigns a donor basin (used in training) to every receiver basin based on sharin
 cluster and then finding the donor basin within each cluster at the nearest euclidean distance.
 
 Changelog / Contributions
- 2026-07-20 Originally created, GL with heavy consultation from Gemini3.1Pro
+ 2026-07-21 Originally created, GL with heavy consultation from Gemini3.1Pro
 """
-
-from sklearn.neighbors import NearestNeighbors
-import gower
-
 import argparse
 import pandas as pd
 from pathlib import Path
@@ -21,60 +17,7 @@ import numpy as np
 
 import fs_algo.utils as fsutil
 import fs_prep.proc_eval_metrics as pem
-
-def assign_donors_to_receivers(
-    df_donors: pd.DataFrame, 
-    df_receivers: pd.DataFrame, 
-    attrs: list, 
-    metric: str = 'euclidean',
-    cluster_col: str = 'prediction',
-    id_col: str = 'featureID'
-) -> pd.DataFrame:
-    """
-    Pairs each receiver basin with the most similar donor basin within its assigned cluster.
-    """
-    pairing_results = []
-    unique_clusters = df_receivers[cluster_col].dropna().unique()
-    
-    for cluster_id in unique_clusters:
-        donors_in_clust = df_donors[df_donors[cluster_col] == cluster_id].reset_index(drop=True)
-        receivers_in_clust = df_receivers[df_receivers[cluster_col] == cluster_id].reset_index(drop=True)
-        
-        if donors_in_clust.empty:
-            logging.warning(f"No donors found for Cluster {cluster_id}. {len(receivers_in_clust)} receivers unassigned.")
-            continue
-            
-        X_donor = donors_in_clust[attrs]
-        X_recv = receivers_in_clust[attrs]
-        
-        # Calculate Nearest Neighbor
-        if metric == 'gower':
-            dist_matrix = gower.gower_matrix(np.asarray(X_recv), np.asarray(X_donor))
-            closest_donor_indices = np.argmin(dist_matrix, axis=1)
-            distances = np.min(dist_matrix, axis=1)
-        else:
-            nn = NearestNeighbors(n_neighbors=1, metric=metric)
-            nn.fit(X_donor)
-            distances, closest_donor_indices = nn.kneighbors(X_recv)
-            distances = distances.flatten()
-            closest_donor_indices = closest_donor_indices.flatten()
-            
-        # Record the pairings
-        clust_pairings = pd.DataFrame({
-            'receiver_id': receivers_in_clust[id_col],
-            'donor_id': donors_in_clust.loc[closest_donor_indices, id_col].values,
-            'cluster_id': cluster_id,
-            'distance_to_donor': distances
-        })
-        pairing_results.append(clust_pairings)
-        
-    if pairing_results:
-        return pd.concat(pairing_results, ignore_index=True)
-    else:
-        return pd.DataFrame()
-
-
-
+import fs_algo.fs_algo_train as fsat
 
 """
 Workflow script to pair ungauged receiver basins with gauged donor basins
@@ -83,8 +26,6 @@ based on 1:1 attribute nearest-neighbor matching within machine learning cluster
 Usage:
     >>> python fs_pair_donors.py "/path/to/datasetshortname_pred_config.yaml"
 """
-
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process the prediction config file for donor pairing.')
@@ -175,8 +116,6 @@ if __name__ == "__main__":
      
             
         logging.info(f"Reading donor metadata from {path_meta}")    
-        # Strip pint units
-        # df_meta = fsutil.clean_hfatlas_columns(pd.read_parquet(path_meta))
         df_meta = fsutil.read_hfatlas_wrap_dask(
             paths_hfatl=[dir_db_attrs], 
             attrs_sel=[], # Empty list forces it to only pull the map_id_col
@@ -184,9 +123,15 @@ if __name__ == "__main__":
         )
         # Read in the donor ids, meaning those that were trained.
         gageids_donor = df_meta['featureID'].drop_duplicates().tolist()
+
+        # Load the donor response variables (.nc file) generated during prep
+        dat_resp = fsutil._open_response_data_fs(dir_std_base, ds)
+        df_resp = dat_resp.to_dataframe()
+        gage_ids_raw = df_resp.index.tolist()
+
         
         df_attr_donor = fsutil.fs_read_attr_comid(dir_db_attrs, 
-                                                  gageids_donor, attrs_sel=attrs_sel, read_type='all')
+                                                  gage_ids_raw, attrs_sel=attrs_sel, read_type='all')
         df_donor_wide = df_attr_donor.pivot(index='featureID', columns='attribute', values='value').dropna()
         logging.info(f"Ingested donor attribute data. Total locations = {df_donor_wide.shape[0]}")
 
@@ -223,7 +168,7 @@ if __name__ == "__main__":
                     print(f"PROBLEM: No Receiver predictions from the prediction step!! {path_pred_in}")
                     continue
                 
-                # TODO read in the predictions
+                # Read the cluster predictions across all locations 
                 path_pred_out = fsutil.std_pred_path(dir_out,algo=algo,metric=resp_var,dataset_id=ds)
                 df_receivers = pd.read_parquet(path_pred_out)
                 df_recv_attrs = fsutil.read_hfatlas_wrap_dask(
@@ -239,19 +184,10 @@ if __name__ == "__main__":
                 df_receivers_mrge = df_receivers.merge(df_recv_attrs, left_on = 'featureID', right_on = id_col_pred, how = 'inner')         
                 df_receivers_mrge = df_receivers_mrge[['featureID','prediction']+attrs_sel]      
 
-                # # TODO change this to read the receivers, not the donors!!
-                # # Fetch receiver attributes to calculate distance
-                # locids_recv = df_receivers[id_col_pred].tolist()
-                # df_attr_recv = fsutil.fs_read_attr_comid(Path(str(dir_db_attrs).format(**vals_train)), 
-                #                                          locids_recv, attrs_sel=attrs_sel, read_type='all')
-                # df_recv_wide = df_attr_recv.pivot(index=id_col_pred, columns='attribute', values='value').dropna()
                 logging.info(f"Ingested receiver attribute data. Total locations = {df_receivers.shape[0]}")
 
-                # # Merge receiver predictions with their attributes
-                # df_receivers_paired = df_receivers.merge(df_recv_wide, left_on=id_col_pred, right_index=True, how='inner')
-
                 # 4. Execute 1:1 Pairing
-                df_pairings = assign_donors_to_receivers(
+                df_pairings = fsat.assign_donors_to_receivers(
                     df_donors=df_donors_paired,
                     df_receivers=df_receivers_mrge,
                     attrs=attrs_sel,
@@ -269,5 +205,52 @@ if __name__ == "__main__":
                     df_pairings.to_csv(path_pair_out, index=False)
                     logging.info(f"Saved {len(df_pairings)} donor-receiver pairings to {path_pair_out}")
 
-    logging.info("FINISHED Donor-Receiver Pairing.")
+
+                    # 6. Assign parameter sets to receivers from donors
+                    logging.info(f"Assigning donor parameters to receiver locations for {algo}...")
+                    try:
+                        # Identify the ID column in df_resp (typically 'gage_id' or 'featureID')
+                        id_col_resp = df_resp.index.name
+                        if not id_col_resp:
+                            id_col_resp = 'gage_id' if 'gage_id' in df_resp.columns else  \
+                                logging.error(f"Could not determine the location identifier column in the prepared response variable dataset {ds}")
+
+                        # # Extract the parameter columns (data variables in the .nc file)
+                        # param_cols = list(dat_resp.data_vars.keys())
+                        # df_params_only = df_resp[[id_col_resp] + param_cols].copy()
+                        
+                        # Enforce string types to prevent merge failures
+                        #df_params_only[id_col_resp] = df_params_only[id_col_resp].astype(str)
+                        df_pairings['donor_id'] = df_pairings['donor_id'].astype(str)
+                        
+                        # Merge parameters onto the pairing DataFrame based on donor_id
+                        df_receiver_params = df_pairings[['receiver_id', 'donor_id']].merge(
+                            df_resp, 
+                            left_on='donor_id', 
+                            right_on=id_col_resp, 
+                            how='left'
+                        )
+
+                        # Insert check on gage_ids
+                        tot_gage_ids = len(df_resp.index)
+                        tot_donor_ids = df_receiver_params['donor_id'].nunique()
+                        tot_cmmn_ids = len(np.intersect1d(df_resp.index.unique(),df_receiver_params['donor_id'].unique()))
+                        if tot_cmmn_ids < tot_donor_ids:
+                            logging.error('Something is wrong with the donor ids. Some are unknown, having no parameter sets.')
+
+
+                        # Format as wide: featureID (receiver), and the parameters
+                        df_receiver_params = df_receiver_params.rename(columns={'receiver_id': 'featureID'})
+                        # cols_to_keep = ['featureID'] + param_cols
+                        # df_receiver_params_wide = df_receiver_params[cols_to_keep]
+                        
+                        # Save output
+                        path_params_out = dir_regionalization / ds / f"receiver_params_{algo}_{resp_var}__{ds}.csv"
+                        df_receiver_params.to_csv(path_params_out, index=False)
+                        logging.info(f"Saved assigned receiver parameters to {path_params_out}")
+                        
+                    except Exception as e:
+                        logging.error(f"Failed to assign donor parameters to receivers: {e}")
+
+    logging.info("FINISHED Donor-Receiver Pairing & Parameter Assignment.")
     logging.shutdown()
