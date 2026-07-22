@@ -17,14 +17,14 @@ The RaFTS hfATLAS workflow is executed in a specific sequence to process raw inp
 
 ### Understanding `fs_agg_hfatl_basin.py` vs. `fs_hfatlas_to_rafts_prep.py`
 
-Both scripts prepare the watershed attribute data and the choice depends on the scale you wish to model.
+Both scripts prepare the watershed attribute data and the choice depends on whether the input data have been aggregated to the desired scale (i.e. basin size). Preferably, the input watershed attribute data have already been aggregated to same scale as the response variables. In that case, `fs_hfatlas_to_rafts_prep.py` is the method.
 These run after the initial custom prep script that generates the response variable `.nc` file. 
 
 
-* **`fs_hfatlas_to_rafts_prep.py`**: This script simply formats hfATLAS attributes into RaFTS-compatible attributes. It is intended to run when the raw data are already described at the native `featureID` level (e.g. divide_id) and need no additional aggregation. 
+* **`fs_hfatlas_to_rafts_prep.py`**:  This script formats hfATLAS attributes into RaFTS-compatible attributes. It is intended to run when the raw response variable and corresponding attribute data are already described at the native `featureID` level such as a USGS gaged basin and therefore need no additional aggregation. 
 
 
-* **`fs_agg_hfatl_basin.py`**: This script is required specifically in cases where hydrofabric divides need to be aggregated to a larger scale. It reads a hydrofabric GPKG, extracts the divide-to-gage mapping, loads the raw hfATLAS attributes, and aggregates them to the gage level. It outputs analysis-ready aggregated attributes. Note that aggregation is assumed to take the average, unless it is an area column in which case the sum is taken. Code modification will be required for exceptions. A simpler approach would be to use aggregation methods prior to  `hfATLAS` aggregation cap
+* **`fs_agg_hfatl_basin.py`**: Not recommended unless attribute data have not been pre-processed to the desired basin scale. This script is used specifically in cases where hydrofabric divides need to be (crudely) aggregated to a larger scale. It reads a hydrofabric GPKG, extracts the divide-to-gage mapping, loads the raw hfATLAS attributes, and aggregates them to the gage level. It outputs analysis-ready aggregated attributes. Note that aggregation is assumed to take the average of attributes across divides, unless it is an area column in which case the sum is taken. Code modification will be required for exceptions. A simpler approach would be to use aggregation methods prior to  `hfATLAS` aggregation cap
 
 
 3. **Training & Testing**: Algorithms are trained and tested in parallel on the catchment attribute data to predict formulation metrics or hydrologic signatures. There are a few different algorithm training scripts contained inside `pkg/fs_algo/fs_algo/flow/`:
@@ -41,8 +41,11 @@ These run after the initial custom prep script that generates the response varia
 
  - `fs_map_pred_hfatl.py`: Generates static `.png` maps of the predicted values and uncertainty bounds joined dynamically to the hydrofabric geometries.
 
+6. **Donor-Receiver Pairing**: Used for unsupervised algorithm-only algorithms. 
 
+- `fs_pair_donors.py`: Pairs donor and receiver basins within the same cluster based on euclidean distance.
 
+Note: The attribute transformation workflow has been deprecated for the current processing workflows. It's recommended to perform desired transformations on the input attribute data beforehand. If attribute transformation is desired, updates will need to be made to the prediction step.
 
 ---
 
@@ -65,8 +68,6 @@ Defines the required column mappings, file paths, and metadata for the response 
 
 
 * `metric_cols` & `metric_mappings`: Column(s) in the raw response variables dataset (`'metric_cols'`) and the mapped column names to be used for the dataset and all further processing. In other words, `'metric_cols'` gives the user the option to rename the response variables' data columns. (Required).
-
-
 
 
 * **`file_io`**:
@@ -93,6 +94,25 @@ Defines the required column mappings, file paths, and metadata for the response 
 
 * `gage_id_col_gpkg`: The gage_id column in the `path_hf_basins_gpkg`, if present. Otherwise do not provide this entry in the config file.
 
+### Attribute prep config requirements
+Some options are specific to the next step in the standard workflow using pre-defined attributes. These requirements may vary by the choice of script (`fs_hfatlas_to_rafts_prep.py` vs. `fs_agg_hfatl_basin.py`).
+
+#### `fs_hfatlas_to_rafts_prep.py`
+When working on the individual divide scale, the entire hydrofabric may be considered as an input dataset. Organizing the attributes and hydrofabric by vpu subdirectories offers data reading efficiencies. Otherwise, smaller datasets do not need to be organized by vpu.
+* **`file_io`**:
+* `vpu_mapped`:  Boolean str. Should output attribute data be organized by vpu? Recommended to be True for large datasets, e.g. entire CONUS scale. If set to False, the vpuid will be assigned as 'all' (appropriate for smaller datasets). More details in `fs_algo.utils.hfatl_hf_cmbo_wrap()`. The following flowpath and vpu config spec options pertain to `vpu_mapped=True`.
+
+* `hf_fp_layer` Hydrofabric name for the flowpaths layer, used for organizing file write of data by vpu
+
+* `hf_fp_id_col` The column name in the flowpaths layer corresponding to the flowpath outlet of the divide, used for organizing file write of data by vpu
+
+* `vpu_id_col` The column name in the hydrofabric flowpaths layer, , used for organizing file write of data by vpu
+
+#### Both `fs_agg_hfatl_basin.py` and `fs_hfatlas_to_rafts_prep.py`
+When wanting to aggregate hydrofabric divides to a larger scale, the following config options in the prep config specify the aggregation scale for algorithm training. Ideally, this capability is ignored if the attribute data have already been aggregated in a previous step.
+* **`file_io`**
+* `path_hf_basins_gpkg`  The filepath or dir to the gpkg(s) containing the divide_ids as they correspond to basins of interest (e.g. individual .gpkg files representing each calibration basin).
+* `gpkg_filename_pattern` Optional string pattern used to isolate the gage_id from the gpkg filenames inside the `path_hf_basins_gpkg` directory. (Default 'gage_{gage_id}.gpkg')
 
 **`formulation_metadata**:
 * `dataset_name`: The name to be assigned to this dataset. This name will be used to create a subdirectory inside `user_data_std`. (Required).

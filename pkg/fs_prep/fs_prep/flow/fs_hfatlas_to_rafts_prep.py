@@ -2,8 +2,12 @@
 
 Intended to run after the initial prep script that generates the response variable .nc file.
 
-This script is designed for modeling at the native divide level. It assumes that every modeled location in 
-the dataset corresponds directly to a single hydrofabric divide (e.g., a 1:1 relationship).
+Preferred script for preparing attribute data when the data have been organized to the desired resolution (i.e. pre-aggregated).
+
+This script is designed for preparing training attribute data at the dataset's pre-defined native featureID level,
+aka at the resolution of location identifiers in the input attribute dataset. These location identifiers correspond 
+1:1 with the known response variables. It assumes that every modeled location in the dataset corresponds directly 
+to a single featureID (i.e., a 1:1 relationship).
 
 In cases where divides need to be aggregated to a larger scale, fs_agg_hfatl_basin.py should be run instead.
 
