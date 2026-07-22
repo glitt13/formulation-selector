@@ -166,26 +166,58 @@ if __name__ == "__main__":
         # Force numeric, pushing unparseable values to NaN
         df_raw_attrs[col] = pd.to_numeric(df_raw_attrs[col], errors='coerce')
 
-    # # ==========================================
-    # # 5. AGGREGATE
-    # # ==========================================
+    # ==========================================
+    # 5. AGGREGATE
+    # ==========================================
     logging.info("Merging mapping and computing aggregations...")
     df_merged = pd.merge(df_mapping, df_raw_attrs, on=map_divide_id_col, how='inner')
 
-    # Build the aggregation dictionary safely
+    # Build the fallback aggregation dictionary safely
     agg_dict = {
         col: 'mean' 
         for col in data_cols 
         if col not in ['area_sqkm', 'areasqkm'] and col in df_merged.columns
     }
     
-    # Explicitly sum area if it exists
+    # Identify the area column if it exists for our weighting
+    area_col_name = None
     for area_col in ['area_sqkm', 'areasqkm']:
         if area_col in df_merged.columns:
             agg_dict[area_col] = 'sum'
+            area_col_name = area_col
+            break
 
-    # Perform the aggregation grouped by the gage_id!
-    df_aggregated = df_merged.groupby(gage_id_col_gpkg).agg(agg_dict).reset_index()
+    try:
+        if area_col_name is None:
+            raise ValueError("No area column found in the dataset to use as weights.")
+            
+        logging.info("Attempting area-weighted mean aggregation...")
+        
+        # Define a custom function to calculate the weighted mean, handling NaNs safely
+        def area_weighted_mean(x):
+            weights = df_merged.loc[x.index, area_col_name]
+            # Only use weights where the data value and the weight are not NaN
+            mask = x.notna() & weights.notna()
+            if mask.sum() == 0 or weights[mask].sum() == 0:
+                return np.nan
+            return np.average(x[mask], weights=weights[mask])
+            
+        # Build a new aggregation dictionary using the custom weighted mean function
+        wm_agg_dict = {
+            col: area_weighted_mean 
+            for col in data_cols 
+            if col != area_col_name and col in df_merged.columns
+        }
+        wm_agg_dict[area_col_name] = 'sum'
+        
+        # Perform the area-weighted aggregation grouped by the gage_id!
+        df_aggregated = df_merged.groupby(gage_id_col_gpkg).agg(wm_agg_dict).reset_index()
+        logging.info("Area-weighted mean aggregation successful!")
+        
+    except Exception as e:
+        logging.warning(f"Area-weighted mean failed ({e}). Falling back to simple mean.")
+        # Perform the fallback aggregation grouped by the gage_id!
+        df_aggregated = df_merged.groupby(gage_id_col_gpkg).agg(agg_dict).reset_index()
 
     logging.info("Reshaping aggregated attributes to RaFTS standard long-format schema...")
     
