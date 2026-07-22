@@ -17,7 +17,6 @@ file_io: # May define {home_dir} for python's '{home_dir}/string_path'.format(ho
   - 'hf_fp_id_col': "id" # The column name in the flowpaths layer corresponding to the flowpath outlet of the divide
   - 'vpu_id_col': "vpuid" # The column name in the hydrofabric flowpaths layer
   - 'vpu_mapped': 'True' # Boolean str. Should output attribute data be organized by vpu? True recommended for large datasets, e.g. entire CONUS scale.
-  - 'dir_db_gpkg': "{home_dir}/noaa/regionalization/data/input/gpkg/hfatl/"
   # aggregation: # OPTIONAL - when divides need to be aggregated to a larger scale, the hydrofabric-based aggregation goes here:
   - 'path_hf_basins_gpkg': '{home_dir}/noaa/camels/hydrofabric/gagesII_wood_hf_combo' # OPTIONAL - the path to the gpkg or dir of gpkgs containing the divide_ids as they correspond to basins of interest.
   - 'gpkg_filename_pattern': 'gage_(.*)\.gpkg' # Optional string pattern used to isolate the gage_id from filenames (Default 'gage_{gage_id}.gpkg')
