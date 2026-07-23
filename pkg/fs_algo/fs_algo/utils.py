@@ -1997,6 +1997,7 @@ def read_hfatlas_wrap_dask(paths_hfatl: Union[Path, str, List[Union[Path, str]]]
 
     Changelog:
      2026-07-21 fix: enforce map_id_col dtype read as str, GL
+     2026-07-23 fix: ignore a col if colname duplicated in a separate parquet, GL
     """
     if attrs_sel is None:
         attrs_sel = []
@@ -2075,8 +2076,15 @@ def read_hfatlas_wrap_dask(paths_hfatl: Union[Path, str, List[Union[Path, str]]]
     logging.info("Building Dask merge graph...")
     combined_ddf = ddfs_to_merge[0]
     for i in range(1, len(ddfs_to_merge)):
-        # Because we set_index earlier, Dask can join these much more efficiently
-        combined_ddf = combined_ddf.join(ddfs_to_merge[i], how='outer')
+        right_ddf = ddfs_to_merge[i]
+        # Identify any columns (excluding the index) that already exist in the combined_ddf
+        overlapping_cols = set(combined_ddf.columns).intersection(right_ddf.columns)
+        
+        # Drop the overlapping columns from the right-hand dataframe
+        if overlapping_cols:
+            right_ddf = right_ddf.drop(columns=list(overlapping_cols))
+            # Because we set_index earlier, Dask can join these much more efficiently
+        combined_ddf = combined_ddf.join(right_ddf, how='outer')
 
     # 5. COMPUTE phase: Execute the graph and bring the final, slimmed-down table into Pandas RAM
     logging.info("Executing computations and pulling to memory...")
