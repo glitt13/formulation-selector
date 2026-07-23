@@ -216,6 +216,7 @@ def read_schm_ls_of_dict(schema_path: str | os.PathLike) -> pd.DataFrame:
     # Changelog/contributions
     #   2024-07-02 Originally created, GL
     #.  2025-10-10 add home_dir handling, GL
+    #.  2026-07-23 revise file_io: Only attempt to .format if the string actually contains the home_dir placeholder, Gemini3.1pro
     # Load the YAML configuration file
     with open(schema_path, 'r') as file:
         config = yaml.safe_load(file)
@@ -232,7 +233,12 @@ def read_schm_ls_of_dict(schema_path: str | os.PathLike) -> pd.DataFrame:
         for v in vv:
             if k == 'file_io':
                 for key, value in v.items():
-                    new_path = value.format(home_dir=home_dir)
+                    # Only attempt to format if the string actually contains the home_dir placeholder
+                    if isinstance(value, str) and '{home_dir}' in value:
+                        new_path = value.format(home_dir=home_dir)
+                    else:
+                        new_path = value
+                    
                     if home_dir in new_path:
                         new_path = str(Path(new_path).expanduser())
                     v[key] = new_path
