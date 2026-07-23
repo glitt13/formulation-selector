@@ -24,6 +24,16 @@ import numpy as np
 import fs_prep.proc_eval_metrics as pem
 import fs_algo.utils as fsutil
 
+# Calculate the weighted mean, handling NaNs safely
+def area_weighted_mean(x):
+    weights = df_merged.loc[x.index, area_col_name]
+    # Only use weights where the data value and the weight are not NaN
+    mask = x.notna() & weights.notna()
+    if mask.sum() == 0 or weights[mask].sum() == 0:
+        return np.nan
+    return np.average(x[mask], weights=weights[mask])
+            
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Aggregate hfATLAS attributes based on hydrofabric divides.')
     parser.add_argument('--path_prep_config', type=str, required=True, help='Path to the prep YAML configuration file')
@@ -142,7 +152,7 @@ if __name__ == "__main__":
     df_raw_attrs = fsutil.read_hfatlas_wrap_dask(
         paths_hfatl=paths_hfatl, 
         attrs_sel=attrs_sel, 
-        map_id_col=hfatl_id_col
+        map_id_col=hfatl_id_col,
     )
     
     # Safety rename if the parquet ID column name differs from the hydrofabric ID column name
@@ -193,15 +203,7 @@ if __name__ == "__main__":
             
         logging.info("Attempting area-weighted mean aggregation...")
         
-        # Define a custom function to calculate the weighted mean, handling NaNs safely
-        def area_weighted_mean(x):
-            weights = df_merged.loc[x.index, area_col_name]
-            # Only use weights where the data value and the weight are not NaN
-            mask = x.notna() & weights.notna()
-            if mask.sum() == 0 or weights[mask].sum() == 0:
-                return np.nan
-            return np.average(x[mask], weights=weights[mask])
-            
+        
         # Build a new aggregation dictionary using the custom weighted mean function
         wm_agg_dict = {
             col: area_weighted_mean 
