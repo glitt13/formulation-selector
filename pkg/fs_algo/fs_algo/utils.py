@@ -2033,14 +2033,8 @@ def read_hfatlas_wrap_dask(paths_hfatl: Union[Path, str, List[Union[Path, str]]]
         # Build a mapping of clean_name -> raw_name for this specific file
         col_mapping = {}
         for raw_col in raw_cols:
-            if raw_col.startswith("('") and raw_col.endswith("')"):
-                try:
-                    clean_col = ast.literal_eval(raw_col)[0]
-                    col_mapping[clean_col] = raw_col
-                except (ValueError, SyntaxError):
-                    col_mapping[raw_col] = raw_col
-            else:
-                col_mapping[raw_col] = raw_col
+            clean_col, _ = parse_hfatlas_colname(raw_col)
+            col_mapping[clean_col] = raw_col
 
         if query_clean and not attrs_sel:
             attrs_sel = [c for c in col_mapping.keys() if c != map_id_col]
@@ -2107,6 +2101,26 @@ def read_hfatlas_wrap_dask(paths_hfatl: Union[Path, str, List[Union[Path, str]]]
         
     return combined_df
 
+def parse_hfatlas_colname(raw_col: str) -> tuple[str, str | None]:
+    """
+    Parses a raw hfATLAS column string representation of a tuple into a clean name and unit.
+    Returns the original string if parsing fails or isn't a tuple.
+    """
+    clean_name = raw_col
+    unit = None
+    
+    if isinstance(raw_col, str) and raw_col.startswith("('") and raw_col.endswith("')"):
+        try:
+            parsed_tuple = ast.literal_eval(raw_col)
+            if isinstance(parsed_tuple, tuple):
+                clean_name = parsed_tuple[0]
+                if len(parsed_tuple) >= 2:
+                    unit = parsed_tuple[1]
+        except (ValueError, SyntaxError):
+            pass
+            
+    return clean_name, unit
+
 def clean_hfatlas_columns(df: pd.DataFrame) -> pd.DataFrame:
     """Parses pint-aware string columns and renames them to standard strings.
 
@@ -2117,17 +2131,72 @@ def clean_hfatlas_columns(df: pd.DataFrame) -> pd.DataFrame:
     """
     new_cols = {}
     for col in df.columns:
-        if col.startswith("('") and col.endswith("')"):
-            try:
-                parsed_tuple = ast.literal_eval(col)
-                new_cols[col] = parsed_tuple[0]
-            except (ValueError, SyntaxError):
-                new_cols[col] = col
-        else:
-            new_cols[col] = col
+        clean_col, _ = parse_hfatlas_colname(col)
+        new_cols[col] = clean_col
             
     return df.rename(columns=new_cols)
 
+def create_hfatlas_unit_mapper(raw_columns: list) -> pd.DataFrame:
+    """
+    Creates a dataframe mapping raw hfATLAS column names to their cleaned names and pint units.
+    
+    :param raw_columns: A list of raw column names (e.g., from df.columns or parquet schema)
+    :type raw_columns: list
+    :return: A DataFrame containing 'raw_column', 'clean_column', and 'unit'
+    :rtype: pd.DataFrame
+    """
+    mapping_data = []
+    
+    for col in raw_columns:
+        clean_name, unit = parse_hfatlas_colname(col)
+        
+        mapping_data.append({
+            'raw_column': col,
+            'clean_column': clean_name,
+            'unit': unit
+        })
+
+    return pd.DataFrame(mapping_data)
+
+def std_unit_mapper_path(dir_std_base: str | Path, ds: str, cstm_str:str='') -> Path:
+    """
+    Standardize the filepath for saving the hfATLAS unit mapper.
+
+    :param dir_std_base: The base directory for standardized data
+    :type dir_std_base: str | Path
+    :param ds: The dataset string/name
+    :type ds: str
+    :param cstm_str: A custom string to add to the end of the filename
+    :type cstm_str: str
+    :return: Full path to the unit mapper CSV
+    :rtype: Path
+    """
+    if cstm_str == '':
+        path_mapper = Path(dir_std_base) / ds / f"hfatlas_unit_mapper_{ds}.csv"
+    else:
+        path_mapper = Path(dir_std_base) / ds / f"hfatlas_unit_mapper_{ds}_{cstm_str}.csv"
+    path_mapper.parent.mkdir(parents=True, exist_ok=True)
+    return path_mapper
+
+def save_hfatlas_unit_mapper(mapper_df: pd.DataFrame, dir_std_base: str | Path, ds: str, cstm_str:str='') -> Path:
+    """
+    Writes the unit mapper dataframe to a standardized CSV file.
+
+    :param mapper_df: The unit mapping DataFrame from create_hfatlas_unit_mapper
+    :type mapper_df: pd.DataFrame
+    :param dir_std_base: The base directory for standardized data
+    :type dir_std_base: str | Path
+    :param ds: The dataset string/name
+    :type ds: str
+    :param cstm_str: A custom string to add to the end of the filename
+    :type cstm_str: str
+    :return: The path where the file was written
+    :rtype: Path
+    """
+    out_path = std_unit_mapper_path(dir_std_base, ds,cstm_str)
+    mapper_df.to_csv(out_path, index=False)
+    logging.info(f"Wrote hfATLAS pint unit mapper to {out_path}")
+    return out_path
 
 def get_middle_vertex(geom) -> Point:
     """Returns the middle existing coordinate/vertex from a line, or a guaranteed internal point for a polygon."""

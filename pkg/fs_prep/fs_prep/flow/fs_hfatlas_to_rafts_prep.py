@@ -210,24 +210,12 @@ if __name__ == "__main__":
                             vpu_id_col=vpu_id_col, vpu_mapped=vpu_mapped,
                             data_source = fio.get('data_source','hfATLAS'))
       
-        # 6. Generate Metadata Parquet
-        # In R, this comes from proc.attr.hydfab::proc_attr_gageids()
-        # plus the column dataset_name from Retr_Params$loc_id_read$loc_id_filepath
-        # featureID featureSource      data_source        dl_timestamp      attribute   value  gage_id  dataset_name
-        #  10302627   COMID   hydroatlas__v1       2024-12-24 20:31:06     ari_ix_sav  101.00 03300400 juliemai-xSSA
-
-        # TODO can metadata be skipped??
-
-        # # TODO make consistent with other metadata parquet. This needs attributes, but is it worth it??
-        # logging.info("Generating placeholder metadata parquet file for spatial joining...")
-        # unique_features = gdf_hf['featureID'].unique()
-        # df_meta = pd.DataFrame({'featureID': unique_features})
-        # df_meta = gdf_hf[['featureID','featureSource','gage_id','X','Y']].drop_duplicates()
-        # df_meta['dataset_name'] = Path(path_hfatl).name
-        # vals = {'ds_type':ds_type,'write_type':write_type, 'dir_std_base':dir_std_base,'ds':ds}
-        # path_meta = path_meta_fstr.format(**vals)
-        # df_meta.to_parquet(path_meta, index=False)
-
+        # Generate the attribute column name mapper to keep track of pint units that get 
+        # stripped throughout algo training & prediction
+        raw_columns = pd.read_parquet(paths_hfatl).columns
+        mapper_df = fsutil.create_hfatlas_unit_mapper(raw_columns=raw_columns)
+        fsutil.save_hfatlas_unit_mapper(mapper_df=mapper_df, dir_std_base = dir_std_base, ds=ds)
+     
         # logging.info(f"Saved placeholder metadata for {len(unique_features)} locations to {path_meta}")
         logging.info("Successfully finished processing and writing all attribute files.")
 

@@ -154,7 +154,12 @@ if __name__ == "__main__":
         attrs_sel=attrs_sel, 
         map_id_col=hfatl_id_col,
     )
-    
+    # Generate the attribute column name mapper to keep track of pint units that get 
+    # stripped throughout algo training & prediction
+    raw_columns = pd.read_parquet(paths_hfatl).columns
+    mapper_df = fsutil.create_hfatlas_unit_mapper(raw_columns=raw_columns)
+    fsutil.save_hfatlas_unit_mapper(mapper_df=mapper_df, dir_std_base = dir_std_base, ds=ds)
+
     # Safety rename if the parquet ID column name differs from the hydrofabric ID column name
     if hfatl_id_col != map_divide_id_col and hfatl_id_col in df_raw_attrs.columns:
         df_raw_attrs = df_raw_attrs.rename(columns={hfatl_id_col: map_divide_id_col})
