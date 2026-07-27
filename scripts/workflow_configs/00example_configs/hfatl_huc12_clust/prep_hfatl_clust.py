@@ -52,39 +52,6 @@ if __name__ == "__main__":
     logging.info("Custom code: Reading/formatting non-standardized input datasets")
     df_all_data = pd.read_parquet(path_data)
 
-
-    
-    # Extract the gpkg path from your loaded config
-    path_hf_gpkg = col_schema_df['path_hf_gpkg'].loc[0].format(home_dir=str(Path.home()))
-    hf_divides_layer = col_schema_df['hf_divides_layer'].loc[0]
-    
-    logging.info(f"Scanning hydrofabric GPKG for HUC01 locations: {path_hf_gpkg}")
-    
-    # 
-    gdf = gpd.read_file(
-        path_hf_gpkg, 
-        layer='gages', 
-        engine="pyogrio", 
-        #columns=['divide_id', 'vpuid'], # Only load the columns we need
-        #where="vpuid = '01'"            # SQL-style filter applied during read
-        )
-    # # # NOTE: Replace 'huc2' with the exact column name in your .gpkg that specifies the HUC
-    # # # We use pyogrio's native 'where' clause so we don't have to load the entire CONUS into RAM
-    # # gdf_huc01 = gpd.read_file(
-    # #     path_hf_gpkg, 
-    # #     layer=hf_divides_layer, 
-    # #     engine="pyogrio", 
-    # #     columns=['divide_id', 'vpuid'], # Only load the columns we need
-    # #     where="vpuid = '01'"            # SQL-style filter applied during read
-    # # )
-    
-    # huc01_ids = gdf_huc01['divide_id'].unique()
-    # logging.info(f"Found {len(huc01_ids)} locations in HUC01. Subsetting dataset...")
-
-    # # Filter the dataset to ONLY include HUC01 locations
-    # df_all_data = df_all_data[df_all_data['divide_id'].isin(huc01_ids)]
-    # # ----------------------------------
- 
     # END CUSTOMIZED DATASET MUNGING
 
     # ------ Extract metric data and write to file
