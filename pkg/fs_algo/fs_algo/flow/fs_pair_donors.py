@@ -244,6 +244,17 @@ if __name__ == "__main__":
                         # cols_to_keep = ['featureID'] + param_cols
                         # df_receiver_params_wide = df_receiver_params[cols_to_keep]
                         
+                        # Reformat columns response variable columns to have pint units
+                        path_mapper = fsutil.std_unit_mapper_path(dir_std_base=dir_std_base, ds=ds, cstm_str='resp_vars')
+                        logging.info(f'Writing mapping of pint units/colnames to {path_mapper}')
+                        mapper_df = pd.read_csv(path_mapper)
+
+                        # Rename response variable columns based on options in the mapper column's 'raw' field
+                        rename_dict = dict(zip(mapper_df['clean_column'], mapper_df['raw_column']))
+
+                        # Apply the renaming to your dataframe
+                        df_receiver_params = df_receiver_params.rename(columns=rename_dict)
+
                         # Save output
                         path_params_out = dir_regionalization / ds / f"receiver_params_{algo}_{resp_var}__{ds}.csv"
                         df_receiver_params.to_csv(path_params_out, index=False)

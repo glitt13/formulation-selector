@@ -13,7 +13,7 @@ Helper functions for processing evaluation metrics datasets
 #     2024-07-09 added different file format/dir path options; add file format checkers, GL
 #     2024-08-13 update docstrings, GL
 #     2025-08-18 add logging, GL
-
+#     2026-07-24 implement pint unit mapping before stripping, GL
 import pandas as pd
 from pathlib import Path
 import yaml
@@ -29,6 +29,7 @@ import pynhd as nhd
 import logging
 import __future__
 import sys
+import fs_algo.utils as fsutil
 #pd.set_option('future.no_silent_downcasting', True)
 
 def std_dir_logs(dir_input:str | os.PathLike) -> Path:
@@ -528,6 +529,9 @@ def proc_col_schema(df: pd.DataFrame,
         val_metrics = col_schema_df.loc[0, 'val_metrics'] == 'True'
     else:
         val_metrics = False
+    
+    # IMPORTANT: Run create_hfatlas_unit_mapper before cleaning the df column names:
+    mapper_df = fsutil.create_hfatlas_unit_mapper(raw_columns=df.columns)
 
     # TODO add cloud or local saving
     if save_loc == 'local':
@@ -580,6 +584,7 @@ def proc_col_schema(df: pd.DataFrame,
 
     # Save the standardized dataset
     if save_type == 'csv' or save_type == 'parquet':
+        logging.warning(f'Using dataset save_type of {save_type}. STRONGLY RECOMMENDED to use save_type="netcdf"')
         if len(_other_save_dirs) == 0:
             logging.error(
                 'Expected _save_dir_struct to generate values in _other_save_dirs'
@@ -592,7 +597,7 @@ def proc_col_schema(df: pd.DataFrame,
         # TODO allow output write to a variety of locations (e.g. local/cloud)
         # Write data in long format
         save_path_eval_metr = path_std_eval_metr(dir_save,dataset_name,formulation_id)
-             
+        dir_std_base = save_path_eval_metr.parent.parent.parent.parent     
         if save_type == 'csv':
             df.to_csv(save_path_eval_metr)
         else:
@@ -617,6 +622,13 @@ def proc_col_schema(df: pd.DataFrame,
             Path(save_path_nc).unlink() # Delete the pre-existing file
         ds.to_netcdf(save_path_nc,mode='w',format='NETCDF4') # mode='w' overwrites
         logging.info(f"Saved netcdf file as {save_path_nc}")
+        dir_std_base = Path(save_path_nc).parent.parent
+    # Ensure that the original names are mapped in case renamer modifies them (for hfATLAS pint data)
+    fsutil.save_hfatlas_unit_mapper(mapper_df=mapper_df, 
+                                    dir_std_base = dir_std_base,
+                                     ds=dataset_name,cstm_str="resp_vars")
+
+
     return ds # Returning not intended use case, but it's an option
 
 def check_fix_nwissite_gageids(df:pd.DataFrame, gage_id_col:str,
