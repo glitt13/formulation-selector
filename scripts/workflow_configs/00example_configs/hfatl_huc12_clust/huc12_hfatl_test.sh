@@ -2,8 +2,8 @@
 
 # RaFTS processing the regionalization testing dataset with hfATLAS data
 # Instructions:
-# Make this script executable using: chmod +x regn_cfes_agg_proc.sh
-# Run by calling in terminal: ./regn_cfes_agg_proc.sh
+# Make this script executable using: chmod +x huc12_hfatl_test.sh
+# Run by calling in terminal: ./huc12_hfatl_test.sh
 
 # -----------------------------------------------------------------------------
 # ERROR HANDLING
@@ -55,10 +55,9 @@ uv run --project "${DIR_REPO}/pkg" python "${DIR_PY}/fs_proc_algo_pool.py" "${DI
 }
 echo "Algorithm training completed successfully!"
 
-
 # 4. Perform the prediction
 echo "--> Performing predictions..."
-uv run --project "${DIR_REPO}/pkg" python "${DIR_PY}/fs_map_pred_hfatl.py" "${DIR_CONFIG}/hfatl_pred_config.yaml" || {
+uv run --project "${DIR_REPO}/pkg" python "${DIR_PY}/fs_pred_algo.py" "${DIR_CONFIG}/hfatl_pred_config.yaml" || {
     echo "ERROR: Process predictions failed. Exiting."
     exit 1
 }
@@ -78,7 +77,7 @@ uv run --project "${DIR_REPO}/pkg" python "${DIR_PY}/fs_map_pred_hfatl.py" "${DI
     echo "ERROR: Prediction mapping failed. Exiting."
     exit 1
 }
-# echo "Completed prediction mapping!"
+echo "Completed prediction mapping!"
 
 # echo "========================================================================"
 # echo "SUCCESS: Finished the hfATLAS regionalization predictions!"
