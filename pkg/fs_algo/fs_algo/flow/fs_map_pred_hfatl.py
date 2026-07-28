@@ -109,6 +109,7 @@ if __name__ == "__main__":
         # Keep original columns, but ensure we have standard names for plotting logic
         if 'featureID' not in gdf_all.columns and 'comid' in gdf_all.columns:
             gdf_all['featureID'] = gdf_all['comid']
+            gdf_all['featureSource'] = pred_gpkg_id_col
         
         if 'featureID' not in gdf_all.columns:
             logging.error(f'Expecting featureID column to be in the gdf_all geodataframe')
