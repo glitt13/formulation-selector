@@ -428,7 +428,7 @@ class PredConfigParser:
         path_gpkg_pred = pred_cfg.get('path_gpkg_pred',None)
         pred_gpkg_lyr = pred_cfg.get('pred_gpkg_lyr', None)
         pred_gpkg_id_col = pred_cfg.get('pred_gpkg_id_col',None)
-
+        path_crosswalk_ids = pred_cfg.get('path_crosswalk_ids',None)
 
         # Compile dictionary
         self.pred_cfg_dict = {
@@ -453,6 +453,7 @@ class PredConfigParser:
             'path_gpkg_pred':path_gpkg_pred,
             'pred_gpkg_lyr':pred_gpkg_lyr,
             'pred_gpkg_id_col':pred_gpkg_id_col,
+            'path_crosswalk_ids':path_crosswalk_ids,
         }   
 
 def _make_home_dir(home_dir_read:str|os.PathLike=[])-> os.PathLike:
