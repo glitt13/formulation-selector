@@ -186,7 +186,34 @@ if __name__ == "__main__":
 
                 logging.info(f"Ingested receiver attribute data. Total locations = {df_receivers.shape[0]}")
 
-                # 4. Execute 1:1 Pairing
+                # 4. MISSING DATA IMPUTATION & CLUSTER ASSIGNMENT
+                nan_pred_mask = df_receivers_mrge['prediction'].isna()
+                if nan_pred_mask.any():
+                    from sklearn.impute import KNNImputer
+                    
+                    num_missing = nan_pred_mask.sum()
+                    logging.warning(f"Found {num_missing} receivers with NaN cluster predictions due to missing attributes.")
+                    
+                    # A. Document the locations that will be imputed
+                    path_impute_log = dir_regionalization / ds / f"imputed_locations_{algo}_{resp_var}__{ds}.csv"
+                    df_receivers_mrge.loc[nan_pred_mask, ['featureID']].to_csv(path_impute_log, index=False)
+                    logging.info(f"Wrote list of imputed locations to {path_impute_log}")
+                    
+                    # B. Impute missing attributes using K-Nearest Neighbors
+                    # Fit and transform across all receivers to find the nearest attribute matches
+                    imputer = KNNImputer(n_neighbors=5, weights='distance')
+                    df_receivers_mrge.loc[:, attrs_sel] = imputer.fit_transform(df_receivers_mrge[attrs_sel])
+                    
+                    # C. Predict the missing clusters using the imputed attributes
+                    # Ensure we pass the features in the exact order the pipeline expects
+                    X_imputed = df_receivers_mrge.loc[nan_pred_mask, expected_features]
+                    imputed_clusters = pipe.predict(X_imputed)
+                    
+                    # Update the prediction column with the new cluster assignments
+                    df_receivers_mrge.loc[nan_pred_mask, 'prediction'] = imputed_clusters
+                    logging.info("Successfully imputed attributes and assigned clusters for missing locations.")               
+
+                # 5. Execute 1:1 Pairing
                 df_pairings = fsat.assign_donors_to_receivers(
                     df_donors=df_donors_paired,
                     df_receivers=df_receivers_mrge,
@@ -199,14 +226,14 @@ if __name__ == "__main__":
                     df_pairings['algo'] = algo
                     df_pairings['resp_var'] = resp_var
                     
-                    # 5. Save Output
+                    # 6. Save Output
                     path_pair_out = dir_regionalization / ds / f"donor_pairs_{algo}_{resp_var}__{ds}.csv"
                     path_pair_out.parent.mkdir(parents=True, exist_ok=True)
                     df_pairings.to_csv(path_pair_out, index=False)
                     logging.info(f"Saved {len(df_pairings)} donor-receiver pairings to {path_pair_out}")
 
 
-                    # 6. Assign parameter sets to receivers from donors
+                    # 7. Assign parameter sets to receivers from donors
                     logging.info(f"Assigning donor parameters to receiver locations for {algo}...")
                     try:
                         # Identify the ID column in df_resp (typically 'gage_id' or 'featureID')
@@ -259,7 +286,67 @@ if __name__ == "__main__":
                         path_params_out = dir_regionalization / ds / f"receiver_params_{algo}_{resp_var}__{ds}.csv"
                         df_receiver_params.to_csv(path_params_out, index=False)
                         logging.info(f"Saved assigned receiver parameters to {path_params_out}")
+
+                        # 8. OPTIONAL CROSSWALK MAPPING
+                        # Fetch from the pre-parsed prediction configuration dictionary
+                        path_crosswalk_ids_raw = pred_cfg.pred_cfg_dict.get('path_crosswalk_ids')
+                        pred_gpkg_id_col = pred_cfg.pred_cfg_dict.get('pred_gpkg_id_col')
                         
+                        if path_crosswalk_ids_raw:
+                            # Safely resolve any f-strings (like {dir_std_base}) in the path
+                            path_crosswalk_ids = Path(fsutil.resolve_fstrings(path_crosswalk_ids_raw, context))
+                            
+                            if path_crosswalk_ids.exists():
+                                logging.info(f"Applying crosswalk mapping from {path_crosswalk_ids}")
+                                
+                                # Ensure crosswalk is strictly read as string to prevent integer coercion
+                                if str(path_crosswalk_ids).endswith('.csv'):
+                                    df_crosswalk = pd.read_csv(path_crosswalk_ids, dtype=str)
+                                elif str(path_crosswalk_ids).endswith('.parquet'):
+                                    df_crosswalk = pd.read_parquet(path_crosswalk_ids).astype(str)
+                                else:
+                                    logging.error("Crosswalk file must be a .csv or .parquet")
+                                    continue
+                                    
+                                # Identify the desired new identifier column (the one that isn't pred_gpkg_id_col)
+                                crosswalk_cols = list(df_crosswalk.columns)
+                                if pred_gpkg_id_col in crosswalk_cols:
+                                    crosswalk_cols.remove(pred_gpkg_id_col)
+                                    desired_id_col = crosswalk_cols[0] # e.g., 'divide_id'
+                                    
+                                    # df_receiver_params currently stores receiver IDs in 'featureID'
+                                    df_receiver_params['featureID'] = df_receiver_params['featureID'].astype(str)
+                                    
+                                    # Merge crosswalk onto the assigned parameters
+                                    df_mapped_params = df_receiver_params.merge(
+                                        df_crosswalk, 
+                                        left_on='featureID', 
+                                        right_on=pred_gpkg_id_col, 
+                                        how='inner'
+                                    )
+                                    
+                                    # Clean up columns: drop the old featureID and the crosswalk join key
+                                    cols_to_drop = ['featureID']
+                                    if pred_gpkg_id_col in df_mapped_params.columns and pred_gpkg_id_col != desired_id_col:
+                                        cols_to_drop.append(pred_gpkg_id_col)
+                                        
+                                    df_mapped_params = df_mapped_params.drop(columns=cols_to_drop, errors='ignore')
+                                    
+                                    # Move the new desired identifier column to the front of the DataFrame
+                                    new_col_order = [desired_id_col] + [c for c in df_mapped_params.columns if c != desired_id_col]
+                                    df_mapped_params = df_mapped_params[new_col_order]
+                                    
+                                    # Save the final mapped parameters as a Parquet file
+                                    path_params_cw_out = dir_regionalization / ds / f"receiver_params_mapped_{algo}_{resp_var}__{ds}.parquet"
+                                    df_mapped_params.to_parquet(path_params_cw_out, index=False)
+                                    logging.info(f"Saved crosswalk-mapped receiver parameters to {path_params_cw_out}")
+                                    
+                                else:
+                                    logging.error(f"Crosswalk file missing the specified pred_gpkg_id_col: {pred_gpkg_id_col}")
+                            else:
+                                logging.error(f"Crosswalk file path was provided but does not exist: {path_crosswalk_ids}")
+                        else:
+                            logging.warning("NOT performing a crosswalk on aggregated identifiers.")
                     except Exception as e:
                         logging.error(f"Failed to assign donor parameters to receivers: {e}")
 
