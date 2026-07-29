@@ -1219,9 +1219,20 @@ def assign_donors_to_receivers(
 ) -> pd.DataFrame:
     """
     Pairs each receiver basin with the most similar donor basin within its assigned cluster.
+    Tracks and reports any receiver basins that fail to receive a donor assignment.
     """
     pairing_results = []
+    
+    # Track initial receivers to verify completeness at the end
+    initial_receivers = set(df_receivers[id_col])
+    
+    # Identify receivers that missed predictions entirely (NaN values)
+    unassigned_missing_cluster = df_receivers[df_receivers[cluster_col].isna()][id_col].tolist()
+    if unassigned_missing_cluster:
+        logging.warning(f"{len(unassigned_missing_cluster)} receivers have NaN cluster predictions and will be skipped.")
+    
     unique_clusters = df_receivers[cluster_col].dropna().unique()
+    unassigned_empty_donor_cluster = []
     
     for cluster_id in unique_clusters:
         donors_in_clust = df_donors[df_donors[cluster_col] == cluster_id].reset_index(drop=True)
@@ -1229,6 +1240,8 @@ def assign_donors_to_receivers(
         
         if donors_in_clust.empty:
             logging.warning(f"No donors found for Cluster {cluster_id}. {len(receivers_in_clust)} receivers unassigned.")
+            # Record the specific receivers that are dropped here
+            unassigned_empty_donor_cluster.extend(receivers_in_clust[id_col].tolist())
             continue
             
         X_donor = donors_in_clust[attrs]
@@ -1256,8 +1269,23 @@ def assign_donors_to_receivers(
         pairing_results.append(clust_pairings)
         
     if pairing_results:
-        return pd.concat(pairing_results, ignore_index=True)
+        df_final_pairings = pd.concat(pairing_results, ignore_index=True)
     else:
-        return pd.DataFrame()
+        df_final_pairings = pd.DataFrame()
+        
+    # --- Final Reconciliation and Reporting ---
+    paired_receivers = set(df_final_pairings['receiver_id']) if not df_final_pairings.empty else set()
+    missed_receivers = initial_receivers - paired_receivers
+    
+    if missed_receivers:
+        logging.warning(f"A total of {len(missed_receivers)} receivers were NOT assigned a donor.")
+        if unassigned_empty_donor_cluster:
+            logging.warning(f"Missed due to empty donor clusters: {unassigned_empty_donor_cluster}")
+        if unassigned_missing_cluster:
+            logging.warning(f"Missed due to missing (NaN) cluster predictions: {unassigned_missing_cluster}")
+    else:
+        logging.info("All receivers were successfully assigned a donor.")
+        
+    return df_final_pairings
 
 
