@@ -223,6 +223,14 @@ Configures the out-of-sample prediction step and downstream mapping.
 
 * `pred_file_comid_colname`: The column name containing the location identifiers used for prediction within the `path_meta` file. (Required).
 
+* `path_gpkg_pred`: Strongly recommended for custom prediction locations (e.g. aggregated locations). If not provided, the path_gpkg_fs_prep will be used, which may not have any required data points corresponding to prediction locations.
+
+* `pred_gpkg_lyr`: The layer name to read from the prediction geopackage. Default None.
+
+* `pred_gpkg_id_col`: The column name of the identifier inside path_gpkg_pred
+
+* `path_crosswalk_ids`: Optional. Path to the .parquet file used to crosswalk aggregated identifiers (e.g. huc12) to the standard identifier (e.g. divide_id). Only used in `fs_pair_donors.py`
+
 
 * `path_tfrm_script` & `conda_env`: Filepath to the transformation script and its execution environment. (Required if transforming data).
 
