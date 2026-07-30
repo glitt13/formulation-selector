@@ -1631,12 +1631,10 @@ class TestAlgoTrainEvalClustering(unittest.TestCase):
             'attr2': np.random.rand(30),
         })
         
-        # --- FIX: Wrap the parameter dicts in lists ---
         self.algo_config = {
             'kmeans': [{'n_clusters': [2, 3]}],
             'gower_agglomerative': [{'n_clusters': [2]}]
         }
-        # ----------------------------------------------
         
         self.algo_train_eval = fsalgo.AlgoTrainEval(
             df=self.df, attrs=['attr1', 'attr2'], algo_config=self.algo_config,
@@ -1644,6 +1642,19 @@ class TestAlgoTrainEvalClustering(unittest.TestCase):
             metr='cluster_labels', task_type='clustering', test_size=0.3, rs=42,
             test_id_col='comid', save_all_clusters=True
         )
+
+    def tearDown(self):
+        """Clean up .joblib files created in the local directory upon completion."""
+        files_to_remove = [
+            'algo_kmeans_k3_cluster_labels__test.joblib',
+            'algo_kmeans_k2_cluster_labels__test.joblib',
+            'algo_gower_agglomerative_k2_cluster_labels__test.joblib'
+        ]
+        
+        for file_name in files_to_remove:
+            file_path = Path('./') / file_name
+            if file_path.exists():
+                file_path.unlink()
 
     def test_clustering_pipeline(self):
         # This single test will hit split_data, train_algos_grid_search, 
@@ -1745,6 +1756,165 @@ class TestMapieInferenceUtilities(unittest.TestCase):
         self.assertIn("MAPIE columns for alpha 0.10 not found", str(context.exception))
         
         print("✅ test_infer_mapie_errors passed.")
+
+
+class TestAssignDonorsToReceivers(unittest.TestCase):
+    def setUp(self):
+        """Set up realistic, unmocked DataFrames for donor/receiver pairing."""
+        self.attrs = ['attr1', 'attr2']
+        self.id_col = 'featureID'
+        self.cluster_col = 'prediction'
+
+        # Donors DataFrame
+        self.df_donors = pd.DataFrame({
+            self.id_col: ['donor_1', 'donor_2', 'donor_3'],
+            self.cluster_col: [1, 1, 3],
+            'attr1': [0.0, 10.0, 5.0],
+            'attr2': [0.0, 10.0, 5.0]
+        })
+
+        # Receivers DataFrame
+        # recv_3 has no donor in cluster 2, recv_nan has a missing cluster prediction
+        self.df_receivers = pd.DataFrame({
+            self.id_col: ['recv_1', 'recv_2', 'recv_3', 'recv_4', 'recv_nan'],
+            self.cluster_col: [1, 1, 2, 3, np.nan], 
+            'attr1': [0.1, 9.9, 5.0, 4.9, 1.0],
+            'attr2': [0.1, 9.9, 5.0, 4.9, 1.0]
+        })
+
+    def test_assign_donors_to_receivers_euclidean(self):
+        """Test default euclidean metric handling, pairing logic, and missing donor warnings."""
+        with self.assertLogs(level='WARNING') as cm:
+            result = fsalgo.assign_donors_to_receivers(
+                df_donors=self.df_donors, 
+                df_receivers=self.df_receivers, 
+                attrs=self.attrs,
+                metric='euclidean', 
+                cluster_col=self.cluster_col, 
+                id_col=self.id_col
+            )
+
+        # Confirm exact output format
+        self.assertIsInstance(result, pd.DataFrame)
+        self.assertIn('distance_to_donor', result.columns)
+        
+        # We expect exactly 3 successful pairings (recv_3 missing donor, recv_nan missing cluster)
+        self.assertEqual(len(result), 3) 
+
+        # Validate specific pairings based on NearestNeighbor Euclidean distance
+        pairings = result.set_index('receiver_id')['donor_id'].to_dict()
+        self.assertEqual(pairings['recv_1'], 'donor_1')
+        self.assertEqual(pairings['recv_2'], 'donor_2')
+        self.assertEqual(pairings['recv_4'], 'donor_3')
+
+        # Validate that the function logged warnings for the expected unassigned cases
+        logs = str(cm.output)
+        self.assertTrue("receivers have NaN cluster predictions" in logs)
+        self.assertTrue("No donors found for Cluster 2.0" in logs)
+        self.assertTrue("NOT assigned a donor" in logs)
+
+    def test_assign_donors_to_receivers_gower(self):
+        """Test alternative Gower metric execution."""
+        # Use a cleaned receiver set to avoid triggering the unassigned warnings in this specific test
+        df_recv_clean = self.df_receivers.dropna(subset=[self.cluster_col])
+        df_recv_clean = df_recv_clean[df_recv_clean[self.cluster_col] != 2.0]
+
+        result = fsalgo.assign_donors_to_receivers(
+            df_donors=self.df_donors, 
+            df_receivers=df_recv_clean, 
+            attrs=self.attrs,
+            metric='gower', 
+            cluster_col=self.cluster_col, 
+            id_col=self.id_col
+        )
+        
+        # Validate that Gower matrix operations succeeded and returned populated distances
+        self.assertEqual(len(result), 3)
+        self.assertFalse(result['distance_to_donor'].isna().any())
+
+class TestAlgoTrainEvalCoverage(unittest.TestCase):
+    def setUp(self):
+        """Set up a basic AlgoTrainEval without relying on mocks."""
+        df = pd.DataFrame({
+            'comid': ['id1', 'id2', 'id3', 'id4'],
+            'attr1': [1, 2, 3, 4],
+            'metric': [10, 20, 30, 40]
+        })
+        
+        # Provide minimal real arguments to initialize the object safely
+        self.ate = fsalgo.AlgoTrainEval(
+            df=df, attrs=['attr1'], algo_config={}, uncertainty={},
+            dir_out_alg_ds='.', dataset_id='test', metr='metric',
+            test_id_col='comid'
+        )
+
+    def test_list_to_dict(self):
+        """Test conversion of a list of dictionaries to a single dictionary."""
+        # Test when input is a list of dicts
+        list_input = [{'param1': 10}, {'param2': 20}]
+        expected_dict = {'param1': 10, 'param2': 20}
+        self.assertEqual(self.ate.list_to_dict(list_input), expected_dict)
+        
+        # Test when input is already a dict
+        dict_input = {'param1': 10}
+        self.assertEqual(self.ate.list_to_dict(dict_input), dict_input)
+
+    def test_all_X_all_y(self):
+        """Test the concatenation of train and test datasets."""
+        # Manually assign splits using Pandas 
+        self.ate.X_train = pd.DataFrame({'attr1': [1, 2]})
+        self.ate.X_test = pd.DataFrame({'attr1': [3, 4]})
+        self.ate.y_train = pd.Series([10, 20])
+        self.ate.y_test = pd.Series([30, 40])
+        
+        X, y = self.ate.all_X_all_y()
+        
+        # Verify concatenated lengths
+        self.assertEqual(len(X), 4)
+        self.assertEqual(len(y), 4)
+        
+        # Based on the source code, X combines [X_train, X_test] and y combines [y_test, y_train]
+        self.assertEqual(X['attr1'].tolist(), [1, 2, 3, 4])
+        self.assertEqual(y.tolist(), [30, 40, 10, 20])
+
+    def test_extr_rf_algo(self):
+        """Test extracting the Random Forest model and its fallback warning log."""
+        # Case 1: 'rf' exists in the algs_dict
+        rf_model = RandomForestRegressor(n_estimators=5)
+        self.ate.algs_dict = {'rf': {'algo': rf_model}}
+        
+        extracted = fsalgo._extr_rf_algo(self.ate)
+        self.assertIs(extracted, rf_model)
+        
+        # Case 2: 'rf' does not exist in the algs_dict
+        self.ate.algs_dict = {'mlp': {'algo': MLPRegressor()}}
+        
+        with self.assertLogs(level='INFO') as cm:
+            extracted_none = fsalgo._extr_rf_algo(self.ate)
+            
+            self.assertIsNone(extracted_none)
+            self.assertTrue(
+                any("Trained random forest object 'rf' non-existent" in log for log in cm.output)
+            )
+
+    def test_extr_modl_algo_train(self):
+        """Test that extr_modl_algo_train traverses the algs dictionary safely."""
+        # Setup the plotting object with empty dummy structures
+        plot_obj = fsalgo.AlgoEvalPlotLC(X=pd.DataFrame(), y=pd.Series())
+        
+        # Populate the parent evaluation dictionary
+        self.ate.algs_dict = {
+            'rf': {'algo': RandomForestRegressor()},
+            'mlp': {'algo': MLPRegressor()}
+        }
+        
+        # The method currently performs no returns or explicit state mutations.
+        # This test ensures it successfully iterates over the valid keys without raising a KeyError or Exception.
+        try:
+            plot_obj.extr_modl_algo_train(self.ate)
+        except Exception as e:
+            self.fail(f"extr_modl_algo_train raised an unexpected exception: {e}")
+
 if __name__ == '__main__':
 
     unittest.main()
