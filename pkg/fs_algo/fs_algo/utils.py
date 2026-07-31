@@ -431,6 +431,8 @@ class PredConfigParser:
         path_crosswalk_ids = pred_cfg.get('path_crosswalk_ids',None)
         overwrite_sql = pred_cfg.get('overwrite_sql', False)
         path_hf_finl_gpkg = pred_cfg.get('path_hf_finl_gpkg', None)
+        algo_select = pred_cfg.get('algo_select', None)
+
         # Compile dictionary
         self.pred_cfg_dict = {
             'algo_response_vars': algo_response_vars,
@@ -457,6 +459,7 @@ class PredConfigParser:
             'path_crosswalk_ids':path_crosswalk_ids,
             'path_hf_finl_gpkg': path_hf_finl_gpkg,
             'overwrite_sql': overwrite_sql,
+            'algo_select': algo_select,
         }   
 
 def _make_home_dir(home_dir_read:str|os.PathLike=[])-> os.PathLike:
