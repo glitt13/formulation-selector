@@ -91,9 +91,7 @@ if __name__ == "__main__":
 
     # READ fs_categories.yaml
     logging.info("Reading uncertainty bounds from fs_categories.yaml...")
-
     fs_catg_uncn = pem._conv_ls_dicts_df_long()
-    logging.info("Successfully loaded uncertainty bounds.")
 
     # Grab the attributes of interest from the attribute config file,
     #  OR a .csv file if specified in the algo config file.
