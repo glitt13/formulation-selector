@@ -429,7 +429,8 @@ class PredConfigParser:
         pred_gpkg_lyr = pred_cfg.get('pred_gpkg_lyr', None)
         pred_gpkg_id_col = pred_cfg.get('pred_gpkg_id_col',None)
         path_crosswalk_ids = pred_cfg.get('path_crosswalk_ids',None)
-
+        overwrite_sql = pred_cfg.get('overwrite_sql', False)
+        path_hf_finl_gpkg = pred_cfg.get('path_hf_finl_gpkg', None)
         # Compile dictionary
         self.pred_cfg_dict = {
             'algo_response_vars': algo_response_vars,
@@ -454,6 +455,8 @@ class PredConfigParser:
             'pred_gpkg_lyr':pred_gpkg_lyr,
             'pred_gpkg_id_col':pred_gpkg_id_col,
             'path_crosswalk_ids':path_crosswalk_ids,
+            'path_hf_finl_gpkg': path_hf_finl_gpkg,
+            'overwrite_sql': overwrite_sql,
         }   
 
 def _make_home_dir(home_dir_read:str|os.PathLike=[])-> os.PathLike:
@@ -2464,6 +2467,31 @@ def generate_vpu_attr_filepath(dir_db_attrs: Path, dataset_name: str, vpuid: str
         save_dir = dir_db_attrs / dataset_name / str(vpuid)
     save_dir.mkdir(parents=True, exist_ok=True)
     return save_dir / f"attr_{vpuid}.parquet"
+
+# --- filepaths used in fs_pair_donors.py:
+def std_impute_log_path(dir_regn: str | Path, ds: str, algo: str, resp_var: str) -> Path:
+    """Standardize the path for the missing data imputation log."""
+    path_out = Path(dir_regn) / ds / f"imputed_locations_{algo}_{resp_var}__{ds}.csv"
+    path_out.parent.mkdir(parents=True, exist_ok=True)
+    return path_out
+
+def std_donor_pairs_path(dir_regn: str | Path, ds: str, algo: str, resp_var: str) -> Path:
+    """Standardize the path for donor-receiver pairings."""
+    path_out = Path(dir_regn) / ds / f"donor_pairs_{algo}_{resp_var}__{ds}.csv"
+    path_out.parent.mkdir(parents=True, exist_ok=True)
+    return path_out
+
+def std_receiver_params_path(dir_regn: str | Path, ds: str, algo: str, resp_var: str) -> Path:
+    """Standardize the path for assigned receiver parameters."""
+    path_out = Path(dir_regn) / ds / f"receiver_params_{algo}_{resp_var}__{ds}.csv"
+    path_out.parent.mkdir(parents=True, exist_ok=True)
+    return path_out
+
+def std_receiver_params_mapped_path(dir_regn: str | Path, ds: str, algo: str, resp_var: str, ext: str = ".gpkg") -> Path:
+    """Standardize the path for crosswalk-mapped receiver parameters."""
+    path_out = Path(dir_regn) / ds / f"receiver_params_mapped_{algo}_{resp_var}__{ds}{ext}"
+    path_out.parent.mkdir(parents=True, exist_ok=True)
+    return path_out
 
 # --- Safe f-string Resolver for DataFrames (used in fs_hfatlas_to_rafts_prep.py) ---
 class SafeDict(dict):

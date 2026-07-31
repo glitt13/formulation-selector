@@ -18,6 +18,7 @@ import numpy as np
 import fs_algo.utils as fsutil
 import fs_prep.proc_eval_metrics as pem
 import fs_algo.fs_algo_train as fsat
+import sqlite3
 
 """
 Workflow script to pair ungauged receiver basins with gauged donor basins
@@ -63,12 +64,14 @@ if __name__ == "__main__":
     dir_std_base = attr_cfig.attrs_cfg_dict.get('dir_std_base')
     dir_db_attrs = attr_cfig.attrs_cfg_dict.get('dir_db_attrs')
     datasets = attr_cfig.attrs_cfg_dict.get('datasets')
+    home_dir = attr_cfig.attrs_cfg_dict.get('home_dir')
     
     id_col_pred = pred_cfg.pred_cfg_dict.get('pred_file_comid_colname')
     context = {
         'dir_base': str(dir_base),
         'dir_std_base': str(dir_std_base),
         'dir_db_attrs': str(dir_db_attrs),
+        'home_dir': str(home_dir),
     }
 
     path_meta_raw = pred_cfg.pred_cfg_dict.get('path_meta')
@@ -195,7 +198,7 @@ if __name__ == "__main__":
                     logging.warning(f"Found {num_missing} receivers with NaN cluster predictions due to missing attributes.")
                     
                     # A. Document the locations that will be imputed
-                    path_impute_log = dir_regionalization / ds / f"imputed_locations_{algo}_{resp_var}__{ds}.csv"
+                    path_impute_log = fsutil.std_impute_log_path(dir_regionalization, ds, algo, resp_var)
                     df_receivers_mrge.loc[nan_pred_mask, ['featureID']].to_csv(path_impute_log, index=False)
                     logging.info(f"Wrote list of imputed locations to {path_impute_log}")
                     
@@ -227,7 +230,7 @@ if __name__ == "__main__":
                     df_pairings['resp_var'] = resp_var
                     
                     # 6. Save Output
-                    path_pair_out = dir_regionalization / ds / f"donor_pairs_{algo}_{resp_var}__{ds}.csv"
+                    path_pair_out = fsutil.std_donor_pairs_path(dir_regionalization, ds, algo, resp_var)
                     path_pair_out.parent.mkdir(parents=True, exist_ok=True)
                     df_pairings.to_csv(path_pair_out, index=False)
                     logging.info(f"Saved {len(df_pairings)} donor-receiver pairings to {path_pair_out}")
@@ -283,7 +286,7 @@ if __name__ == "__main__":
                         df_receiver_params = df_receiver_params.rename(columns=rename_dict)
 
                         # Save output
-                        path_params_out = dir_regionalization / ds / f"receiver_params_{algo}_{resp_var}__{ds}.csv"
+                        path_params_out = fsutil.std_receiver_params_path(dir_regionalization, ds, algo, resp_var)
                         df_receiver_params.to_csv(path_params_out, index=False)
                         logging.info(f"Saved assigned receiver parameters to {path_params_out}")
 
@@ -337,9 +340,16 @@ if __name__ == "__main__":
                                     df_mapped_params = df_mapped_params[new_col_order]
                                     
                                     # Save the final mapped parameters as a Parquet file
-                                    path_params_cw_out = dir_regionalization / ds / f"receiver_params_mapped_{algo}_{resp_var}__{ds}.parquet"
+                                    path_params_cw_out = fsutil.std_receiver_params_mapped_path(dir_regionalization, ds, algo,
+                                                                                                 resp_var, ext=".parquet")
                                     df_mapped_params.to_parquet(path_params_cw_out, index=False)
                                     logging.info(f"Saved crosswalk-mapped receiver parameters to {path_params_cw_out}")
+
+                                    path_params_cw_out_gpkg = fsutil.std_receiver_params_mapped_path(dir_regionalization, ds, algo, 
+                                                                                                     resp_var, ext=".gpkg")
+                                    with sqlite3.connect(path_params_cw_out) as conn:
+                                        df_mapped_params.to_sql("parameters", conn, if_exists='replace', index=False)
+                                    logging.info(f"Saved crosswalk-mapped receiver parameters to {path_params_cw_out_gpkg}")
                                     
                                 else:
                                     logging.error(f"Crosswalk file missing the specified pred_gpkg_id_col: {pred_gpkg_id_col}")
