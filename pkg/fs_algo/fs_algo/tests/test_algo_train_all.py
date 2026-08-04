@@ -1916,7 +1916,7 @@ class TestAlgoTrainEvalCoverage(unittest.TestCase):
         except Exception as e:
             self.fail(f"extr_modl_algo_train raised an unexpected exception: {e}")
 
-#%% functions corresponding to fs_write_params_gpkg.py
+#%% functions corresponding to fs_regn_params_gpkg.py
 
 @pytest.fixture
 def sample_dataframe():
