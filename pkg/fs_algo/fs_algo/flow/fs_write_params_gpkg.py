@@ -23,74 +23,6 @@ import fnmatch
 import fs_algo.utils as fsutil
 import fs_prep.proc_eval_metrics as pem
 
-def register_gpkg_attributes_table(conn: sqlite3.Connection, table_name: str):
-    """Registers a raw SQLite table as a non-spatial GeoPackage attributes layer."""
-    try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT count(name) FROM sqlite_master WHERE type='table' AND name='gpkg_contents'")
-        if cursor.fetchone()[0] == 1:
-            query = f"""
-            INSERT OR IGNORE INTO gpkg_contents (table_name, data_type, identifier, description)
-            VALUES ('{table_name}', 'attributes', '{table_name}', 'Regionalized parameters');
-            """
-            cursor.execute(query)
-            conn.commit()
-    except sqlite3.Error as e:
-        logging.warning(f"Could not register table '{table_name}' in gpkg_contents: {e}")
-
-def create_sqlite_index(conn: sqlite3.Connection, table_name: str, index_col: str):
-    """Creates a formal SQLite database index on the specified column to speed up joins."""
-    try:
-        cursor = conn.cursor()
-        index_name = f"idx_{table_name}_{index_col}"
-        query = f'CREATE INDEX IF NOT EXISTS "{index_name}" ON "{table_name}" ("{index_col}");'
-        cursor.execute(query)
-        conn.commit()
-    except sqlite3.Error as e:
-        logging.warning(f"Could not create SQLite index on '{table_name}' for column '{index_col}': {e}")
-
-def update_database(db_path: Path, df_data: pd.DataFrame, table_name: str, id_col: str, overwrite: bool):
-    """Helper function to execute standard SQLite table writing, appending, registration, and indexing."""
-    try:
-        with sqlite3.connect(db_path) as conn:
-            cursor = conn.cursor()
-            cursor.execute(f"SELECT count(name) FROM sqlite_master WHERE type='table' AND name='{table_name}'")
-            table_exists = cursor.fetchone()[0] == 1
-            
-            if not table_exists or overwrite:
-                if overwrite and table_exists:
-                    logging.info(f"Replacing existing table '{table_name}' in {db_path.name}.")
-                else:
-                    logging.info(f"Creating new table '{table_name}' in {db_path.name}.")
-                    
-                df_data.set_index(id_col).to_sql(table_name, conn, if_exists='replace', index=True)
-                register_gpkg_attributes_table(conn, table_name)
-                create_sqlite_index(conn, table_name, id_col)
-                
-            else:
-                logging.info(f"Table '{table_name}' exists in {db_path.name}. Checking for missing {id_col}s...")
-                existing_ids_query = f"SELECT {id_col} FROM '{table_name}'"
-                try:
-                    df_existing = pd.read_sql_query(existing_ids_query, conn)
-                    existing_id_set = set(df_existing[id_col].astype(str))
-                    
-                    df_data[id_col] = df_data[id_col].astype(str)
-                    df_new = df_data[~df_data[id_col].isin(existing_id_set)]
-                    
-                    if not df_new.empty:
-                        logging.info(f"Appending {len(df_new)} new records to '{table_name}'.")
-                        df_new.set_index(id_col).to_sql(table_name, conn, if_exists='append', index=True)
-                        register_gpkg_attributes_table(conn, table_name)
-                        create_sqlite_index(conn, table_name, id_col)
-                    else:
-                        logging.info(f"No new records to append. Table '{table_name}' is up to date.")
-                except sqlite3.OperationalError:
-                    logging.error(f"Identifier column '{id_col}' missing in the existing table '{table_name}'. Cannot append.")
-    except sqlite3.Error as e:
-        logging.error(f"SQLite error occurred while writing to {db_path.name}: {e}")
-        sys.exit(1)
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Write regionalized parameters to a standalone GeoPackage.')
     parser.add_argument('path_pred_config', type=str, help='Path to the prediction YAML config.')
@@ -220,9 +152,9 @@ if __name__ == "__main__":
                 path_output_sql = dir_regionalization_sub / f"compiled_regionalized_params_{algo}.sqlite"
                 
                 # Write/Append to Local SQLite DB
-                update_database(path_output_sql, df_params, table_name, id_col, overwrite_sql)
+                fsutil.update_database(path_output_sql, df_params, table_name, id_col, overwrite_sql)
                 
                 # Write/Append to Master GPKG
-                update_database(dest_master_path, df_params, table_name, id_col, overwrite_sql)
-
+                fsutil.update_database(dest_master_path, df_params, table_name, id_col, overwrite_sql)
+                logging.info(f"Updated hydrofabric geopackage at {dest_master_path} with table '{table_name}'")
     logging.info("FINISHED writing and transferring parameters to GeoPackages.")
