@@ -50,6 +50,7 @@ import pytest
 import geopandas as gpd
 from shapely import Point
 import joblib 
+import sqlite3
 # Tell pytest natively to ignore these specific warnings for this entire file
 pytestmark = pytest.mark.filterwarnings(
     "ignore:.*disp.*iprint.*:DeprecationWarning",
@@ -1915,6 +1916,206 @@ class TestAlgoTrainEvalCoverage(unittest.TestCase):
         except Exception as e:
             self.fail(f"extr_modl_algo_train raised an unexpected exception: {e}")
 
+#%% functions corresponding to fs_write_params_gpkg.py
+
+@pytest.fixture
+def sample_dataframe():
+    """Fixture providing a sample DataFrame for database operations."""
+    return pd.DataFrame({
+        'divide_id': ['cat-1', 'cat-2'],
+        'param_a': [1.5, 2.5],
+        'param_b': [100, 200]
+    })
+
+# =====================================================================
+# Tests for register_gpkg_attributes_table
+# =====================================================================
+
+def test_register_gpkg_attributes_table_success():
+    """Test that a table is successfully registered when gpkg_contents exists."""
+    # Use a real in-memory SQLite database
+    conn = sqlite3.connect(':memory:')
+    cursor = conn.cursor()
+    
+    # Manually create the GeoPackage master metadata table
+    cursor.execute("""
+        CREATE TABLE gpkg_contents (
+            table_name TEXT, 
+            data_type TEXT, 
+            identifier TEXT, 
+            description TEXT
+        )
+    """)
+    
+    table_name = "test_formulation"
+    
+    # Call the actual function
+    fsutil.register_gpkg_attributes_table(conn, table_name)
+    
+    # Verify the insertion was successful
+    cursor.execute("SELECT table_name, data_type FROM gpkg_contents")
+    result = cursor.fetchone()
+    
+    assert result is not None
+    assert result[0] == table_name
+    assert result[1] == 'attributes'
+    conn.close()
+
+def test_register_gpkg_attributes_table_missing_contents():
+    """Test that the function safely exits without errors if gpkg_contents is missing."""
+    conn = sqlite3.connect(':memory:')
+    table_name = "test_formulation"
+    
+    # Call without creating gpkg_contents; per the function's logic, it should check 
+    # sqlite_master, find nothing, and bypass execution without crashing.
+    fsutil.register_gpkg_attributes_table(conn, table_name)
+    
+    cursor = conn.cursor()
+    # Verify no random tables were created
+    cursor.execute("SELECT count(name) FROM sqlite_master WHERE type='table'")
+    assert cursor.fetchone()[0] == 0
+    conn.close()
+
+# =====================================================================
+# Tests for create_sqlite_index
+# =====================================================================
+
+def test_create_sqlite_index_success():
+    """Test that a valid SQLite index is explicitly created on the specified column."""
+    conn = sqlite3.connect(':memory:')
+    cursor = conn.cursor()
+    
+    # Create a real dummy table
+    table_name = "test_params"
+    index_col = "divide_id"
+    cursor.execute(f"CREATE TABLE {table_name} ({index_col} TEXT, value REAL)")
+    
+    # Call the indexing function
+    fsutil.create_sqlite_index(conn, table_name, index_col)
+    
+    # Verify the index exists in the SQLite master schema
+    cursor.execute(f"SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='{table_name}'")
+    
+    # Fetch all indices for the table to ensure ours is included
+    indices = [row[0] for row in cursor.fetchall()]
+    assert f"idx_{table_name}_{index_col}" in indices
+    conn.close()
+
+def test_create_sqlite_index_invalid_table(caplog):
+    """Test that attempting to index a non-existent table is caught and logged as a sqlite3.Error."""
+    conn = sqlite3.connect(':memory:')
+    
+    # Call function on a table that doesn't exist; triggers a SQLite syntax error
+    fsutil.create_sqlite_index(conn, "missing_table", "divide_id")
+    
+    # Check that the error was caught and logged gracefully without raising an exception
+    assert "Could not create SQLite index on 'missing_table'" in caplog.text
+    conn.close()
+
+# =====================================================================
+# Tests for update_database
+# =====================================================================
+
+def test_update_database_create_new(tmp_path, sample_dataframe):
+    """Test writing a brand-new table to a real file-based SQLite database."""
+    # Use Pytest's tmp_path to create a real file that gets cleaned up automatically
+    db_path = tmp_path / "test_output.sqlite"
+    table_name = "formulation_kmeans"
+    id_col = "divide_id"
+    
+    fsutil.update_database(db_path, sample_dataframe, table_name, id_col, overwrite=False)
+    
+    with sqlite3.connect(db_path) as conn:
+        # 1. Verify data exists
+        df_result = pd.read_sql(f"SELECT * FROM {table_name}", conn)
+        assert len(df_result) == 2
+        assert id_col in df_result.columns
+        
+        # 2. Verify the formal index was successfully created via the helper
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='{table_name}'")
+        
+        # FIX: Check if our explicit index is IN the list of indices, 
+        # bypassing the auto-generated Pandas 'ix_' index.
+        indices = [row[0] for row in cursor.fetchall()]
+        assert f"idx_{table_name}_{id_col}" in indices
+
+def test_update_database_overwrite(tmp_path, sample_dataframe):
+    """Test that the overwrite=True flag completely drops and replaces existing data."""
+    db_path = tmp_path / "test_output.sqlite"
+    table_name = "formulation_kmeans"
+    id_col = "divide_id"
+    
+    # Initial write to establish the table
+    fsutil.update_database(db_path, sample_dataframe, table_name, id_col, overwrite=False)
+    
+    # Create a new DataFrame with completely different data and IDs
+    overwrite_df = pd.DataFrame({
+        'divide_id': ['cat-99'],
+        'param_a': [9.9],
+        'param_b': [999]
+    })
+    
+    # Execute the overwrite
+    fsutil.update_database(db_path, overwrite_df, table_name, id_col, overwrite=True)
+    
+    with sqlite3.connect(db_path) as conn:
+        df_result = pd.read_sql(f"SELECT * FROM {table_name}", conn)
+        # Verify the table was replaced: it should only contain the 1 new row, not 3
+        assert len(df_result) == 1
+        assert df_result.iloc[0]['divide_id'] == 'cat-99'
+
+def test_update_database_append_new_only(tmp_path, sample_dataframe):
+    """Test that the append logic strictly ignores redundant records and appends missing IDs."""
+    db_path = tmp_path / "test_output.sqlite"
+    table_name = "formulation_kmeans"
+    id_col = "divide_id"
+    
+    # Initial write: contains 'cat-1' and 'cat-2'
+    fsutil.update_database(db_path, sample_dataframe, table_name, id_col, overwrite=False)
+    
+    # DataFrame containing 1 old ID ('cat-2') and 1 new ID ('cat-3')
+    append_df = pd.DataFrame({
+        'divide_id': ['cat-2', 'cat-3'], 
+        'param_a': [2.5, 3.5],
+        'param_b': [200, 300]
+    })
+    
+    # Attempt to append
+    fsutil.update_database(db_path, append_df, table_name, id_col, overwrite=False)
+    
+    with sqlite3.connect(db_path) as conn:
+        df_result = pd.read_sql(f"SELECT * FROM {table_name}", conn)
+        
+        # Should contain 'cat-1', 'cat-2', and 'cat-3'. The duplicated 'cat-2' was ignored.
+        assert len(df_result) == 3
+        assert set(df_result['divide_id']) == {'cat-1', 'cat-2', 'cat-3'}
+        
+        # Ensure our custom index was reapplied after appending
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='{table_name}'")
+        indices = [row[0] for row in cursor.fetchall()]
+        assert f"idx_{table_name}_{id_col}" in indices
+
+def test_update_database_append_missing_id_col(tmp_path, sample_dataframe, caplog):
+    """Test that attempting to append to a table lacking the designated id_col is caught."""
+    db_path = tmp_path / "test_output.sqlite"
+    table_name = "formulation_kmeans"
+    id_col = "divide_id"
+    
+    # Manually create a table without the expected identifier column
+    bad_df = pd.DataFrame({
+        'wrong_id': ['cat-1'], 
+        'param_a': [1.0]
+    })
+    with sqlite3.connect(db_path) as conn:
+        bad_df.to_sql(table_name, conn, index=False)
+    
+    # Attempt to use the append feature which requires reading the existing id_col
+    fsutil.update_database(db_path, sample_dataframe, table_name, id_col, overwrite=False)
+    
+    # Ensure the DatabaseError was gracefully caught and logged by our updated except block
+    assert f"Identifier column '{id_col}' missing in the existing table '{table_name}'" in caplog.text
 if __name__ == '__main__':
 
     unittest.main()
