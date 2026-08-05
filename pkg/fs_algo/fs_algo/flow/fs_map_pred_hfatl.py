@@ -66,8 +66,10 @@ if __name__ == "__main__":
 
     dir_base = attr_cfig.attrs_cfg_dict.get('dir_base')
     dir_std_base = attr_cfig.attrs_cfg_dict.get('dir_std_base')
+    home_dir = attr_cfig.attrs_cfg_dict.get('home_dir')
     # dir_db_attrs = attr_cfig.attrs_cfg_dict.get('dir_db_attrs')
     datasets = attr_cfig.attrs_cfg_dict.get('datasets')
+
 
     dirs_std_dict = fsutil.fs_save_algo_dir_struct(dir_base)
     dir_out_viz_base = dirs_std_dict.get('dir_out_viz_base')
@@ -88,7 +90,8 @@ if __name__ == "__main__":
     
     for ds in datasets: 
         print(f"Mapping predictions for {ds} dataset")
-        vals = {'dir_std_base':dir_std_base,'ds':ds,}
+        vals = {'dir_std_base':dir_std_base,'ds':ds,
+                'home_dir':home_dir}
         path_fs_dat_resp =  fsutil._std_fs_prep_ds_paths(dir_std_base=dir_std_base,ds=ds,mtch_str='*.nc')
         path_gpkg_fs_prep = fsutil._std_fs_prep_ds_companion_gpkg_path(path_fs_dat_resp[0])
         layers = gpd.list_layers(path_gpkg_fs_prep)
