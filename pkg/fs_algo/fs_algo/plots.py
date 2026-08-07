@@ -682,8 +682,7 @@ def gen_conus_basemap(dir_out_basemap:str | Path, # This should be the data_visu
 def plot_map_pred(geo_df:gpd.GeoDataFrame, states:gpd.GeoDataFrame,
                   title:str,metr:str,colname_data:str='prediction',
                   plot_style:str='auto', task_type:str='regression'
-                  ):
-    
+                  )->Figure:
     # Calculate vmin and vmax based on the data
     vmin = geo_df[colname_data].min(skipna=True)
     vmax = geo_df[colname_data].max(skipna=True)
@@ -693,7 +692,10 @@ def plot_map_pred(geo_df:gpd.GeoDataFrame, states:gpd.GeoDataFrame,
     # Determine plot style
     if plot_style == 'auto':
         plot_style = 'hexbin' if geo_df.shape[0] > 20000 else 'points'
-
+    map_msg = f"{title} :\n \
+        - Plotting {geo_df.shape[0]} locations on map with {plot_style} style and {task_type} task_type"
+    logging.info(map_msg)
+    print(map_msg)
     # --- 1. HEXBIN PLOTTING ---
     if plot_style == 'hexbin':
         logging.info(f"Using hexbin mapping for large dataset ({len(geo_df)} points).")
