@@ -19,7 +19,7 @@ import zipfile
 from typing import Iterable
 import fs_algo.utils as fsutil
 import os
-
+import gc
 
 # Set up basic logging configuration
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -321,7 +321,8 @@ def plot_pca_save_wrap(df_X:pd.DataFrame,
     fig_pca_cumulative.savefig(path_pca_stdscaled_cum_fig)
     logging.info(f"Wrote the {ds} PCA cumulative variance explained plot to\n{path_pca_stdscaled_cum_fig}")
     plt.clf()
-    plt.close()
+    plt.close('all')
+    gc.collect()
     return None
 
 def std_feat_imp_plot_path(dir_out_viz_base:str|Path, ds:str,
@@ -392,9 +393,9 @@ def save_feat_imp_fig_wrap(rfr:RandomForestRegressor,
 
     fig_feat_imp.savefig(path_fig_imp)
     logging.info(f"Wrote feature importance plot to {path_fig_imp}")
-    plt.clf()
-    plt.close()
-
+    plt.close(fig_feat_imp)
+    plt.close('all')
+    gc.collect()
 
 def std_lc_plot_path(dir_out_viz_base: str|Path,
                       ds:str, metr:str, algo_str:str
@@ -534,8 +535,9 @@ def plot_pred_vs_obs_wrap(y_pred: np.ndarray, y_obs:np.ndarray, dir_out_viz_base
                             metr,algo_str,split_type)
     # Save the plot as a .png file
     fig_regr.savefig(path_regr_plot, dpi=300, bbox_inches='tight')
-    plt.clf()
-    plt.close()
+    plt.close(fig_regr)
+    plt.close('all')
+    gc.collect()
 
 def plot_pred_vs_obs_regr_mapie(y_pred: np.ndarray, y_obs: np.ndarray, ds:str,
                                 metr:str, y_pis: list, alpha_val:float, r2_val:float=None)->Figure:
@@ -611,8 +613,9 @@ def plot_pred_vs_obs_wrap_mapie(y_pred: np.ndarray, y_obs:np.ndarray, dir_out_vi
                             metr,algo_str,alpha_val,split_type)
     # Save the plot as a .png file
     fig_regr.savefig(path_regr_plot, dpi=300, bbox_inches='tight')
-    plt.clf()
-    plt.close()
+    plt.close(fig_regr)
+    plt.close('all')
+    gc.collect()
 
 def std_map_pred_path(dir_out_viz_base:str|Path, ds:str,
                       metr:str,algo_str:str,
@@ -839,8 +842,9 @@ def plot_map_pred_wrap(test_gdf:gpd.GeoDataFrame,
     # Save the plot as a .png file
     plot_pred_map.savefig(path_pred_map_plot, dpi=300, bbox_inches='tight')
     logging.info(f"Wrote prediction map to \n{path_pred_map_plot}")
-    plt.clf()
-    plt.close()
+    plt.close(plot_pred_map)
+    plt.close('all')
+    gc.collect()
 
 def plot_map_pred_uncn(geo_df: gpd.GeoDataFrame, states: gpd.GeoDataFrame, title: str, metr: str,
                        alpha_val: float = None, uncn_col: str = None,
@@ -932,8 +936,9 @@ def plot_map_pred_wrap_uncn(test_gdf, dir_out_viz_base, ds, metr, algo_str,
 
     plot_pred_map.savefig(path_uncn_plot, dpi=300, bbox_inches='tight')
     logging.info(f"Wrote uncertainty map to \n{path_uncn_plot}")
-    plt.clf()
-    plt.close()
+    plt.close(plot_pred_map)
+    plt.close('all')
+    gc.collect()
 
 def plot_best_perf_map(geo_df,states, title, comparison_col = 'dataset'):
 
@@ -1014,6 +1019,6 @@ def plot_best_algo_wrap(geo_df, dir_out_viz_base,subdir_anlys, metr,comparison_c
     plot_best_perf = plot_best_perf_map(geo_df, states,title, comparison_col)
     plot_best_perf.savefig(path_best_map_plot, dpi=300, bbox_inches='tight')
     logging.info(f"Wrote top predicted value map to \n{path_best_map_plot}")
-
-    plt.clf()
-    plt.close()
+    plt.close(plot_best_perf)
+    plt.close('all')
+    gc.collect()
