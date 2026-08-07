@@ -182,7 +182,7 @@ if __name__ == "__main__":
             df_attr.reset_index(inplace=True)
 
             new_df_attr = df_attr[['featureID', 'featureSource', 'attribute', 'value']]
-
+            map_feat_srce_feat_id = new_df_attr[['featureID', 'featureSource']].drop_duplicates()
             # Convert into wide format for model prediction
             df_attr_wide = new_df_attr.pivot(index='featureID', columns = 'attribute', values = 'value')
 
@@ -199,10 +199,11 @@ if __name__ == "__main__":
 
             if 'featureID' not in df_attr_wide.columns:
                 df_attr_wide.rename(columns={comid_pred_col:'featureID'},inplace=True)
+            if 'featureSource' not in df_attr_wide.columns:
                 df_attr_wide['featureSource'] = fio.get('featureSource', 'hf_id')
-
-        map_feat_srce_feat_id = df_attr_wide[['featureID','featureSource']].drop_duplicates()
-        df_attr_wide.set_index('featureID',inplace = True)    
+            
+            map_feat_srce_feat_id = df_attr_wide[['featureID','featureSource']].drop_duplicates()
+            df_attr_wide.set_index('featureID',inplace = True)    
                 
         # Run predictions & save output
         dir_out_alg_ds = Path(dir_out_alg_base/Path(ds))
