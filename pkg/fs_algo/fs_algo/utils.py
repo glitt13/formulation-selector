@@ -24,6 +24,7 @@ from sklearn.model_selection import train_test_split
 import joblib
 import sys 
 import sqlite3
+import json
 # Set up basic logging configuration
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -2005,6 +2006,7 @@ def read_hfatlas_wrap_dask(paths_hfatl: Union[Path, str, List[Union[Path, str]]]
     Changelog:
      2026-07-21 fix: enforce map_id_col dtype read as str, GL
      2026-07-23 fix: ignore a col if colname duplicated in a separate parquet, GL
+     2026-08-05 feat: dynamically check if map_id_col is an index or column to prevent Dask KeyErrors, Gemini3.1Pro
     """
     if attrs_sel is None:
         attrs_sel = []
@@ -2031,8 +2033,25 @@ def read_hfatlas_wrap_dask(paths_hfatl: Union[Path, str, List[Union[Path, str]]]
     # 2. PEEK phase: Read only the schema metadata (extremely fast, ~0 RAM)
     for file in all_files:
         try:
-            # Read just the column names from the parquet metadata
-            raw_cols = pq.ParquetFile(file).schema.names
+            pq_file = pq.ParquetFile(file)
+            raw_cols = pq_file.schema.names
+            
+            # Dynamically extract pandas index metadata
+            index_cols = []
+            if pq_file.schema_arrow.metadata and b'pandas' in pq_file.schema_arrow.metadata:
+                try:
+                    pandas_meta = json.loads(pq_file.schema_arrow.metadata[b'pandas'].decode('utf8'))
+                    raw_index_cols = pandas_meta.get('index_columns', [])
+                    
+                    # Ensure we extract the string names safely
+                    for ic in raw_index_cols:
+                        if isinstance(ic, str):
+                            index_cols.append(ic)
+                        elif isinstance(ic, dict) and 'name' in ic and ic['name']:
+                            index_cols.append(ic['name'])
+                except Exception as meta_err:
+                    logging.debug(f"Could not parse pandas metadata in {file.name}: {meta_err}")
+                    
         except Exception as e:
             logging.warning(f"Could not read schema for {file.name}: {e}")
             continue
@@ -2052,15 +2071,56 @@ def read_hfatlas_wrap_dask(paths_hfatl: Union[Path, str, List[Union[Path, str]]]
         logging.info(f"Found {len(available_clean_cols)} requested attributes in {file.name}")
         found_attrs.update(available_clean_cols)
 
+        # Determine if map_id_col is an explicit column or an index
+        raw_map_id_col = col_mapping.get(map_id_col, map_id_col)
+        is_index = raw_map_id_col in index_cols
+        is_col = raw_map_id_col in raw_cols
+
         # The exact raw strings we need to ask Dask to load
-        raw_cols_to_load = [col_mapping[map_id_col]] + [col_mapping[col] for col in available_clean_cols]
+        raw_cols_to_load = [col_mapping[col] for col in available_clean_cols]
+        rename_dict = {col_mapping[col]: col for col in available_clean_cols}
         
-        # Mapping to rename them back to clean names after loading
-        rename_dict = {col_mapping[col]: col for col in [map_id_col] + available_clean_cols}
+        dask_kwargs = {'engine': 'pyarrow'}
+
+        if is_index:
+            # Tell Dask to specifically load this as the index (do NOT add to raw_cols_to_load)
+            dask_kwargs['index'] = raw_map_id_col
+        elif is_col:
+            # Bypass hidden metadata indices to prevent KeyError, load as standard column
+            dask_kwargs['index'] = False
+            raw_cols_to_load.insert(0, raw_map_id_col)
+            rename_dict[raw_map_id_col] = map_id_col
+        else:
+            logging.warning(f"'{map_id_col}' not found as a column or index in {file.name}")
+            continue
 
         # 3. LAZY LOAD phase: Tell Dask to read *only* the specific columns we need
-        ddf = dd.read_parquet(file, columns=raw_cols_to_load, engine='pyarrow')
+        try:
+            ddf = dd.read_parquet(file, columns=raw_cols_to_load, **dask_kwargs)
+        except Exception as e:
+            logging.error(f"Failed to read {file.name} with Dask: {e}")
+            continue
+            
         ddf = ddf.rename(columns=rename_dict)
+        
+        # Extract map_id_col if it was stored as the index instead of a column
+        if is_index:
+            if ddf.index.name == raw_map_id_col or ddf.index.name == map_id_col:
+                ddf = ddf.reset_index()
+            else:
+                ddf = ddf.reset_index()
+                if 'index' in ddf.columns:
+                    ddf = ddf.rename(columns={'index': map_id_col})
+                elif '__index_level_0__' in ddf.columns:
+                    ddf = ddf.rename(columns={'__index_level_0__': map_id_col})
+                else:
+                    ddf = ddf.rename(columns={ddf.columns[0]: map_id_col})
+                    
+            # Just in case the raw name wasn't renamed yet
+            if raw_map_id_col in ddf.columns and raw_map_id_col != map_id_col:
+                ddf = ddf.rename(columns={raw_map_id_col: map_id_col})
+                
+            logging.info(f"Extracted '{map_id_col}' from the index of {file.name}.")
         
         # Enforce string type inside the lazy Dask graph BEFORE indexing/merging
         ddf[map_id_col] = ddf[map_id_col].astype(str)
@@ -2084,7 +2144,6 @@ def read_hfatlas_wrap_dask(paths_hfatl: Union[Path, str, List[Union[Path, str]]]
         # Drop the overlapping columns from the right-hand dataframe
         if overlapping_cols:
             right_ddf = right_ddf.drop(columns=list(overlapping_cols))
-            # Because we set_index earlier, Dask can join these much more efficiently
         combined_ddf = combined_ddf.join(right_ddf, how='outer')
 
     # 5. COMPUTE phase: Execute the graph and bring the final, slimmed-down table into Pandas RAM
@@ -2094,7 +2153,6 @@ def read_hfatlas_wrap_dask(paths_hfatl: Union[Path, str, List[Union[Path, str]]]
     # Enforce string dtype on the location identifier to prevent downstream bugs
     if map_id_col in combined_df.columns:
         col_dtype = combined_df[map_id_col].dtype
-        # Pandas represents strings as either 'object' or the newer 'string' extension type
         if not pd.api.types.is_object_dtype(col_dtype) and not pd.api.types.is_string_dtype(col_dtype):
             warn_str = f"Location identifier column '{map_id_col}' was read as {col_dtype}. Coercing to string to prevent downstream ID-matching errors."
             logging.warning(warn_str)
