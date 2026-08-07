@@ -96,25 +96,32 @@ if __name__ == "__main__":
         path_fs_dat_resp =  fsutil._std_fs_prep_ds_paths(dir_std_base=dir_std_base,ds=ds,mtch_str='*.nc')
         path_gpkg_fs_prep = fsutil._std_fs_prep_ds_companion_gpkg_path(path_fs_dat_resp[0])
 
-        path_crosswalk_ids = Path(fsutil.resolve_fstrings(path_crosswalk_ids_raw, vals))
-        if path_crosswalk_ids.exists():
-            df_crosswalk = pd.read_parquet(path_crosswalk_ids).astype(str) if str(path_crosswalk_ids).endswith('.parquet') else pd.read_csv(path_crosswalk_ids, dtype=str)
-            crosswalk_cols = list(df_crosswalk.columns)
-            if pred_gpkg_id_col in crosswalk_cols:
-                crosswalk_cols.remove(pred_gpkg_id_col)
-                desired_id_col = crosswalk_cols[0] # Usually 'divide_id'
-            else:
-                logging.error(f"{pred_gpkg_id_col} not in the crosswalk dataset column names.")
-                
-            path_hf_finl_gpkg = Path(fsutil.resolve_fstrings(path_hf_finl_gpkg_raw, vals))
-            if not path_hf_finl_gpkg.exists():
-                logging.warning(f"Does not exist: {path_hf_finl_gpkg}")
-        
-            try:  # Read hydrofabric divides
-                gdf_divides = gpd.read_file(path_hf_finl_gpkg, layer='divides', columns=[desired_id_col, 'geometry'], engine='pyogrio')
-                gdf_divides[desired_id_col] = gdf_divides[desired_id_col].astype(str)
-            except Exception as e:
-                logging.warning(f"Could not read 'divides' layer from {path_hf_finl_gpkg}. Skipping secondary map. Error: {e}")
+        # Initialize safe placeholder variables
+        df_crosswalk = None
+        gdf_divides = None
+        desired_id_col = None
+
+        if path_crosswalk_ids_raw and path_hf_finl_gpkg_raw:
+            path_crosswalk_ids = Path(fsutil.resolve_fstrings(path_crosswalk_ids_raw, vals))
+            
+            if path_crosswalk_ids.exists():
+                df_crosswalk = pd.read_parquet(path_crosswalk_ids).astype(str) if str(path_crosswalk_ids).endswith('.parquet') else pd.read_csv(path_crosswalk_ids, dtype=str)
+                crosswalk_cols = list(df_crosswalk.columns)
+                if pred_gpkg_id_col in crosswalk_cols:
+                    crosswalk_cols.remove(pred_gpkg_id_col)
+                    desired_id_col = crosswalk_cols[0] # Usually 'divide_id'
+                else:
+                    logging.error(f"{pred_gpkg_id_col} not in the crosswalk dataset column names.")
+                    
+                path_hf_finl_gpkg = Path(fsutil.resolve_fstrings(path_hf_finl_gpkg_raw, vals))
+                if not path_hf_finl_gpkg.exists():
+                    logging.warning(f"Master GPKG does not exist: {path_hf_finl_gpkg}")
+            
+                try:  # Read hydrofabric divides
+                    gdf_divides = gpd.read_file(path_hf_finl_gpkg, layer='divides', columns=[desired_id_col, 'geometry'], engine='pyogrio')
+                    gdf_divides[desired_id_col] = gdf_divides[desired_id_col].astype(str)
+                except Exception as e:
+                    logging.warning(f"Could not read 'divides' layer from {path_hf_finl_gpkg}. Skipping secondary map. Error: {e}")
 
         # ---
         layers = gpd.list_layers(path_gpkg_fs_prep)
@@ -225,28 +232,21 @@ if __name__ == "__main__":
                 # -----------------------------------------------------
                 # 2. PLOT SECONDARY GEOMETRY (DIVIDES via CROSSWALK)
                 # -----------------------------------------------------
-                if path_crosswalk_ids.exists() and path_hf_finl_gpkg.exists():
+                if df_crosswalk is not None and gdf_divides is not None and desired_id_col:
                     logging.info("Crosswalk and master GPKG found. Generating secondary divide-level map.")
                     
-                    if pred_gpkg_id_col in crosswalk_cols:
-                        crosswalk_cols.remove(pred_gpkg_id_col)
-                        desired_id_col = crosswalk_cols[0] # Usually 'divide_id'
-                        
-                        # Broadcast the aggregated predictions down to the divide scale
-                        df_pred_mapped = df_pred.merge(df_crosswalk, left_on='featureID', right_on=pred_gpkg_id_col, how='inner')
-                        
-                        # Merge geometries with broadcasted predictions
-                        gdf_pred_divides = gdf_divides.merge(df_pred_mapped, left_on=desired_id_col, right_on=desired_id_col, how='inner')
-                        
-                        if not gdf_pred_divides.empty:
-                            div_analysis_str = f"{analysis_str}_divides" if analysis_str else "divides"
-                            execute_mapping(gdf_pred_divides, div_analysis_str)
-                        else:
-                            logging.warning("Divide-level merge resulted in an empty GeoDataFrame.")
-        
+                    # Broadcast the aggregated predictions down to the divide scale
+                    df_pred_mapped = df_pred.merge(df_crosswalk, left_on='featureID', right_on=pred_gpkg_id_col, how='inner')
+                    
+                    # Merge geometries with broadcasted predictions
+                    gdf_pred_divides = gdf_divides.merge(df_pred_mapped, left_on=desired_id_col, right_on=desired_id_col, how='inner')
+                    
+                    if not gdf_pred_divides.empty:
+                        div_analysis_str = f"{analysis_str}_divides" if analysis_str else "divides"
+                        execute_mapping(gdf_pred_divides, div_analysis_str)
                     else:
-                        logging.warning(f"Crosswalk file missing the specified aggregated ID column: {pred_gpkg_id_col}")
-
+                        logging.warning("Divide-level merge resulted in an empty GeoDataFrame.")
+        
         logging.info(f"Prediction map plots stored inside {dir_out_viz_base}")
         logging.info(f"Completed prediction map generation for {path_pred_config}")
         
