@@ -473,7 +473,8 @@ def _estimate_decimals_for_plotting(val:float)-> int:
 
     return round_decimals
 
-def plot_pred_vs_obs_regr(y_pred: np.ndarray, y_obs: np.ndarray, ds:str, metr:str, r2_val:float=None)->Figure:
+def plot_pred_vs_obs_regr(y_pred: np.ndarray, y_obs: np.ndarray, ds:str, metr:str, 
+                          r2_val:float=None,spearman_val:float=None)->Figure:
     """Plot the observed vs. predicted module performance
 
     :param y_pred: The predicted response variable
@@ -484,7 +485,11 @@ def plot_pred_vs_obs_regr(y_pred: np.ndarray, y_obs: np.ndarray, ds:str, metr:st
     :type ds: str
     :param metr: The metric/response variable name of interest
     :type metr: str
-    :return: THe predicted vs observed regression plot
+    :param r2_val: The r-squared value from regression
+    :type r2_val: float
+    :param spearman_val: The spearman rank correlation coefficient
+    :type spearman_val: float
+    :return: The predicted vs observed regression plot
     :rtype: Figure
     """
     max_val = np.max([y_pred,y_obs])
@@ -503,14 +508,24 @@ def plot_pred_vs_obs_regr(y_pred: np.ndarray, y_obs: np.ndarray, ds:str, metr:st
     plt.ylabel('Predicted {}'.format(metr))
     plt.xlabel('Actual {}'.format(metr))
     plt.title('RaFTS-predicted vs. observed: {}'.format(ds))
+
+    metrics_text = []
     if r2_val is not None:
-        plt.text(0.05, 0.95, f'$R^2 = {r2_val:.2f}$', transform = plt.gca().transAxes,
-             fontsize=12, verticalalignment='top')
+        metrics_text.append(f'$R^2 = {r2_val:.2f}$')
+
+    if spearman_val is not None:
+        metrics_text.append(f'$\\rho = {spearman_val:.2f}$')
+
+    if metrics_text:
+        plt.gca().text(0.05, 0.95, '\n'.join(metrics_text), transform=plt.gca().transAxes,
+                       fontsize=12, verticalalignment='top', bbox=dict(facecolor='white', alpha=0.5))
+
     fig = plt.gcf()
     return fig
 
 def plot_pred_vs_obs_wrap(y_pred: np.ndarray, y_obs:np.ndarray, dir_out_viz_base:str|Path,
-                           ds:str, metr:str, algo_str:str, r2_val:float=None, split_type:str=''):
+                           ds:str, metr:str, algo_str:str, r2_val:float=None,
+                           split_type:str='',spearman_val:float=None):
     """Wrapper to create & save predicted vs. observed regression plot
 
     :param y_pred: The predicted response variable
@@ -527,9 +542,13 @@ def plot_pred_vs_obs_wrap(y_pred: np.ndarray, y_obs:np.ndarray, dir_out_viz_base
     :type algo_str: str
     :param split_type: The type of data being displayed (e.g. training, testing), defaults to ''
     :type split_type: str, optional
+    :param r2_val: The r-squared value from regression
+    :type r2_val: float
+    :param spearman_val: The spearman rank correlation coefficient
+    :type spearman_val: float
     """
     # Generate figure
-    fig_regr = plot_pred_vs_obs_regr(y_pred, y_obs, ds, metr, r2_val)
+    fig_regr = plot_pred_vs_obs_regr(y_pred, y_obs, ds, metr, r2_val,spearman_val)
     # Generate filepath for saving figure
     path_regr_plot = std_regr_pred_obs_path(dir_out_viz_base, ds,
                             metr,algo_str,split_type)
@@ -540,7 +559,8 @@ def plot_pred_vs_obs_wrap(y_pred: np.ndarray, y_obs:np.ndarray, dir_out_viz_base
     gc.collect()
 
 def plot_pred_vs_obs_regr_mapie(y_pred: np.ndarray, y_obs: np.ndarray, ds:str,
-                                metr:str, y_pis: list, alpha_val:float, r2_val:float=None)->Figure:
+                                metr:str, y_pis: list, alpha_val:float,
+                                r2_val:float=None,spearman_val:float=None)->Figure:
     """Plot the observed vs. predicted module performance
 
     :param y_pred: The predicted response variable
@@ -551,7 +571,15 @@ def plot_pred_vs_obs_regr_mapie(y_pred: np.ndarray, y_obs: np.ndarray, ds:str,
     :type ds: str
     :param metr: The metric/response variable name of interest
     :type metr: str
-    :return: THe predicted vs observed regression plot
+    :param y_pis: y prediction intervals
+    :type y_pis: list
+    :param alpha_val: The alpha value for the prediction intervals
+    :type alpha_val: float
+    :param r2_val: The r-squared value from regression
+    :type r2_val: float
+    :param spearman_val: The spearman rank correlation coefficient
+    :type spearman_val: float
+    :return: The predicted vs observed regression plot
     :rtype: Figure
     """
     max_val = np.max([y_pred,y_obs])
@@ -578,17 +606,22 @@ def plot_pred_vs_obs_regr_mapie(y_pred: np.ndarray, y_obs: np.ndarray, ds:str,
     # Add alpha values as text box
     plt.gca().text(0.05, 0.95, f'alpha = {alpha_val:.2f}', transform=plt.gca().transAxes,
                    fontsize=10, verticalalignment='top', bbox=dict(facecolor='white', alpha=0.5))
-    
+    metrics_text = []
     if r2_val is not None:
-        plt.gca().text(0.05, 0.98, f'$R^2 = {r2_val:.2f}$', transform=plt.gca().transAxes,
-                       fontsize=12, verticalalignment='top', bbox=dict(facecolor='white', alpha=0.5))
+        metrics_text.append(f'$R^2 = {r2_val:.2f}$')
 
+    if spearman_val is not None:
+        metrics_text.append(f'$\\rho = {spearman_val:.2f}$')
+
+    if metrics_text:
+        plt.gca().text(0.05, 0.95, '\n'.join(metrics_text), transform=plt.gca().transAxes,
+                       fontsize=12, verticalalignment='top', bbox=dict(facecolor='white', alpha=0.5))
     fig = plt.gcf()
     return fig
 
 def plot_pred_vs_obs_wrap_mapie(y_pred: np.ndarray, y_obs:np.ndarray, dir_out_viz_base:str|Path,
                            ds:str, metr:str, algo_str:str,y_pis: list, alpha_val:float,
-                           split_type:str='',r2_val:float=None):
+                           split_type:str='',r2_val:float=None,spearman_val:float=None):
     """Wrapper to create & save predicted vs. observed regression plot
 
     :param y_pred: The predicted response variable
@@ -605,9 +638,13 @@ def plot_pred_vs_obs_wrap_mapie(y_pred: np.ndarray, y_obs:np.ndarray, dir_out_vi
     :type algo_str: str
     :param split_type: The type of data being displayed (e.g. training, testing), defaults to ''
     :type split_type: str, optional
+    :param r2_val: The r-squared value from regression
+    :type r2_val: float
+    :param spearman_val: The spearman rank correlation coefficient
+    :type spearman_val: float
     """
     # Generate figure
-    fig_regr = plot_pred_vs_obs_regr_mapie(y_pred, y_obs, ds, metr, y_pis, alpha_val, r2_val)
+    fig_regr = plot_pred_vs_obs_regr_mapie(y_pred, y_obs, ds, metr, y_pis, alpha_val, r2_val,spearman_val)
     # Generate filepath for saving figure
     path_regr_plot = std_regr_pred_obs_path_mapie(dir_out_viz_base, ds,
                             metr,algo_str,alpha_val,split_type)
