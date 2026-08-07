@@ -1,6 +1,6 @@
 # Config for training and testing algorithms that predict formulation metrics or hydrologic signatures based on catchment attributes
 # Note: This alternative configuration of the algo_config file was used in early August 2025 to perform process sensitivity analysis and assess uncertainty bounds.
-task_type: 'clustering' # REQUIRED for unsupervised runs
+task_type: 'clustering' # REQUIRED for unsupervised clustering runs. Options include 'regression' or 'clustering'. Default 'regression'.
 save_all_clusters: True # Boolean. Save outputs from all cluster sizes specified in the clustering algorithms? Default False.
 algorithms: # REQUIRED. Refer to AlgoTrainEval.train_algos to see what options are present (e.g. rf, mlp)  
   kmeans:
