@@ -416,6 +416,8 @@ if __name__ == "__main__":
                     y_pred = train_eval.preds_dict[algo_str].get('y_pred')
                     y_obs = train_eval.y_test.values
                     r2_val = train_eval.eval_dict[algo_str].get('r2', None)
+                    
+                    spearman_val = train_eval.eval_dict[algo_str].get('spearman', None)
                     if make_plots and task_type != 'clustering':
                         # Regression of testing holdout's prediction vs observation
                         if train_eval.preds_dict[algo_str].get('y_pis',None) is not None:
@@ -424,10 +426,10 @@ if __name__ == "__main__":
                                 fsplot.plot_pred_vs_obs_wrap_mapie(y_pred, y_obs, dir_out_viz_base,
                                         ds, metr, algo_str=algo_str,
                                         y_pis = y_pis, alpha_val = alpha_val,
-                                        split_type=f'testing{test_size}',r2_val=r2_val)
+                                        split_type=f'testing{test_size}',r2_val=r2_val,spearman_val=spearman_val)
                         else:
                             fsplot.plot_pred_vs_obs_wrap(y_pred, y_obs, dir_out_viz_base,
-                                    ds, metr, algo_str=algo_str,split_type=f'testing{test_size}',r2_val=r2_val)
+                                    ds, metr, algo_str=algo_str,split_type=f'testing{test_size}',r2_val=r2_val,spearman_val=spearman_val)
                             
                     # PREPARE THE GDF TO ALIGN PREDICTION VALUES BY COMIDS/COORDS
                     # Get the comids corresponding to the testing data/run QA checks

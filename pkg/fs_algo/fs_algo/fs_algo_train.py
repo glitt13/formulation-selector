@@ -743,11 +743,14 @@ class AlgoTrainEval:
                 rmse = float(np.sqrt(np.mean(resid**2)))
                 obs_range = float(np.max(self.y_test) - np.min(self.y_test))
                 rmse_obs = float(rmse / obs_range) if obs_range > 0.0 else np.nan
+                # Calculate Spearman's correlation coefficient
+                spearman_corr, _ = st.spearmanr(self.y_test, y_pred)
 
                 self.eval_dict[k] = {'type': v['type'],
                                 'metric': v['metric'],
                                 'mse': mean_squared_error(self.y_test, y_pred),
                                 'r2': r2_score(self.y_test, y_pred),
+                                'spearman': float(spearman_corr),
                                 'MinResid': float(np.min(resid)),
                                 'MaxResid': float(np.max(resid)),
                                 'AvgResid': float(np.mean(resid)),
@@ -1122,6 +1125,7 @@ def _process_single_metric(args_dict):
                 y_obs = train_eval.y_test.values
             
             r2_val = train_eval.eval_dict[algo_str].get('r2', None)
+            spearman_val = train_eval.eval_dict[algo_str].get('spearman',None)
 
             if args_dict['make_plots'] and args_dict['task_type'] != 'clustering':
                 # Regression of testing holdout's prediction vs observation
@@ -1131,13 +1135,13 @@ def _process_single_metric(args_dict):
                         plots.plot_pred_vs_obs_wrap_mapie(
                             y_pred, y_obs, dir_out_viz_base, ds, metr, algo_str=algo_str,
                             y_pis=y_pis, alpha_val=alpha_val, split_type=f"testing{args_dict['test_size']}",
-                            r2_val=r2_val
+                            r2_val=r2_val,spearman_val=spearman_val
                         )
                 else:
                     plots.plot_pred_vs_obs_wrap(
                         y_pred, y_obs, dir_out_viz_base, ds, metr, 
                         algo_str=algo_str, split_type=f"testing{args_dict['test_size']}",
-                        r2_val=r2_val
+                        r2_val=r2_val,spearman_val=spearman_val
                     )
                         
             # PREPARE THE GDF TO ALIGN PREDICTION VALUES BY COMIDS/COORDS
