@@ -25,6 +25,7 @@ import fs_prep.proc_eval_metrics as pem
 from logging.handlers import MemoryHandler
 import logging
 import sys
+import gc
 
 import copy
 import gc
@@ -270,6 +271,8 @@ if __name__ == "__main__":
                                     title=f'Correlation matrix from {ds} dataset',
                                     dir_out_viz_base=dir_out_viz_base,
                                     ds=ds)
+        plt.close(fig_corr_mat) # Explicitly close the exact figure
+   
         plt.clf()
         # Attribute correlation results based on a correlation threshold (writes to file)
         df_corr_rslt = fsplot.corr_thr_write_table_wrap(df_X=df_attr_wide_dropna,
@@ -277,14 +280,15 @@ if __name__ == "__main__":
                                                        ds = ds,
                                                        corr_thr=0.8)
         
-
         # Principal component analysis
         pca_rslt = fsplot.plot_pca_save_wrap(df_X=df_attr_wide_dropna, 
                         dir_out_viz_base=dir_out_viz_base,
                         ds = ds, 
                         std_scale=True # Apply the StandardScaler.
                         )
-        plt.clf()
+        plt.close(pca_rslt)
+        plt.close('all')
+        gc.collect()
         # %% Train, test, and evaluate
         task_type = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"].get("task_type", "regression")
         # Override metrics if clustering (we don't need real metrics)
