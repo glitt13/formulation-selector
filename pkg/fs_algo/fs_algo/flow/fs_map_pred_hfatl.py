@@ -1,14 +1,16 @@
-"""Workflow script to generate a map of predictions
+"""fs_map_pred_hfatl_huc_div.py
+Workflow script to generate a map of predictions
 
 Make sure to add in a unique string pertaining to the prediction of interest!
 Example: 
-    >>> python fs_map_pred.py "/path/to/pred_config.yaml" "huc08"
+    >>> python fs_map_pred_hfatl.py "/path/to/pred_config.yaml" --analysis_str "huc08"
 
 # Changelog/contributions
     2025-08-21 added logging, GL
     2025-10-10 refactor to renamed fs_algo modules, GL
     2026-05-01 adapted to support dynamic ID joins for hfATLAS and mapie uncertainties
     2026-07-21 add custom pred gpkg capability, GL
+    2026-08-07 feat: auto-generate divide-level map if crosswalk and master GPKG are present, Gemini3.1Pro
 """
 import argparse
 import pandas as pd
@@ -19,7 +21,36 @@ import geopandas as gpd
 import logging
 from logging.handlers import MemoryHandler
 import fs_prep.proc_eval_metrics as pem
-import sys
+
+ # =========================================================================
+# HELPER: Execution sequence for map plotting
+# =========================================================================
+def execute_mapping(gdf_to_plot, current_analysis_str):
+    logging.info(f"Plotting predictions for {current_analysis_str}")
+    fsplot.plot_map_pred_wrap(
+        test_gdf=gdf_to_plot,
+        dir_out_viz_base=dir_out_viz_base, 
+        ds=ds, metr=metr, algo_str=algo_str,
+        split_type=current_analysis_str,
+        colname_data='prediction', epsg_reproj=3857, task_type=task_type
+    )
+    
+    mapie_alphas = fsutil.infer_mapie_alphas(gdf_to_plot.columns)
+    for alpha_val in mapie_alphas:
+        logging.info(f"Generating MAPIE uncertainty map for alpha={alpha_val}")
+        fsplot.plot_map_pred_wrap_uncn(
+            test_gdf=gdf_to_plot, dir_out_viz_base=dir_out_viz_base, 
+            ds=ds, metr=metr, algo_str=algo_str, alpha_val=alpha_val, uncn_col=None,
+            split_type=current_analysis_str, colname_data='prediction', epsg_reproj=3857
+        )
+
+    if 'forestci' in gdf_to_plot.columns:
+        logging.info("Generating ForestCI uncertainty map")
+        fsplot.plot_map_pred_wrap_uncn(
+            test_gdf=gdf_to_plot, dir_out_viz_base=dir_out_viz_base, 
+            ds=ds, metr=metr, algo_str=algo_str, alpha_val=None, uncn_col='forestci',
+            split_type=current_analysis_str, colname_data='prediction', epsg_reproj=3857
+        )
 
 # Predict values and evaluate predictions
 if __name__ == "__main__":
@@ -35,14 +66,13 @@ if __name__ == "__main__":
     root_logger = logging.getLogger()
     root_logger.addHandler(memory_handler)
     root_logger.setLevel(logging.INFO) 
-    logging.info(f"Running fs_map_pred.py with {path_pred_config.name} config file")
+    logging.info(f"Running fs_map_pred_hfatl.py with {path_pred_config.name} config file")
     # ---
     
     analysis_str = args.analysis_str
 
     pred_cfg = fsutil.PredConfigParser(path_pred_config)
     pred_cfg._read_pred_config()
-
 
     #%% prediction config var extract
     resp_vars = pred_cfg.pred_cfg_dict.get('algo_response_vars')
@@ -67,9 +97,7 @@ if __name__ == "__main__":
     dir_base = attr_cfig.attrs_cfg_dict.get('dir_base')
     dir_std_base = attr_cfig.attrs_cfg_dict.get('dir_std_base')
     home_dir = attr_cfig.attrs_cfg_dict.get('home_dir')
-    # dir_db_attrs = attr_cfig.attrs_cfg_dict.get('dir_db_attrs')
     datasets = attr_cfig.attrs_cfg_dict.get('datasets')
-
 
     dirs_std_dict = fsutil.fs_save_algo_dir_struct(dir_base)
     dir_out_viz_base = dirs_std_dict.get('dir_out_viz_base')
@@ -90,26 +118,25 @@ if __name__ == "__main__":
     
     for ds in datasets: 
         print(f"Mapping predictions for {ds} dataset")
-        vals = {'dir_std_base':dir_std_base,'ds':ds,
-                'home_dir':home_dir}
+        vals = {'dir_std_base':dir_std_base,'ds':ds, 'home_dir':home_dir}
         path_fs_dat_resp =  fsutil._std_fs_prep_ds_paths(dir_std_base=dir_std_base,ds=ds,mtch_str='*.nc')
         path_gpkg_fs_prep = fsutil._std_fs_prep_ds_companion_gpkg_path(path_fs_dat_resp[0])
+        
         layers = gpd.list_layers(path_gpkg_fs_prep)
         lyr = None
-        if len(layers) >0:
+        if len(layers) > 0:
             if layers['name'].str.contains('outlet').any():
-                lyr = 'outlet' # Corresponds w/ fs_retr_nhdp_comids_geom_wrap
+                lyr = 'outlet' 
+                
         if path_gpkg_pred:
             path_gpkg_pred = Path(str(path_gpkg_pred).format(**vals))
             gdf_all = gpd.read_file(path_gpkg_pred,layer=pred_gpkg_lyr,
                                     columns=[pred_gpkg_id_col], engine='pyogrio')
             gdf_all['featureID'] = gdf_all[pred_gpkg_id_col]
         else:
-            logging.warning(f"Falling back on reading the gpkg used in the response variable preparation, \
-            which may not be appropriate!! {path_gpkg_fs_prep}")
+            logging.warning(f"Falling back on reading the gpkg used in the response variable preparation: {path_gpkg_fs_prep}")
             gdf_all = gpd.read_file(path_gpkg_fs_prep,layer=lyr)
 
-        # Keep original columns, but ensure we have standard names for plotting logic
         if 'featureID' not in gdf_all.columns and 'comid' in gdf_all.columns:
             gdf_all['featureID'] = gdf_all['comid']
             gdf_all['featureSource'] = pred_gpkg_id_col
@@ -118,7 +145,6 @@ if __name__ == "__main__":
             logging.error(f'Expecting featureID column to be in the gdf_all geodataframe')
 
         for metr in resp_vars:
-            # --- DYNAMIC MAPPING DISCOVERY ---
             dir_preds_ds = Path(dir_out) / 'algorithm_predictions' / ds
             dynamic_algos = fsutil.discover_dynamic_algos(
                 search_dir=dir_preds_ds,
@@ -144,70 +170,74 @@ if __name__ == "__main__":
                     
                 df_pred = pd.read_parquet(path_pred_in)
 
-                # --- DYNAMIC JOIN LOGIC FOR HFATLAS / COMID COMPATIBILITY ---
                 possible_joins = [('featureID', 'featureID'), ('divide_id', 'featureID'), ('comid', 'featureID')]
                 join_col_gpkg = None
                 
                 for gpkg_c, pred_c in possible_joins:
                     if gpkg_c in gdf_all.columns and pred_c in df_pred.columns:
                         join_col_gpkg = gpkg_c
-                        #break
+                        break
                         
                 if not join_col_gpkg:
                     logging.error(f"Could not find matching ID columns to join GPKG {gdf_all.columns.tolist()} and Preds {df_pred.columns.tolist()}")
                     continue
 
-                # Type-cast to string to prevent silent merge failures
                 gdf_all[join_col_gpkg] = gdf_all[join_col_gpkg].astype(str)
                 df_pred['featureID'] = df_pred['featureID'].astype(str)
 
-                # Merge
                 gdf_pred = gdf_all.merge(df_pred, how='inner', left_on=join_col_gpkg, right_on='featureID')
                 
                 if gdf_pred.empty:
                     logging.error("Merge resulted in an empty GeoDataFrame. IDs did not match.")
                     continue
 
-                #%% PREDICT RAW VALUES
-                logging.info(f"Plotting predictions inside {dir_out_viz_base}")
-                fsplot.plot_map_pred_wrap(
-                    test_gdf=gdf_pred,
-                    dir_out_viz_base=dir_out_viz_base, 
-                    ds=ds,
-                    metr=metr,
-                    algo_str=algo_str,
-                    split_type=analysis_str,
-                    colname_data='prediction',
-                    epsg_reproj=3857,
-                    task_type=task_type
-                )
-                
-                #%% PREDICT UNCERTAINTIES (If MAPIE Alpha columns exist)
-                mapie_alphas = fsutil.infer_mapie_alphas(gdf_pred.columns)
 
-                for alpha_val in mapie_alphas:
-                    logging.info(f"Generating MAPIE concentric uncertainty map for alpha={alpha_val}")
+                # -----------------------------------------------------
+                # 1. PLOT PRIMARY GEOMETRY
+                # -----------------------------------------------------
+                execute_mapping(gdf_pred, analysis_str)
+
+                # -----------------------------------------------------
+                # 2. PLOT SECONDARY GEOMETRY (DIVIDES via CROSSWALK)
+                # -----------------------------------------------------
+                path_crosswalk_ids_raw = pred_cfg.pred_cfg_dict.get('path_crosswalk_ids')
+                path_hf_finl_gpkg_raw = pred_cfg.pred_cfg_dict.get('path_hf_finl_gpkg')
+
+                if path_crosswalk_ids_raw and path_hf_finl_gpkg_raw:
+                    path_crosswalk_ids = Path(fsutil.resolve_fstrings(path_crosswalk_ids_raw, vals))
+                    path_hf_finl_gpkg = Path(fsutil.resolve_fstrings(path_hf_finl_gpkg_raw, vals))
                     
-                    fsplot.plot_map_pred_wrap_uncn(
-                        test_gdf=gdf_pred,
-                        dir_out_viz_base=dir_out_viz_base, 
-                        ds=ds, metr=metr, algo_str=algo_str,
-                        alpha_val=alpha_val, uncn_col=None,
-                        split_type=analysis_str, colname_data='prediction',
-                        epsg_reproj=3857
-                    )
+                    if path_crosswalk_ids.exists() and path_hf_finl_gpkg.exists():
+                        logging.info("Crosswalk and master GPKG found. Generating secondary divide-level map.")
+                        
+                        df_crosswalk = pd.read_parquet(path_crosswalk_ids).astype(str) if str(path_crosswalk_ids).endswith('.parquet') else pd.read_csv(path_crosswalk_ids, dtype=str)
+                        crosswalk_cols = list(df_crosswalk.columns)
+                        
+                        if pred_gpkg_id_col in crosswalk_cols:
+                            crosswalk_cols.remove(pred_gpkg_id_col)
+                            desired_id_col = crosswalk_cols[0] # Usually 'divide_id'
+                            
+                            # Broadcast the aggregated predictions down to the divide scale
+                            df_pred_mapped = df_pred.merge(df_crosswalk, left_on='featureID', right_on=pred_gpkg_id_col, how='inner')
+                            
+                            try:
+                                # Read hydrofabric divides
+                                gdf_divides = gpd.read_file(path_hf_finl_gpkg, layer='divides', columns=[desired_id_col, 'geometry'], engine='pyogrio')
+                                gdf_divides[desired_id_col] = gdf_divides[desired_id_col].astype(str)
+                                
+                                # Merge geometries with broadcasted predictions
+                                gdf_pred_divides = gdf_divides.merge(df_pred_mapped, left_on=desired_id_col, right_on=desired_id_col, how='inner')
+                                
+                                if not gdf_pred_divides.empty:
+                                    div_analysis_str = f"{analysis_str}_divides" if analysis_str else "divides"
+                                    execute_mapping(gdf_pred_divides, div_analysis_str)
+                                else:
+                                    logging.warning("Divide-level merge resulted in an empty GeoDataFrame.")
+                            except Exception as e:
+                                logging.warning(f"Could not read 'divides' layer from {path_hf_finl_gpkg}. Skipping secondary map. Error: {e}")
+                        else:
+                            logging.warning(f"Crosswalk file missing the specified aggregated ID column: {pred_gpkg_id_col}")
 
-                #%% PREDICT UNCERTAINTIES (If ForestCI exists)
-                if 'forestci' in gdf_pred.columns:
-                    logging.info("Generating ForestCI uncertainty map")
-                    fsplot.plot_map_pred_wrap_uncn(
-                        test_gdf=gdf_pred,
-                        dir_out_viz_base=dir_out_viz_base, 
-                        ds=ds, metr=metr, algo_str=algo_str,
-                        alpha_val=None, uncn_col='forestci',
-                        split_type=analysis_str, colname_data='prediction',
-                        epsg_reproj=3857
-                    )
         logging.info(f"Prediction map plots stored inside {dir_out_viz_base}")
         logging.info(f"Completed prediction map generation for {path_pred_config}")
         
