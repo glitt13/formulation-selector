@@ -251,3 +251,76 @@ class TestHfAtlasToRaftsPrep(unittest.TestCase):
         # Hit the fallback conditions at the top of the function
         self.assertIsNone(fsutil.get_middle_vertex(None))
         self.assertIsNone(fsutil.get_middle_vertex(LineString()))
+
+class TestDiscoverDynamicAlgos(unittest.TestCase):
+    def test_discover_dynamic_algos(self):
+        """Test the dynamic extraction of model names from files on disk without mocking."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            search_dir = Path(tmpdir)
+            
+            # Create physically real, empty dummy files on the disk
+            (search_dir / "algo_kmeans_k5_my_metric__my_ds.joblib").touch()
+            (search_dir / "algo_rf_my_metric__my_ds.joblib").touch()
+            (search_dir / "ignore_me.txt").touch() # Noise file to ensure strict filtering
+
+            # Execute the function
+            discovered = fsutil.discover_dynamic_algos(
+                search_dir=search_dir,
+                base_algos=['kmeans', 'rf'],
+                metric='my_metric',
+                dataset_id='my_ds',
+                file_prefix='algo_',
+                file_extension='.joblib'
+            )
+            
+            # Validate it found the exact algorithm strings required to load them
+            self.assertCountEqual(discovered, ['kmeans_k5', 'rf'])
+
+class TestHfAtlasUnitMapper(unittest.TestCase):
+    def test_unit_mapper_creation_and_saving(self):
+        """Test parsing pint-tuples and physically writing the mapper CSV."""
+        raw_cols = ["normal_col", "('TOT_AET', 'mm')"]
+        
+        # 1. Test DataFrame Creation logic
+        mapper_df = fsutil.create_hfatlas_unit_mapper(raw_cols)
+        self.assertEqual(len(mapper_df), 2)
+        self.assertEqual(mapper_df.iloc[1]['clean_column'], 'TOT_AET')
+        self.assertEqual(mapper_df.iloc[1]['unit'], 'mm')
+        
+        # 2. Test Physical File Saving
+        with tempfile.TemporaryDirectory() as tmpdir:
+            out_dir = Path(tmpdir)
+            
+            saved_path = fsutil.save_hfatlas_unit_mapper(
+                mapper_df=mapper_df,
+                dir_std_base=out_dir,
+                ds="my_ds",
+                cstm_str="test"
+            )
+            
+            # Assert the file exists on the OS
+            self.assertTrue(saved_path.exists())
+            
+            # Verify we can read it back natively
+            read_df = pd.read_csv(saved_path)
+            self.assertEqual(read_df.iloc[1]['unit'], 'mm')
+
+class TestRegionalizationPaths(unittest.TestCase):
+    def test_donor_pairing_and_receiver_paths(self):
+        """Test that regionalization output paths are formatted correctly and parents are created."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base = Path(tmpdir)
+            
+            # Test donor pairing path
+            p1 = fsutil.std_donor_pairs_path(base, 'my_ds', 'rf', 'param_a')
+            self.assertEqual(p1.name, 'donor_pairs_rf_param_a__my_ds.csv')
+            self.assertTrue(p1.parent.exists()) # Verifies mkdir(parents=True) worked
+            
+            # Test mapped gpkg path
+            p2 = fsutil.std_receiver_params_mapped_path(base, 'my_ds', 'rf', 'param_a', ext='.gpkg')
+            self.assertEqual(p2.name, 'receiver_params_mapped_rf_param_a__my_ds.gpkg')
+
+            # Test imputation log path
+            p3 = fsutil.std_impute_log_path(base, 'my_ds', 'rf', 'param_a')
+            self.assertEqual(p3.name, 'imputed_locations_rf_param_a__my_ds.csv')
+
