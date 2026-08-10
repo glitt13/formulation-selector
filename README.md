@@ -107,8 +107,7 @@ When configuring a new workflow, the following are common considerations/gotchas
     - `path_meta` points to the prediction watershed attribute dataset. This dataset must contain the same column names used for training.
     - `path_gpkg_pred` points to the corresponding .gpkg providing geospatial context to the locations in `path_meta`. Optional, but strongly recommended when dealing with customized prediction locations (e.g. hydrofabric divides aggregated to a larger scale.)
     - `path_crosswalk_ids` Optional. This is the crosswalk (.csv or parquet file) translates the aggregated basin identifiers to individual hydrofabric divide ids. This file is only guaranteed to work by containing two columns for both identifiers.
-    - `path_hf_finl_gpkg` This is only used when running `fs_regn_params_gpkg.py`. This is the path to the 'official' hydrofabric .gpkg file that will be used for `ngen` simulations. A copy of the hydrofabric .gpkg will be made within a RaFTS regionalization subdirectory, and populated with new tables for each `ngen` formulation containing the regionalized parameters.
-
+    - `path_hf_finl_gpkg` This is only used when running `fs_regn_params_gpkg.py`. This is the path to the 'official' hydrofabric .gpkg file that will be used for `ngen` simulations. A copy of the hydrofabric .gpkg will be made within a RaFTS regionalization subdirectory, and populated with new tables for each `ngen` formulation containing the regionalized parameters. Also specify `layr_hf_finl_gpkg` for good measure.
 
 ### 1. Preparation Config (e.g. `*_prep_config.yaml`)
 
@@ -322,6 +321,8 @@ Configures the out-of-sample prediction step and downstream mapping.
 * `overwrite_sql`: Boolean. Should the sqlite tables for each parameter set be overwritten? Recommended when running `fs_regn_params_gpkg.py`. Default `False`. 
 
 * `path_hf_finl_gpkg`  Required when running `fs_regn_params_gpkg.py`. The hydrofabric gpkg containing the divides specified in the path_crosswalk_ids. e.g. `'{home_dir}/noaa/hydrofabric/v2.2_2025Apr/conus_nextgen'`.gpkg'. Should also specify `path_crosswalk_ids`. Note that this is also referenced in the mapping script `fs_map_pred_hfatl.py` when the workflow includes `fs_regn_params_gpkg.py`.
+
+*  `layr_hf_finl_gpkg` This is the layer name of the corresponding path_hf_finl_gpkg. Generally, this is going to be 'divides', but the default is None in case the .gpkg doesn't have layer names.
 
 * `algo_select` The specfic algorithm string to use for the final integration into the regionalization gpkg (ie a new layer added to the copy of path_hf_finl_gpkg). Used in `fs_regn_params_gpkg.py`. e.g. 'gower_agglomerative_k12' 
 

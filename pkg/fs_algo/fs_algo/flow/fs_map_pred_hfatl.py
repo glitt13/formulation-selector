@@ -87,6 +87,7 @@ if __name__ == "__main__":
     root_logger.removeHandler(memory_handler) 
     # -------------------------------------------------------------------------
     path_hf_finl_gpkg_raw = pred_cfg.pred_cfg_dict.get('path_hf_finl_gpkg')
+    layr_hf_finl_gpkg = pred_cfg.pred_cfg_dict.get('path_hf_finl_gpkg')
     path_crosswalk_ids_raw = pred_cfg.pred_cfg_dict.get('path_crosswalk_ids')
 
 
@@ -118,10 +119,14 @@ if __name__ == "__main__":
                     logging.warning(f"Master GPKG does not exist: {path_hf_finl_gpkg}")
             
                 try:  # Read hydrofabric divides
-                    gdf_divides = gpd.read_file(path_hf_finl_gpkg, layer='divides', columns=[desired_id_col, 'geometry'], engine='pyogrio')
+                    gdf_divides = gpd.read_file(path_hf_finl_gpkg, layer=layr_hf_finl_gpkg, columns=[desired_id_col, 'geometry'], engine='pyogrio')
                     gdf_divides[desired_id_col] = gdf_divides[desired_id_col].astype(str)
-                except Exception as e:
-                    logging.warning(f"Could not read 'divides' layer from {path_hf_finl_gpkg}. Skipping secondary map. Error: {e}")
+                except:
+                    try: # Try out the divides layer
+                        gdf_divides = gpd.read_file(path_hf_finl_gpkg, layer='divides', columns=[desired_id_col, 'geometry'], engine='pyogrio')
+                        gdf_divides[desired_id_col] = gdf_divides[desired_id_col].astype(str)
+                    except Exception as e:
+                        logging.warning(f"Could not read '{str(layr_hf_finl_gpkg)}' nor 'divides' layer names from {path_hf_finl_gpkg}. Skipping secondary map. Error: {e}")
 
         # ---
         layers = gpd.list_layers(path_gpkg_fs_prep)
