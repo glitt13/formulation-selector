@@ -157,7 +157,7 @@ if __name__ == "__main__":
                     else:
                         df_params = pd.read_csv(param_file)
 
-                    id_col = 'divide_id' if 'divide_id' in df_params.columns else 'featureID'
+                    id_col = pred_gpkg_id_col if pred_gpkg_id_col in df_params.columns else 'featureID'
                     if id_col not in df_params.columns:
                         id_col = df_params.columns[0]
                         logging.warning(f"Expected identifier column not found. Defaulting to first column: '{id_col}'.")
@@ -253,7 +253,7 @@ if __name__ == "__main__":
                     else:
                         logging.error(f"Crosswalk file path was provided but does not exist: {path_crosswalk_ids}")
 
-                id_col = 'divide_id' if 'divide_id' in df_compiled_params.columns else current_id_col
+                id_col = pred_gpkg_id_col if pred_gpkg_id_col in df_compiled_params.columns else current_id_col
                 table_name = f"{formulation_id}_{algo}"
                 path_output_sql = dir_regionalization_sub / f"compiled_supervised_params_{algo}.sqlite"
                 
