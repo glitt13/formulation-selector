@@ -1,6 +1,6 @@
 # RaFTS Overview
 
-The Regionalization and Formulation Testing & Selection (RaFTS) tool tests how hydrologically-relevant response variables may be predicted across space from hydrologic predictors using modular sci-kit learn supervised regressor and unsupervised clustering algorithms. 
+The Regionalization and Formulation Testing & Selection (RaFTS) tool tests how hydrologically-relevant response variables may be predicted across space from hydrologic predictors using modular sci-kit learn supervised regressor and unsupervised clustering algorithms. Response variables may include formulation metrics (e.g. KGE), xSSA process sensitivities (Mai et al 2022), or parameter values.
 
 # RaFTS Installation
 
@@ -14,17 +14,16 @@ uv sync --all-groups
 
 # RaFTS Workflow: hydrofabric and custom-generated predictors
 
-This document describes the workflow for preparing, aggregating, and training (pooling) models within the RaFTS (Regionalization and Formulation Testing System) framework using the hydrofabric and corresponding predictors (e.g. hfATLAS).
-
+This document describes the workflow for preparing, aggregating, and training (pooling) models within the RaFTS (Regionalization and Formulation Testing System) framework using the hydrofabric and corresponding predictors (e.g. hfATLAS). 
 ---
 
 ## I. Workflow Overview
 
 The RaFTS hfATLAS workflow is executed in a specific sequence to process raw input datasets, aggregate spatial attributes & format them, train machine learning algorithms, and ultimately perform out-of-sample predictions using algorithms deemed acceptable for prediction by the user. A shell script contained in the same workflow directory as the corresponding config files is recommended for running all of these steps sequentially (e.g., `hfatl_test_proc_rafts_all.sh`).
 
-Note additional configurations/workflows may not be tracked in this repo, but stored in [NOAA gdrive](https://drive.google.com/drive/folders/1ghSVlE890S3LXir1-JhexDlNf1zT6T6h?usp=drive_link)
+Refer to scripts/eval_ingest/*/ for many examples of different workflows. Note additional configurations/workflows may not be tracked in this repo, but stored in [NOAA gdrive](https://drive.google.com/drive/folders/1ghSVlE890S3LXir1-JhexDlNf1zT6T6h?usp=drive_link)
 
-1. **Preparation**: Custom dataset munging is performed first to prepare the initial response variable dataset and write to file in a standardized NetCDF (`.nc`). Typically named `prep_*.py` inside the same directory as the corresponding config files. 
+1. **Preparation**: Custom dataset munging is performed first to prepare the initial response variable dataset and write to file in a standardized NetCDF (`.nc`). Typically named `prep_*.py` inside the same directory as the corresponding config files. The prep script should culminate into properly calling `fs_prep.proc_eval_metrics.proc_col_schema()`
 
 
 2. **Aggregation**: Hydrofabric-based watershed attributes are aggregated based on the gage_id representing the basins of interest. Both methods create the RaFTS-standard form of watershed attribute data, whose column names include `['featureID', 'featureSource',  'data_source', 'dl_timestamp', 'attribute', 'value']`.
@@ -47,6 +46,8 @@ These run after the initial custom prep script that generates the response varia
  - `fs_proc_algo_pool.py`: The computationally-efficient parallelized algorithm training script. Recommended, especially when using the current workflow, with pre-processed attribute data.
  - `fs_proc_algo_viz.py`: The legacy script which is kept in case historic workflow runs are desired (e.g. `/scripts/eval_ingest/xssa_us/`)
 
+Algorithm choices include supervised (i.e. random forest and MLP), and unsupervised (e.g. gower's distance, kmeans). **Develop separate workflows based on algorithm type - supervised or unsupervised.** In other words, build out separate processing workflows for supervised algorithms, and another workflow for unsupervised algorithms. Do not mix supervised and unsupervised algorithms together in the same workflow.
+
 4. **Prediction**  Using trained algorithms to make predictions of response variables in out-of-sample locations. The resulting predictions and their associated uncertainties are plotted onto static spatial maps across the hydrofabric.
 
  - `fs_pred_algo.py`: Generates the predictions and optionally calculates uncertainty bounds (e.g., MAPIE prediction intervals or ForestCI).
@@ -57,90 +58,130 @@ These run after the initial custom prep script that generates the response varia
 
  - `fs_map_pred_hfatl.py`: Generates static `.png` maps of the predicted values and uncertainty bounds joined dynamically to the hydrofabric geometries.
 
-6. **Donor-Receiver Pairing**: Used for unsupervised algorithm-only algorithms. 
+6. **Donor-Receiver Pairing**: Only used for unsupervised clustering algorithms. 
 
 - `fs_pair_donors.py`: Pairs donor and receiver basins within the same cluster based on euclidean distance.
 
 Note: The attribute transformation workflow has been deprecated for the current processing workflows. It's recommended to perform desired transformations on the input attribute data beforehand. If attribute transformation is desired, updates will need to be made to the prediction step.
 
-7. **Regionalized Parameter Integration with Hydrofabric**: Presently only designed for unsupervised algorithms.
+7. **Regionalized Parameter Integration with Hydrofabric**: This prepares the hydrofabric .gpkg to a standardized form of regionalized parameters accepted by nextgen. For regionalization purposes only.
 
- - `fs_write_params_gpkg.py`: Writes sqlite databases of regionalized parameters, writes selected parameters per formulation as new layers in a copy of the hydrofabric .gpkg
+ - `fs_regn_params_gpkg.py`: Designed for unsupervised and supervised algorithms. Writes sqlite databases of regionalized parameters, writes selected parameters per formulation as new layers in a copy of the hydrofabric .gpkg
+
+
+### Workflow Summary
+
+That's a lot of steps! Within a config file subdirectory, you can observe examples of how individual steps are selected within corresponding shell scripts. In some cases, there are multiple datasets being prepared, trained, and predicted, each with their own subset of shell scripts and config files. An overarching shell script (e.g. `regn_all_proc.sh`) may demonstrate how to run the workflow for each dataset in one go.
+
 
 ---
 
 ## II. Configuration Files
 
-The workflow relies on a suite of YAML configuration files to dictate file I/O, dataset schemas, and algorithm hyperparameters. Different datasets/workflows have different sets of config files, as stored inside `scripts/eval_ingest/{workflow_subdir}/`
+A RaFTS workflow relies on a suite of YAML configuration files to dictate file I/O, dataset schemas, and algorithm hyperparameters. Different datasets/workflows have different sets of config files, as stored inside `scripts/eval_ingest/{workflow_subdir}/`. All config files for a given workflow must be in the same directory!
+
+### TL;DR - Configuration Tips:
+When configuring a new workflow, the following are common considerations/gotchas. 
+ - Best practice is to copy-paste a directory containing pre-existing config files representing a similar type of workflow. You'll then need to rename that directory, and make sure the new name is reflected in the shell script's `DIR_CONFIG`. Example shell scripts include `regn_all_proc.sh` or `xssaus_proc_rafts_all.sh`.
+
+ - Next, `dataset_name` needs to be unique for each workflow, and consistently specified between a dataset's _prep_ and _attr_ configs. The `dataset_name` is used as a unique identifier in new subdirectories and filenames that are created when running a workflow.  #TODO remove defining `dataset_name` as a requirement in the attr config without breaking legacy multi-dataset processing.
+
+- Point to the new response variable dataset's location in the prep config's `path_data`. Ensure `metric_cols` and `metric_mappings` appropriately define the data columns of interest. Then, as-needed, adapt the custom prep python script in the same directory as the config files to appropriately munge those data.
+
+ - `algo_response_vars` are listed out in the prediction config from the prep config's  `metric_mappings` for _supervised_ prediction (if appropriate). In _unsupervised_ situations, you'll simply specify `- "cluster_labels"` as the only `algo_response_vars` entry in the prediction config'.
+
+- **Defining Paths**. This can be one of the more challenging aspect of configuration. More details in the following config-specific subsections.
+
+  - **prep config**:
+    - Point to the hydrofabric geopackage In `path_hf_gpkg`. This should be the entire hydrofabric .gpkg. This differs from `path_hf_basins_gpkg`, which represents the subset of the hydrofabric of interest. `path_hf_basins_gpkg` is intended to represent aggregates of divides (i.e. basins) using their unique basin id (e.g. USGS gage ID). 
+  - **attr config**:
+    - `home_dir`: the home directory. Default assumes `~/`
+    - `dir_base`: the base directory location for RaFTS datasets. Recommended to mimic what is (generally) consistently used across all the other attribute configs.
+    - `dir_std_base`:  The location of standardized response-variable data generated by fs_prep python package. Recommended to mimic what is (generally) consistenly used across all the other attribute configs.
+    - `dir_db_attrs`: Where organized attribute data get stored. To avoid overwriting data, ensure that the final subdirectory contains the f-string `{ds}` so that the `dataset_name` is included in the directory name. Legacy forms of RaFTS (using `proc.attr.hydfab`) compiled all attribute data into a single directory. This legacy form saved space, but attribute data are so small it shouldn't matter if it gets duplicated across directories for individual processing workflows.
+    - `paths_hfatl` Path(s) to tabular HydrofabricATLAS parquet file(s) of algorithm training attributes (aka watershed predictors) extracted to hydrofabric divides or larger aggregated scales. Expected to be provided in list form, e.g. `  - "{home_dir}/path_to/attrs.parquet"`.  Not needed when using the legacy `proc.attr.hydfab` workflow.
+
+  - **algo config**: no paths needed here.
+
+  - **pred config**:
+    - `path_meta` points to the prediction watershed attribute dataset. This dataset must contain the same column names used for training.
+    - `path_gpkg_pred` points to the corresponding .gpkg providing geospatial context to the locations in `path_meta`. Optional, but strongly recommended when dealing with customized prediction locations (e.g. hydrofabric divides aggregated to a larger scale.)
+    - `path_crosswalk_ids` Optional. This is the crosswalk (.csv or parquet file) translates the aggregated basin identifiers to individual hydrofabric divide ids. This file is only guaranteed to work by containing two columns for both identifiers.
+    - `path_hf_finl_gpkg` This is only used when running `fs_regn_params_gpkg.py`. This is the path to the 'official' hydrofabric .gpkg file that will be used for `ngen` simulations. A copy of the hydrofabric .gpkg will be made within a RaFTS regionalization subdirectory, and populated with new tables for each `ngen` formulation containing the regionalized parameters.
+
 
 ### 1. Preparation Config (e.g. `*_prep_config.yaml`)
 
-Defines the required column mappings, file paths, and metadata for the response variable dataset.
+Used for _preparing_ the raw input data into standardized forms. Originally, this was just the raw response variable data, but now custom attribute data (e.g. `hfATLAS`) are also configured here. The prep config provides the required column mappings, file paths, and response variable metadata. Remember, when preparing the raw response variable data (which can take many forms), a custom, user-coded prep script using the prep config is REQUIRED.
 
 * **`col_schema`**:
-* `gage_id`: The basin identifier/gage id used for each modeled location. (Required).
+  * `gage_id`: The basin identifier/gage id used for each modeled location from the raw response variable data. (Required).
 
 
-* `featureID`: The Python f-string format converting the `gage_id` to a standardized featureID. (Required).
+  * `featureID`: The Python f-string format converting the `gage_id` to a standardized featureID. (Required).
 
 
-* `featureSource`: The standardized nhdplusTools featureSource (e.g., `hfv22_id`). (Required). This is used to distinguish different types of watershed attribute datasets and is assigned to the `featureSource` column in the attribute data.  In legacy forms of RaFTS that use the `proc.attr.hydfab` R-package, it may be used to designate the data source from NHDPlus attribute retrieval (e.g. 'nwissite'). In normal hydrofabric-based workflows using pre-existing attribute data, it is used to represent the hydrofabric version corresponding to the attribute data (e.g. `hfv22_id`, or `hfv40_id`).
+  * `featureSource`: The standardized nhdplusTools featureSource (e.g., `hfv22_id`). (Required). This is used to distinguish different types of watershed attribute datasets and is assigned to the `featureSource` column in the attribute data.  In legacy forms of RaFTS that use the `proc.attr.hydfab` R-package, it may be used to designate the data source from NHDPlus attribute retrieval (e.g. 'nwissite'). In normal hydrofabric-based workflows using pre-existing attribute data, it is used to represent the hydrofabric version corresponding to the attribute data (e.g. `hfv22_id`, or `hfv40_id`).
 
 
-* `metric_cols` & `metric_mappings`: Column(s) in the raw response variables dataset (`'metric_cols'`) and the mapped column names to be used for the dataset and all further processing. In other words, `'metric_cols'` gives the user the option to rename the response variables' data columns. (Required).
+  * `metric_cols` & `metric_mappings`: Column(s) in the raw response variables dataset (`'metric_cols'`) and the mapped column names to be used for the dataset and all further processing. In other words, `'metric_cols'` gives the user the option to rename the response variables' data columns. (Required).
+
+    - Note that `metric_mappings` originally existed in order to standardize the nomenclature of what is being predicted. With a standardized nomenclature, expected min/max bounds may then be defined to constrain predictions within the theoretical limits of a 'metric' e.g. KGE must be between 0 and 1. 
+    - #TODO rename metrics to resp_vars, as the application of RaFTS has expanded from its original usage of just predicting hydrologic model metrics.
 
 
 * **`file_io`**:
-* `home_dir`: The base home directory. If not specified, the default `~/` will be used. (Optional).
+  * `home_dir`: The base home directory. If not specified, the default `~/` will be used. (Optional).
 
-* `dir_data` or `path_data`: Where the raw response variable data are stored. This is flexible according to the custom prep script created by the user to ingest & munge the data. (Required).
+  * `dir_data` or `path_data`: Where the raw response variable data are stored. This is flexible according to the custom prep script created by the user to ingest & munge the data. (Required). 
 
-* `data_source`: This is a column in the attribute dataset to specify the data source. Required when providing attribute data using the standard RaFTS workflow with pre-processed attribute data. This specifies attribute dataset version (may need to update with major version changes). If using the legacy attribute retrieval workflow (aka `proc.attr.hydfab` R-package), then this is not required.
-
-* `dir_save`: The save location of standardized output. (Required).
+  * `data_source`: This is a column in the attribute dataset to specify the data source. Required when providing attribute data using the standard RaFTS workflow with pre-processed attribute data. This specifies attribute dataset version (may need to update with major version changes). If using the legacy attribute retrieval workflow (aka `proc.attr.hydfab` R-package), then this is not required. The point is to distinguish where attribute data came from when sourced from a custom dataset. For custom datasets, recommended options are explicit on 1) where the data came from, and 2) the corresponding hydrofabric version, e.g. `'hfATLAS_hf22'` or `'hfATLAS_hf4'`.
 
 
-* `save_type`: Save as hierarchical files. Should be `netcdf`. (Required).
+  * `dir_save`: The save location of standardized output. Practically all workflows use `'{home_dir}/noaa/regionalization/data/input'`. A standardized directory structure will then be created relative to this path, e.g. `{home_dir}/noaa/regionalization/data/output/` (Required).
 
 
-* `save_loc`: Use `local` for saving to a local path. (Required).
+  * `save_type`: Save as hierarchical files. Should be `netcdf`. (Required).
 
 
-* `path_hf_gpkg`: The path to the gpkg containing the hfATLAS divides, required for mapping the divide_id. (Required).
+  * `save_loc`: Use `local` for saving to a local path. (Required).
 
 
-* `path_hf_basins_gpkg`: The path to the gpkg containing the divide_ids as they correspond to basins of interest. (Optional; expected by `fs_agg_hfatl_basin.py` for aggregation).
+  * `path_hf_gpkg`: The path to the gpkg containing the hfATLAS divides. This is used for mapping the divide_id to the standardized featureID and featureSource. In other words, needed for mapping the divide_id. (Required).
 
 
-* `gage_id_col_gpkg`: The gage_id column in the `path_hf_basins_gpkg`, if present. Otherwise do not provide this entry in the config file and specify `gpkg_filename_pattern` instead, where the gage_id is contained inside the filename.
+  * `path_hf_basins_gpkg`: The path to the gpkg containing the divide_ids as they correspond to basins of interest. Useful when performing regionalization workflows where basin-aggregated hydrofabrics matter. (Optional; expected by `fs_agg_hfatl_basin.py` for aggregation).
 
-* `gpkg_filename_pattern`: The pattern used to extract the gage_id from the .gpkg filenames contained inside path_hf_basins_gpkg when it's a dir w/ many gpkg files. Default `'gage_(.*).gpkg'`. Use `gage_id_col_gpkg` instead if gage_id is specified in a column inside the .gpkg.
+
+  * `gage_id_col_gpkg`: The gage_id column in the `path_hf_basins_gpkg`, if present. Otherwise do not provide this entry in the config file and specify `gpkg_filename_pattern` instead, where the gage_id is contained inside the filenames of many hydrofabric files representing basins.
+
+  * `gpkg_filename_pattern`: The pattern used to extract the gage_id from the .gpkg filenames contained inside path_hf_basins_gpkg when it's a dir w/ many gpkg files. Default `'gage_(.*).gpkg'`. Use `gage_id_col_gpkg` instead if gage_id is specified in a column inside the .gpkg.
 
 ### Attribute prep config requirements
 Some options are specific to the next step in the standard workflow using pre-defined attributes. These requirements may vary by the choice of script (`fs_hfatlas_to_rafts_prep.py` vs. `fs_agg_hfatl_basin.py`).
 
 #### `fs_hfatlas_to_rafts_prep.py`
-When working on the individual divide scale, the entire hydrofabric may be considered as an input dataset. Organizing the attributes and hydrofabric by vpu subdirectories offers data reading efficiencies. Otherwise, smaller datasets do not need to be organized by vpu.
+When working on the individual divide scale, the entire hydrofabric may be considered as an input dataset. Organizing the attributes and hydrofabric by vpu subdirectories offers file reading efficiencies. Otherwise, smaller datasets do not need to be organized by vpu and this section may be ignored.
 * **`file_io`**:
-* `vpu_mapped`:  Boolean str. Should output attribute data be organized by vpu? Recommended to be True for large datasets, e.g. entire CONUS scale. If set to False, the vpuid will be assigned as 'all' (appropriate for smaller datasets). More details in `fs_algo.utils.hfatl_hf_cmbo_wrap()`. The following flowpath and vpu config spec options pertain to `vpu_mapped=True`.
+  * `vpu_mapped`:  Boolean str. Should output attribute data be organized by vpu? Recommended to be True for large datasets, e.g. entire CONUS scale. If set to False, the vpuid will be assigned as 'all' (appropriate for smaller datasets). More details in `fs_algo.utils.hfatl_hf_cmbo_wrap()`. The following flowpath and vpu config spec options pertain to `vpu_mapped=True`.
 
-* `hf_fp_layer` Hydrofabric name for the flowpaths layer, used for organizing file write of data by vpu
+  * `hf_fp_layer` Hydrofabric name for the flowpaths layer, used for organizing file write of data by vpu.
 
-* `hf_fp_id_col` The column name in the flowpaths layer corresponding to the flowpath outlet of the divide, used for organizing file write of data by vpu
+  * `hf_fp_id_col` The column name in the flowpaths layer corresponding to the flowpath outlet of the divide, used for organizing file write of data by vpu.
 
-* `vpu_id_col` The column name in the hydrofabric flowpaths layer, , used for organizing file write of data by vpu
+  * `vpu_id_col` The column name in the hydrofabric flowpaths layer, used for organizing file write of data by vpu
 
 #### Both `fs_agg_hfatl_basin.py` and `fs_hfatlas_to_rafts_prep.py`
 When wanting to aggregate hydrofabric divides to a larger scale, the following config options in the prep config specify the aggregation scale for algorithm training. Ideally, this capability is ignored if the attribute data have already been aggregated in a previous step.
 * **`file_io`**
-* `path_hf_basins_gpkg`  The filepath or dir to the gpkg(s) containing the divide_ids as they correspond to basins of interest (e.g. individual .gpkg files representing each calibration basin).
-* `gpkg_filename_pattern` Optional string pattern used to isolate the gage_id from the gpkg filenames inside the `path_hf_basins_gpkg` directory. (Default 'gage_{gage_id}.gpkg')
+  * `path_hf_basins_gpkg`  The filepath or dir to the gpkg(s) containing the divide_ids as they correspond to basins of interest (e.g. individual .gpkg files representing each calibration basin).
+  * `gpkg_filename_pattern` Optional string pattern used to isolate the gage_id from the gpkg filenames inside the `path_hf_basins_gpkg` directory. (Default 'gage_{gage_id}.gpkg')
 
 **`formulation_metadata**:
-* `dataset_name`: The name to be assigned to this dataset. This name will be used to create a subdirectory inside `user_data_std`. (Required).
-**NOTE** the dataset name of interest must also be specified in the attribute config.
-This was initially created to handle processing multiple datasets all at once, but present workflows have made it only possible to processing one dataset per config file (e.g. a required assumption in `fs_agg_hfatl_basin.py`). 
-Refer to `scripts/eval_ingest/ealstm/` for an example of processing multiple datasets.
+  * `dataset_name`: The name to be assigned to this dataset. This name will be used to create a subdirectory inside `user_data_std` and is also used in various filenames. This serves as a unique identifier, so make it different from previous workflow runs! (Required).
+  **NOTE** the dataset name of interest must also be specified in the attribute config.
+  This was initially created to handle processing multiple datasets all at once, but present workflows have made it only possible to processing one dataset per config file (e.g. a required assumption in `fs_agg_hfatl_basin.py`). 
+  Refer to `scripts/eval_ingest/ealstm/` for an example of processing multiple datasets.
 
 
 
@@ -149,38 +190,42 @@ Refer to `scripts/eval_ingest/ealstm/` for an example of processing multiple dat
 Configures the acquisition of catchment attributes corresponding to standard-named locations.
 
 * **`file_io`**:
-* `dir_base`: The base save location. (Required).
+  * `dir_base`: The base save location. (Required). 
+  #TODO remove this and base it instead from the `save_loc` in the prep config.
 
 
-* `dir_std_base`: The location of standardized data generated by the `fs_prep` package. (Required).
+  * `dir_std_base`: The location of standardized data generated by the `fs_prep` package. (Required).
+  #TODO remove this and instead use the `save_loc` as a the core for creating this directory
+
+  * `dir_db_attrs`: The parent dir where each dataset's parquet attributes are stored. Recommended default `'{dir_base}/input/attrs_hfatl/{ds}/'` (Required).
 
 
-* `dir_db_attrs`: The parent dir where each dataset's parquet attributes are stored. (Required).
+  * `ds_type`: A string used in the filename of the output metadata to discern whether a dataset is a training or prediction dataset. Options are `'training'` or `'prediction'`. In the common situations using custom hfATLAS attribute data, only `'training'` is used. This is used as a string inserted into `path_meta`, but note that `path_meta` is ignored when using the custom-generated attribute data (e.g. hfATLAS source). (Required in legacy workflows acquiring attribute data via `proc.attr.hydfab`).
 
 
-* `ds_type`: A string used in the filename of the output metadata (e.g., `training`). (Required).
+  * `write_type`: Filetype for writing NLDI feature metadata. Strongly recommend default `'parquet'`. (Required). 
 
 
-* `write_type`: Filetype for writing NLDI feature metadata. Strongly recommend default `'parquet'`. (Required). 
+  * `name_prep_config`: The name of the prep config file. Only used when running the hfatlas-based workflow.  This should be `None` when running the legacy `proc.attr.hydfab` component of the workflow. Note that `fs_pred_algo.py` uses logic on whether this is present to determine how to read predictor data (aka basin attributes).
 
 
-* `name_prep_config`: The name of the prep config file. (Required when running the hfatlas-based workflow).
-
-* `path_meta`: Ignored when processing pre-existing attribute data (although not ignored in the prediction config). For the attribute config, this is used in the legacy RaFTS workflow's `proc.attr.hydfab` processing. Training attribute metadata filepath formatted for R's glue or py f-string, as generated using `proc.attr.hydfab::write_meta_nldi_feat()`. Strongly suggested default:  "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.{write_type}"
+  * `path_meta`: Ignored when processing pre-existing attribute data (e.g. hfATLAS), although not ignored in the prediction config when part of the workflow. For the attribute config, this is used in the legacy RaFTS workflow's `proc.attr.hydfab` processing. Training attribute metadata filepath formatted for R's glue or py f-string, as generated using `proc.attr.hydfab::write_meta_nldi_feat()`. Strongly suggested default:  "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.{write_type}"
 
 
 * **`formulation_metadata`**:
-* `datasets`: The dataset names to select for further processing. (Required).
-**NOTE** the dataset names of interest must also be specified in the prep config.
-This was initially created to handle processing multiple datasets all at once, but present workflows have drifted towards just processing one dataset at a time. 
-Refer to `scripts/eval_ingest/ealstm/` for an example of processing multiple datasets.
+  * `datasets`: The dataset names to select for further processing. (Required).
+    * **NOTE** the dataset names of interest must also be specified in the prep config.
+    * This was initially created to handle processing multiple datasets all at once, but present workflows have drifted towards just processing one dataset at a time. Refer to `scripts/eval_ingest/ealstm/` for an example of processing multiple datasets.
 
 
 * **`attr_select`**:
-* `paths_hfatl`: Path to tabular HydrofabricATLAS parquet files. This is required in the current workflow where the user provides the attribute data. This can be the CONUS-scale attribute data when performing basin aggregation via `fs_agg_hfatl_basin.py`. (Required).
+  * `hfatl_id_col`: The unique location identifier column name used in `paths_hfatl`
 
 
-* `hfatl_vars`: A list of the specific attribute data column names to use as predictors when training algorithms. (Required).
+  * `paths_hfatl`: Path to tabular HydrofabricATLAS parquet files. This is required in the current workflow where the user provides the attribute data. This can be the CONUS-scale attribute data when performing basin aggregation via `fs_agg_hfatl_basin.py`. (Required).
+
+
+  * `hfatl_vars`: A list of the specific attribute data column names to use as predictors when training algorithms. (Required).
 
 
 
@@ -190,16 +235,26 @@ Refer to `scripts/eval_ingest/ealstm/` for an example of processing multiple dat
 
 Configures the training and testing of algorithms that predict formulation metrics or hydrologic signatures.
 
-* `task_type`: The type of machine learning task (e.g., `clustering`). (Required for unsupervised runs).
+* `task_type`: The type of machine learning task. Explicitly enter `clustering` if you desire to run unsupervised clustering. Otherwise the default `'regression'` will be considered supervised.
+
+* `save_all_clusters`: Boolean.  Should every distinct algorithm combination be saved, or just the best-performing algorithm based on the silhouette score? Only applicable to `task_type="clustering"`. Default `False`.
+
+* `algorithms`: Selected algorithm(s) to run, such as `kmeans`, `gower_agglomerative`, `rf`, or `mlp`. (Required). If more algorithms are desired, they may be inserted in the fs_algo_train.py. Note that new supervised algorithms need a little more effort by also integrating them into the uncertainty pipeline.
+
+  * Custom configurations are then provided as nested subsets with the algorithm section. The first nesting level is the algorithm standard name e.g. (`rf:` or `kmeans`), which is followed by another nested level of optional algorithm hyperparameters e.g.:
+  ```yaml
+  algorithms:
+   rf:
+     - n_estimators: 300
+   mlp:
+     - max_iter: [20000,80000,160000]
+  ```
+  Note that lists of hyperparameters (e.g. `max_iter` in the example above) means that `scikit-learn`'s `GridSearchCV` will be employed.
+
+* `test_size`: The proportion of the dataset reserved for testing. Default 0.3. (Required).
 
 
-* `algorithms`: Selected algorithm(s) to run, such as `kmeans`, `gower_agglomerative`, `rf`, or `mlp`. (Required).
-
-
-* `test_size`: The proportion of the dataset reserved for testing. (Required).
-
-
-* `seed`: The starting point for the random number generator. (Required).
+* `seed`: The starting point for the random number generator. Default 32. (Required).
 
 
 * `name_attr_config`: Name of the corresponding dataset's attribute configuration file. (Required).
@@ -214,8 +269,24 @@ Configures the training and testing of algorithms that predict formulation metri
 * `make_plots`: Should plots be created & saved to file? (Optional).
 
 
-* `uncertainty`: Defines methods to quantify uncertainty in model training and predictions, supporting methods like `bagging`, `forestci`, and `mapie`. (Optional).
+* `uncertainty`: Defines methods to quantify uncertainty in model training and predictions for regression-based algorithms, supporting methods like `bagging`, `forestci`, and `mapie`. (Optional).
 
+ - Example of the uncertainy section:
+    ```yaml
+    uncertainty: # OPTIONAL. Defines methods to quantify uncertainty in model training and predictions.
+      confidence_levels: [90,95,99] # OPTIONAL list object, e.g. [90,95]. REQUIRED if a value is assigned to n_algos. Confidence levels between 50 and 100 for bootstrap ci calculation in an array format.
+      uncn_bnd_algo: False  # Optional. Default False. Should the minimum and maximum bounds be applied when calculating the uncertainty? Strongly recommended to keep the flag 'False'. 
+      forestci:  # OPTIONAL. Used only with Random Forest (rf). Applies forestci to estimate confidence intervals for the model training based on the variance of predictions from trees in the random forest model. For more details, see: https://github.com/scikit-learn-contrib/forest-confidence-interval
+        - fci_flag: True # Boolean. Forestci model to calculate confidence interval for rf model.
+      bagging:  # OPTIONAL. Enables bootstrap aggregating (bagging) to calculate confidence intervals during the model training by training multiple models on resampled data. More broadly applicable than forestci, as it works with the algorithm types other than rf as well.
+        - n_algos: 10 # OPTIONAL. Enabled if not empty. Number of bootstrap runs for Bagging confidence interval calculation (integer). Bagging ci calculation is disabled if n_algos is empty.
+      mapie:  # OPTIONAL. Applies the MAPIE (Model Agnostic Prediction Interval Estimator) framework to estimate **prediction intervals**, which provide bounds around individual predicted values. Supports many model types. See documentation for details: https://mapie.readthedocs.io/en/stable/index.html
+        - alpha: [0.05, 0.32] # OPTIONAL list object, e.g. [0.05, 0.32]. MAPIE prediction interval estimation will be enabled if not empty. Alpha parameter (0 < α < 1) in an array format to calculate MAPIE prediction intervals. If empty, MAPIE is not calculated. Note: 1/α (or 1/(1 - α)) must be lower than the number of samples.
+        - method: 'plus' #  OPTIONAL. But REQUIRED if MAPIE_alpha provided. MAPIE method: 'plus' (CV+) or 'minmax' (CV-minmax). For more information and other methods, refer to: https://mapie.readthedocs.io/en/stable/theoretical_description_regression.html
+        - cv: 10 # OPTIONAL integer. REQUIRED if MAPIE_alpha provided. Specifies the number of cross-validation folds.
+        - agg_function: 'median' #OPTIONAL. But REQUIRED if MAPIE_alpha provided. Option: 'mean', 'median'.
+    ```
+Note that if uncertainty quantifications are desired in the prediction step, appropriate configurations must also be specified in the prediction config (e.g. specify `MAPIE_alpha` for the `mapie` configuration).
 
 ### 4. Prediction Config (e.g. *_pred_config.yaml)
 
@@ -227,33 +298,32 @@ Configures the out-of-sample prediction step and downstream mapping.
 * `name_algo_config`: The name of the trained algorithm configuration file. (Required).
 
 
-* `name_tfrm_config`: The name of the transformation configuration file. (Required if transforming predictor data).
+* `name_tfrm_config`: Deprecated with the custom attribute (e.g. hfATLAS) workflow. The name of the transformation configuration file. (Required if transforming predictor data). Present workflows should perform desired transformations on attribute data beforehand, not during RaFTS processing.
 
 
-* `ds_type`: A string identifying the output dataset, highly recommended to be set to `prediction`. (Required).
+* `ds_type`: A string identifying the output dataset, highly recommended to be set to `prediction`. This is used as a string inserted into `path_meta`, but note that `path_meta` is ignored when using the custom-generated attribute data (e.g. hfATLAS source). (Required in legacy workflows acquiring attribute data via `proc.attr.hydfab`).
 
 
 * `write_type`: Filetype for the feature metadata output, defaulting to `parquet`. (Required).
 
 
-* `path_meta`: This is where the prediction attribute data are stored. Not to be confused with `path_meta` in the attribute config file, which is what is used for defining the training predictor dataset location when using the legacy `proc.attr.hydfab` workfklow. However, in the legacy RaFTS workflow's `proc.attr.hydfab` processing, the strongly suggested default is the same as the attribute config entry: `"{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.{write_type}"`, where `ds_type` would be `'prediction'` rather than `'training`'. Required.
-
+* `path_meta`: This is where the prediction attribute data are stored. Not to be confused with `path_meta` in the attribute config file, which is what is used for defining the predictor dataset location.  
 
 * `pred_file_comid_colname`: The column name containing the location identifiers used for prediction within the `path_meta` file. (Required).
 
-* `path_gpkg_pred`: Strongly recommended for custom prediction locations (e.g. aggregated locations). If not provided, the path_gpkg_fs_prep will be used, which may not have any required data points corresponding to prediction locations.
+* `path_gpkg_pred`: Strongly recommended for custom prediction locations (e.g. aggregated locations). If not provided, the path_gpkg_fs_prep will be used, which may not have any required data points corresponding to prediction locations. This is required when running `fs_map_pred_hfatl.py` in order to generate maps of prediction locations.
 
 * `pred_gpkg_lyr`: The layer name to read from the prediction geopackage. Default None.
 
 * `pred_gpkg_id_col`: The column name of the identifier inside path_gpkg_pred
 
-* `path_crosswalk_ids`: Optional. Path to the .parquet file used to crosswalk aggregated identifiers (e.g. huc12) to the standard identifier (e.g. divide_id). Only used in `fs_pair_donors.py`
+* `path_crosswalk_ids`: Optional. Path to the .parquet file used to crosswalk aggregated identifiers (e.g. huc12) to the standard identifier (e.g. divide_id). Only used in `fs_pair_donors.py`. Should also specify `path_hf_finl_gpkg`.
 
-* `overwrite_sql`: Boolean. Should the sqlite tables for each parameter set be overwritten? Recommended when running `fs_write_params_gpkg.py`. Default `False`. 
+* `overwrite_sql`: Boolean. Should the sqlite tables for each parameter set be overwritten? Recommended when running `fs_regn_params_gpkg.py`. Default `False`. 
 
-* `path_hf_finl_gpkg`  Required when running `fs_write_params_gpkg.py` The hydrofabric gpkg containing the divides specified in the path_crosswalk_ids.  e.g. '{home_dir}/noaa/hydrofabric/v2.2_2025Apr/conus_nextgen.gpkg'
+* `path_hf_finl_gpkg`  Required when running `fs_regn_params_gpkg.py`. The hydrofabric gpkg containing the divides specified in the path_crosswalk_ids. e.g. `'{home_dir}/noaa/hydrofabric/v2.2_2025Apr/conus_nextgen'`.gpkg'. Should also specify `path_crosswalk_ids`. Note that this is also referenced in the mapping script `fs_map_pred_hfatl.py` when the workflow includes `fs_regn_params_gpkg.py`.
 
-* `algo_select` The specfic algorithm string to use for the final integration into the regionalization gpkg (ie a new layer added to the copy of path_hf_finl_gpkg). Used in `fs_write_params_gpkg.py`. e.g. 'gower_agglomerative_k12' 
+* `algo_select` The specfic algorithm string to use for the final integration into the regionalization gpkg (ie a new layer added to the copy of path_hf_finl_gpkg). Used in `fs_regn_params_gpkg.py`. e.g. 'gower_agglomerative_k12' 
 
 * `path_tfrm_script` & `conda_env`: Filepath to the transformation script and its execution environment. (Required if transforming data). Not used with the modern `hfATLAS` workflow, but this was used in legacy workflows that employed `proc.attr.hydfab`.
 
@@ -264,11 +334,10 @@ Configures the out-of-sample prediction step and downstream mapping.
 * `algo_type`: A list of the trained regressor algorithms desired for prediction, such as `rf` or `mlp`. (Required).
 
 
-* `MAPIE_alpha`: Alpha parameters (between 0 and 1) in an array format to calculate MAPIE prediction intervals. (Optional).
+* `MAPIE_alpha`: Alpha parameters (between 0 and 1) in an array format to calculate MAPIE prediction intervals. Only applicable when using supervised regression algorithms. (Optional).
 
 
-* `uncn_bnd_pred`: Boolean flag determining whether physical minimum/maximum bounds should be applied when calculating uncertainty. (Optional).
-
+* `uncn_bnd_pred`: Boolean flag determining whether physical minimum/maximum bounds should be applied when calculating uncertainty. Only applicable when using supervised regression algorithms. (Optional).
 
 ---
 
@@ -396,12 +465,12 @@ uv run python pkg/fs_algo/fs_algo/flow/fs_map_pred_hfatl.py "scripts/eval_ingest
 **6. Pair Donors and Receivers:**
 (Only for unsupervised clustering algorithms)
 ```bash
-uv run python pkg/fs_algo/fs_algo/flow/fs_pair_donors.py "scripts/eval_ingest/path_to/*hfatl*_pred_config.yaml"
+uv run python pkg/fs_algo/fs_algo/flow/fs_pair_donors.py "scripts/eval_ingest/path_to/*_pred_config.yaml"
 
 ```
 
 **7. Populate the hydrofabric .gpkg with selected regionalized parameters:**
-(Only for unsupervised clustering algorithms)
+
 ```bash
-uv run python pkg/fs_algo/fs_algo/flow/fs_write_params_gpkg.py "scripts/eval_ingest/path_to/*_pred_config.yaml"
+uv run python pkg/fs_algo/fs_algo/flow/fs_regn_params_gpkg.py "scripts/eval_ingest/path_to/*_pred_config.yaml"
 ```
