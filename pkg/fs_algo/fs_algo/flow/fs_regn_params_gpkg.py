@@ -67,7 +67,7 @@ if __name__ == "__main__":
     overwrite_sql = pred_cfg.pred_cfg_dict.get('overwrite_sql', False)
     base_algos = pred_cfg.pred_cfg_dict.get('algo_type', [])
     resp_vars = pred_cfg.pred_cfg_dict.get('algo_response_vars', [])
-    
+    pred_gpkg_id_col = pred_cfg.pred_cfg_dict.get('pred_gpkg_id_col', 'featureID')
     algo_select = pred_cfg.pred_cfg_dict.get('algo_select', [])
     if isinstance(algo_select, str):
         algo_select = [algo_select]
@@ -158,9 +158,31 @@ if __name__ == "__main__":
                         df_params = pd.read_csv(param_file)
 
                     id_col = pred_gpkg_id_col if pred_gpkg_id_col in df_params.columns else 'featureID'
-                    if id_col not in df_params.columns:
+
+                    # Determine expected ID column based on whether the file was crosswalk-mapped
+                    is_mapped = "mapped" in param_file.name
+                    
+                    try:
+                        map_divide_id_col = col_schema_df.iloc[0].dropna().to_dict().get('map_divide_id_col', 'divide_id')
+                    except Exception:
+                        map_divide_id_col = 'divide_id'
+                    
+                    expected_cols = []
+                    if is_mapped:
+                        expected_cols.extend([map_divide_id_col, 'divide_id'])
+                        
+                    expected_cols.extend([pred_gpkg_id_col, 'featureID'])
+                    
+                    # Remove duplicates while preserving order
+                    expected_cols = list(dict.fromkeys(expected_cols))
+                        
+                    # Safely identify the first matching column
+                    id_col = next((col for col in expected_cols if col in df_params.columns), None)
+                    
+                    if not id_col:
                         id_col = df_params.columns[0]
-                        logging.warning(f"Expected identifier column not found. Defaulting to first column: '{id_col}'.")
+                        if not is_mapped:
+                            logging.warning(f"Expected identifier columns {expected_cols} not found. Defaulting to first column: '{id_col}'.")
                         
                     # Dynamically generate table and file names
                     table_name = f"{formulation_id}_{algo}"
@@ -228,10 +250,14 @@ if __name__ == "__main__":
                         
                         df_crosswalk = pd.read_parquet(path_crosswalk_ids).astype(str) if str(path_crosswalk_ids).endswith('.parquet') else pd.read_csv(path_crosswalk_ids, dtype=str)
                         
-                        crosswalk_cols = list(df_crosswalk.columns)
-                        if pred_gpkg_id_col in crosswalk_cols:
-                            crosswalk_cols.remove(pred_gpkg_id_col)
-                            desired_id_col = crosswalk_cols[0] 
+                        try:
+                            map_divide_id_col = col_schema_df.iloc[0].dropna().to_dict().get('map_divide_id_col', 'divide_id')
+                        except Exception:
+                            map_divide_id_col = 'divide_id'
+                            
+                        desired_id_col = fsutil.get_crosswalk_target_col(df_crosswalk, pred_gpkg_id_col, map_divide_id_col)
+                        
+                        if desired_id_col:
                             
                             df_compiled_params[current_id_col] = df_compiled_params[current_id_col].astype(str)
                             

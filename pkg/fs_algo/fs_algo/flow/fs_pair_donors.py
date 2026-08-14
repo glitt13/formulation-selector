@@ -312,12 +312,18 @@ if __name__ == "__main__":
                                     continue
                                     
                                 # Identify the desired new identifier column (the one that isn't pred_gpkg_id_col)
-                                crosswalk_cols = list(df_crosswalk.columns)
-                                if pred_gpkg_id_col in crosswalk_cols:
-                                    crosswalk_cols.remove(pred_gpkg_id_col)
-                                    desired_id_col = crosswalk_cols[0] # e.g., 'divide_id'
-                                    
-                                    # df_receiver_params currently stores receiver IDs in 'featureID'
+                                # Extract map_divide_id_col from prep config
+                                try:
+                                    name_prep_config = [x for x in attr_cfig.attr_config.get('file_io', []) if 'name_prep_config' in x][0]['name_prep_config']
+                                    path_prep_config = fsutil.build_cfig_path(path_pred_config, name_prep_config)
+                                    config_df = pem.read_schm_ls_of_dict(path_prep_config)
+                                    map_divide_id_col = config_df.iloc[0].dropna().to_dict().get('map_divide_id_col', 'divide_id')
+                                except Exception:
+                                    map_divide_id_col = 'divide_id'
+
+                                desired_id_col = fsutil.get_crosswalk_target_col(df_crosswalk, pred_gpkg_id_col, map_divide_id_col)
+                                
+                                if desired_id_col:
                                     df_receiver_params['featureID'] = df_receiver_params['featureID'].astype(str)
                                     
                                     # Merge crosswalk onto the assigned parameters
