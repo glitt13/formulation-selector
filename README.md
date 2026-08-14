@@ -29,6 +29,8 @@ Refer to scripts/eval_ingest/*/ for many examples of different workflows. Note a
 2. **Aggregation**: Hydrofabric-based watershed attributes are aggregated based on the gage_id representing the basins of interest. Both methods create the RaFTS-standard form of watershed attribute data, whose column names include `['featureID', 'featureSource',  'data_source', 'dl_timestamp', 'attribute', 'value']`.
  - `fs_agg_hfatl_basin.py`: aggregates hydrofabric divides to a larger basin scale.
  - `fs_hfatlas_to_rafts_prep.py`: uses existing location identifiers (e.g. `divide_id`) and performs no aggregation.
+ - `map_nexus_divides.py`: Optional for **nexus**-oriented workflows (e.g. ensemble algorithm applications). Routes the hydrofabric flowpath network to identify the downstream-most terminal nexus for each gaged location subset and creates a crosswalk mapping every upstream divide to that specific nexus.
+ - `fs_agg_nexus_hfatl.py`: Optional for **nexus**-oriented workflows. A "universal aggregator" that uses the crosswalk mappings from `map_nexus_divides.py` to perform area-weighted aggregations of raw divide-level hfATLAS attributes to the custom nexus point level. Intended for preparing training datasets. Note that prediction datasets are expected to already be prepared in the appropriate format using `hfATLAS` nexus-based processing. The same nexus-based `hfATLAS` workflow may also be used for the RaFTS training data, also preventing the need to run `fs_agg_nexus_hfatl.py` entirely.
 
 ### Understanding `fs_agg_hfatl_basin.py` vs. `fs_hfatlas_to_rafts_prep.py`
 
@@ -94,6 +96,7 @@ When configuring a new workflow, the following are common considerations/gotchas
 
   - **prep config**:
     - Point to the hydrofabric geopackage In `path_hf_gpkg`. This should be the entire hydrofabric .gpkg. This differs from `path_hf_basins_gpkg`, which represents the subset of the hydrofabric of interest. `path_hf_basins_gpkg` is intended to represent aggregates of divides (i.e. basins) using their unique basin id (e.g. USGS gage ID). 
+    - **Nexus**-based workflows *may* need to define the flowpath components when input training data are not preprocessed into a form that is aggregated by divides (this can be done in `hfATLAS` nexus-based workflows). When data need aggregated to nexus form, you need to provide the hydrofabric's flowpath layer `hf_fp_layer` and flowpath ID column `hf_fp_id_col` to create divide(s)-to-nexus mappings.
   - **attr config**:
     - `home_dir`: the home directory. Default assumes `~/`
     - `dir_base`: the base directory location for RaFTS datasets. Recommended to mimic what is (generally) consistently used across all the other attribute configs.
@@ -108,6 +111,7 @@ When configuring a new workflow, the following are common considerations/gotchas
     - `path_gpkg_pred` points to the corresponding .gpkg providing geospatial context to the locations in `path_meta`. Optional, but strongly recommended when dealing with customized prediction locations (e.g. hydrofabric divides aggregated to a larger scale.)
     - `path_crosswalk_ids` Optional. This is the crosswalk (.csv or parquet file) translates the aggregated basin identifiers to individual hydrofabric divide ids. This file is only guaranteed to work by containing two columns for both identifiers.
     - `path_hf_finl_gpkg` This is only used when running `fs_regn_params_gpkg.py`. This is the path to the 'official' hydrofabric .gpkg file that will be used for `ngen` simulations. A copy of the hydrofabric .gpkg will be made within a RaFTS regionalization subdirectory, and populated with new tables for each `ngen` formulation containing the regionalized parameters. Also specify `layr_hf_finl_gpkg` for good measure.
+    - 
 
 ### 1. Preparation Config (e.g. `*_prep_config.yaml`)
 
@@ -155,6 +159,8 @@ Used for _preparing_ the raw input data into standardized forms. Originally, thi
   * `gage_id_col_gpkg`: The gage_id column in the `path_hf_basins_gpkg`, if present. Otherwise do not provide this entry in the config file and specify `gpkg_filename_pattern` instead, where the gage_id is contained inside the filenames of many hydrofabric files representing basins.
 
   * `gpkg_filename_pattern`: The pattern used to extract the gage_id from the .gpkg filenames contained inside path_hf_basins_gpkg when it's a dir w/ many gpkg files. Default `'gage_(.*).gpkg'`. Use `gage_id_col_gpkg` instead if gage_id is specified in a column inside the .gpkg.
+
+  * `hfatl_id_format` In some cases, the `hfATLAS` workflow may create it's own unique identifier, often as a combination of the USGS gage ID and a hydrofabric ID. Provide a python f-string format for this string type, e.g .`"USGS-{gage_id}_{divide_id}"`. This is an edge case under certain scenarios.
 
 ### Attribute prep config requirements
 Some options are specific to the next step in the standard workflow using pre-defined attributes. These requirements may vary by the choice of script (`fs_hfatlas_to_rafts_prep.py` vs. `fs_agg_hfatl_basin.py`).
@@ -310,11 +316,11 @@ Configures the out-of-sample prediction step and downstream mapping.
 
 * `pred_file_comid_colname`: The column name containing the location identifiers used for prediction within the `path_meta` file. (Required).
 
-* `path_gpkg_pred`: Strongly recommended for custom prediction locations (e.g. aggregated locations). If not provided, the path_gpkg_fs_prep will be used, which may not have any required data points corresponding to prediction locations. This is required when running `fs_map_pred_hfatl.py` in order to generate maps of prediction locations.
+* `path_gpkg_pred`: Strongly recommended for custom prediction locations (e.g. aggregated locations). If not provided, the `path_gpkg_fs_prep` will be used, which may not have any required data points corresponding to prediction locations. This is required when running `fs_map_pred_hfatl.py` in order to generate maps of prediction locations.
 
-* `pred_gpkg_lyr`: The layer name to read from the prediction geopackage. Default None.
+* `pred_gpkg_lyr`: The layer name corresponding to `path_gpkg_pred` to read from the prediction geopackage. Default None. The fallback reads the gpkg used in the response variable preparation (`path_gpkg_fs_prep`).
 
-* `pred_gpkg_id_col`: The column name of the identifier inside path_gpkg_pred
+* `pred_gpkg_id_col`: The column name corresponding to `path_gpkg_pred`. Default None. The fallback reads the gpkg used in the response variable preparation (`path_gpkg_fs_prep`)
 
 * `path_crosswalk_ids`: Optional. Path to the .parquet file used to crosswalk aggregated identifiers (e.g. huc12) to the standard identifier (e.g. divide_id). Only used in `fs_pair_donors.py`. Should also specify `path_hf_finl_gpkg`.
 
