@@ -430,6 +430,7 @@ class PredConfigParser:
         pred_gpkg_lyr = pred_cfg.get('pred_gpkg_lyr', None)
         pred_gpkg_id_col = pred_cfg.get('pred_gpkg_id_col',None)
         path_crosswalk_ids = pred_cfg.get('path_crosswalk_ids',None)
+        crosswalk_target_col = pred_cfg.get('crosswalk_target_col',None) # Oftentimes 'divide_id' for hydrofabric applications
         overwrite_sql = pred_cfg.get('overwrite_sql', False)
         path_hf_finl_gpkg = pred_cfg.get('path_hf_finl_gpkg', None)
         layr_hf_finl_gpkg = pred_cfg.get('layr_hf_finl_gpkg',None)
@@ -459,6 +460,7 @@ class PredConfigParser:
             'pred_gpkg_lyr':pred_gpkg_lyr,
             'pred_gpkg_id_col':pred_gpkg_id_col,
             'path_crosswalk_ids':path_crosswalk_ids,
+            'crosswalk_target_col':crosswalk_target_col, # target hydrofabric identifier
             'path_hf_finl_gpkg': path_hf_finl_gpkg,
             'layr_hf_finl_gpkg':layr_hf_finl_gpkg,
             'overwrite_sql': overwrite_sql,
@@ -2640,3 +2642,36 @@ def update_database(db_path: Path, df_data: pd.DataFrame, table_name: str, id_co
     except sqlite3.Error as e:
         logging.error(f"SQLite error occurred while writing to {db_path.name}: {e}")
         sys.exit(1)
+
+def get_crosswalk_target_col(df_crosswalk: pd.DataFrame, pred_gpkg_id_col: str, map_divide_id_col: str = 'divide_id') -> str:
+    """
+    Dynamically identify the target identifier column in a crosswalk using a strict 
+    hierarchy: User Config -> Native Default -> Subtraction Fallback.
+    """
+    import logging
+    
+    crosswalk_cols = list(df_crosswalk.columns)
+    
+    if pred_gpkg_id_col not in crosswalk_cols:
+        logging.error(f"Prediction ID '{pred_gpkg_id_col}' not found in crosswalk columns.")
+        return None
+        
+    # 1. PRIORITY: The explicitly configured map_divide_id_col from the prep config
+    if map_divide_id_col in crosswalk_cols:
+        return map_divide_id_col
+        
+
+    # 2. FALLBACK: Dynamically subtract the known prediction ID and common spatial metadata
+    ignore_meta = [pred_gpkg_id_col.lower(), 'vpuid', 'areasqkm', 'areasqmi', 'lengthkm', 'gage_id', 'custom_id', 'site_id']
+    possible_cols = [c for c in crosswalk_cols if c.lower() not in ignore_meta]
+    
+    if possible_cols:
+        desired_id_col = possible_cols[0]
+        if len(possible_cols) > 1:
+            logging.warning(f"Multiple unknown columns found in crosswalk {possible_cols}. Defaulting to '{desired_id_col}'.")
+        logging.warning(f"Assuming crosswalk target column to be the first column in the crosswalk file: {desired_id_col}")
+
+        return desired_id_col
+        
+    logging.error("Could not identify a valid topological target identifier column in the crosswalk file.")
+    return None

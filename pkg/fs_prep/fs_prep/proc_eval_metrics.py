@@ -715,3 +715,28 @@ def check_fix_nwissite_gageids(df:pd.DataFrame, gage_id_col:str,
             logging.info(f"Consider checking the following gage_ids: {', '.join(ls_still_bad)}")
         df[gage_id_col] = df[gage_id_col].astype(str)
     return df
+
+def create_custom_nexus_id(gage_id, nexus_id):
+    """
+    Creates a custom unique identifier combining a gage ID and a nexus ID.
+    Supports scalar values, Pandas Series, ArrowStringArrays, lists, or a mix.
+    
+    :param gage_id: The original basin or gage identifier.
+    :param nexus_id: The terminal downstream nexus identifier.
+    :return: A custom identifier string (or Pandas Series) formatted as '{gage_id}__{nexus_id}'.
+    """
+    # Check if inputs are array-like (catches Series, Arrow arrays, np.arrays, lists)
+    gage_is_array = hasattr(gage_id, "__iter__") and not isinstance(gage_id, (str, bytes))
+    nex_is_array = hasattr(nexus_id, "__iter__") and not isinstance(nexus_id, (str, bytes))
+    
+    if gage_is_array and nex_is_array:
+        return pd.Series(gage_id).astype(str) + "__" + pd.Series(nexus_id).astype(str)
+    elif nex_is_array:
+        # gage_id is scalar, nexus_id is an array
+        return str(gage_id) + "__" + pd.Series(nexus_id).astype(str)
+    elif gage_is_array:
+        # gage_id is an array, nexus_id is scalar
+        return pd.Series(gage_id).astype(str) + "__" + str(nexus_id)
+    else:
+        # Both are scalars
+        return f"{gage_id}__{nexus_id}"
