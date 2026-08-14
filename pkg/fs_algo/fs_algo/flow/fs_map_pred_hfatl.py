@@ -108,11 +108,21 @@ if __name__ == "__main__":
             if path_crosswalk_ids.exists():
                 df_crosswalk = pd.read_parquet(path_crosswalk_ids).astype(str) if str(path_crosswalk_ids).endswith('.parquet') else pd.read_csv(path_crosswalk_ids, dtype=str)
                 crosswalk_cols = list(df_crosswalk.columns)
-                if pred_gpkg_id_col in crosswalk_cols:
-                    crosswalk_cols.remove(pred_gpkg_id_col)
-                    desired_id_col = crosswalk_cols[0] # Usually 'divide_id'
-                else:
-                    logging.error(f"{pred_gpkg_id_col} not in the crosswalk dataset column names.")
+                # Dynamically retrieve map_divide_id_col from prep config, defaulting to 'divide_id'
+                try:
+                    name_prep_config = [x for x in attr_cfig.attr_config.get('file_io', []) if 'name_prep_config' in x][0]['name_prep_config']
+                    path_prep_config = fsutil.build_cfig_path(path_pred_config, name_prep_config)
+                    config_df = pem.read_schm_ls_of_dict(path_prep_config)
+                    map_divide_id_col = config_df.iloc[0].dropna().to_dict().get('map_divide_id_col', 'divide_id')
+                except Exception:
+                    map_divide_id_col = 'divide_id'
+
+                # Use the centralized hierarchy to find the target column
+                desired_id_col = fsutil.get_crosswalk_target_col(df_crosswalk, pred_gpkg_id_col, map_divide_id_col)
+                
+                if not desired_id_col:
+                    logging.error("Could not identify a valid target identifier column in crosswalk.")
+                    continue
                     
                 path_hf_finl_gpkg = Path(fsutil.resolve_fstrings(path_hf_finl_gpkg_raw, vals))
                 if not path_hf_finl_gpkg.exists():
