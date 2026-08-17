@@ -1879,6 +1879,191 @@ class TestAlgoTrainEvalCoverage(unittest.TestCase):
         except Exception as e:
             self.fail(f"extr_modl_algo_train raised an unexpected exception: {e}")
 
+
+class TestAlgoTrainEvalBoosting(unittest.TestCase):
+    def setUp(self):
+        """Set up a sufficiently large DataFrame to survive cv=5 splits without mocking."""
+        np.random.seed(42)
+        # 30 rows is enough to satisfy sklearn's default 5-fold cross-validation
+        self.df = pd.DataFrame({
+            'comid': [f'id_{i}' for i in range(30)],
+            'attr1': np.random.rand(30),
+            'attr2': np.random.rand(30),
+            'metric': np.random.rand(30)
+        })
+        self.attrs = ['attr1', 'attr2']
+        self.dir_out_alg_ds = Path(tempfile.gettempdir())
+
+    def test_train_algos_boosting_single(self):
+        """Test direct initialization and training of all boosting algorithms without grid search."""
+        # Use minimal iterations/estimators for extremely fast unmocked test execution
+        algo_config = {
+            'hgbr': {'max_iter': 5},
+            'gbr': {'n_estimators': 5},
+            'adaboost': {'n_estimators': 5},
+            'xgb': {'n_estimators': 5, 'n_jobs': 1}
+        }
+        
+        ate = fsalgo.AlgoTrainEval(
+            df=self.df, attrs=self.attrs, algo_config=algo_config,
+            uncertainty={}, dir_out_alg_ds=self.dir_out_alg_ds,
+            dataset_id='test_boost', metr='metric', test_size=0.2, test_id_col='comid'
+        )
+        
+        # Execute raw train/predict flow
+        ate.split_data()
+        ate.train_algos()
+        preds = ate.predict_algos()
+        
+        # 1. Verify all 4 models trained successfully and populated the dictionary
+        self.assertIn('hgbr', ate.algs_dict)
+        self.assertIn('gbr', ate.algs_dict)
+        self.assertIn('adaboost', ate.algs_dict)
+        self.assertIn('xgb', ate.algs_dict)
+        
+        # 2. Verify predictions were made accurately based on the X_test split size
+        expected_test_len = len(ate.X_test)
+        self.assertEqual(len(preds['hgbr']['y_pred']), expected_test_len)
+        self.assertEqual(len(preds['xgb']['y_pred']), expected_test_len)
+
+    def test_grid_search_and_bagging_extraction(self):
+        """Test that grid search wraps the boosting models correctly and Bagging CI can unpack them."""
+        # Provide lists to force select_algs_grid_search to trigger the GridSearchCV branches
+        algo_config = {
+            'adaboost': [{'n_estimators': [2, 4]}],
+            'xgb': [{'n_estimators': [2, 4], 'n_jobs': [1]}]
+        }
+        
+        # Enable Bagging to trigger the calculate_bagging_ci pipeline extraction logic
+        # 2 algos is enough to test the math without wasting time
+        uncertainty = {'bagging': [{'n_algos': 2}]}
+        
+        ate = fsalgo.AlgoTrainEval(
+            df=self.df, attrs=self.attrs, algo_config=algo_config,
+            uncertainty=uncertainty, dir_out_alg_ds=self.dir_out_alg_ds,
+            dataset_id='test_grid_boost', metr='metric', test_size=0.2, test_id_col='comid'
+        )
+        
+        # Run full train_eval() to hit select_grid_search -> split -> train_grid -> calculate_bagging
+        ate.train_eval()
+        
+        # 1. Assert GridSearchCV branches executed successfully
+        self.assertIn('adaboost', ate.algs_dict)
+        self.assertIn('xgb', ate.algs_dict)
+        self.assertIn('gridsearchcv', ate.algs_dict['xgb'])
+        
+        # 2. Assert Bagging CI successfully unpacked the Pipeline to find the base estimator
+        self.assertIn('Uncertainty', ate.algs_dict['xgb'])
+        self.assertIn('bagging_confidence_intervals', ate.algs_dict['xgb']['Uncertainty'])
+        self.assertIn('bagging_confidence_intervals', ate.algs_dict['adaboost']['Uncertainty'])
+class TestAlgoTrainEvalDataAndIO(unittest.TestCase):
+    """No-mock tests for data splitting edge cases and physical file I/O operations."""
+    
+    def setUp(self):
+        np.random.seed(42)
+        # Create a temporary directory that acts as a real filesystem for this test
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.dir_out_alg_ds = Path(self.temp_dir.name)
+        
+        # INCREASED SIZE: Create a dataframe with 30 rows to satisfy MAPIE sample requirements
+        self.df = pd.DataFrame({
+            'featureID': [f'id_{i}' for i in range(30)],
+            'attr1': np.random.rand(30),
+            'attr2': np.random.rand(30),
+            'metric': np.random.rand(30)
+        })
+        # Inject an explicit NA to test the NA dropping logic and warning
+        self.df.loc[29, 'attr1'] = np.nan
+        
+        self.attrs = ['attr1', 'attr2']
+        # Very small estimator count for lightning-fast execution
+        self.algo_config = {'rf': {'n_estimators': 2, 'random_state': 42}}
+        
+    def tearDown(self):
+        # Physically clean up the directory and files after the test
+        self.temp_dir.cleanup()
+        
+    def test_split_data_drops_nas(self):
+        """Test that split_data physically drops rows with NAs and logs the correct warning."""
+        ate = fsalgo.AlgoTrainEval(
+            df=self.df, attrs=self.attrs, algo_config=self.algo_config,
+            uncertainty={}, dir_out_alg_ds=self.dir_out_alg_ds,
+            dataset_id='test_io', metr='metric', test_size=0.2, test_id_col='featureID'
+        )
+        
+        with self.assertLogs(level='WARNING') as cm:
+            ate.split_data()
+        
+        # 29 valid rows. Verify the 30th row (NA) is completely gone.
+        self.assertEqual(len(ate.X_train) + len(ate.X_test), 29)
+        self.assertTrue(any("NA VALUES FOUND IN INPUT DATASET" in log for log in cm.output))
+        
+    def test_split_data_explicit_test_ids(self):
+        """Test data splitting when test_ids are explicitly provided instead of a random split."""
+        # Use the clean subset (first 29 rows) and set the index
+        clean_df = self.df.iloc[:29].copy()
+        clean_df.set_index('featureID', inplace=True)
+        
+        # Explicitly select 3 specific IDs to act as the holdout test set
+        test_indices = ['id_0', 'id_4', 'id_8']
+        test_ids_series = pd.Series(test_indices, index=test_indices)
+        
+        ate = fsalgo.AlgoTrainEval(
+            df=clean_df, attrs=self.attrs, algo_config=self.algo_config,
+            uncertainty={}, dir_out_alg_ds=self.dir_out_alg_ds,
+            dataset_id='test_io', metr='metric', test_size=0.2, test_id_col='featureID',
+            test_ids=test_ids_series
+        )
+        ate.split_data()
+        
+        # Verify the exact indices ended up in the test set, and nowhere else
+        self.assertEqual(len(ate.X_test), 3)
+        self.assertEqual(len(ate.X_train), 26)
+        self.assertTrue(all(idx in ate.X_test.index for idx in test_indices))
+        self.assertFalse(any(idx in ate.X_train.index for idx in test_indices))
+
+    def test_save_algos_and_metadata_physical_io(self):
+        """Test actual saving of .joblib files and metadata dataframe population without mocks."""
+        clean_df = self.df.iloc[:29].copy()
+        
+        # Include MAPIE to ensure it gets packed into the joblib dictionary correctly
+        ate = fsalgo.AlgoTrainEval(
+            df=clean_df, attrs=self.attrs, algo_config=self.algo_config,
+            uncertainty={'mapie': [{'alpha': [0.1], 'method': 'plus', 'cv': 2, 'agg_function': 'median'}]},
+            dir_out_alg_ds=self.dir_out_alg_ds,
+            dataset_id='test_io', metr='metric', test_size=0.2, test_id_col='featureID'
+        )
+        
+        # Execute the required prerequisites
+        ate.split_data()
+        ate.train_algos()
+        ate.calculate_mapie()
+        ate.predict_algos()
+        ate.evaluate_algos()
+        
+        # 1. Test Physical File Writing
+        ate.save_algos()
+        
+        expected_joblib = self.dir_out_alg_ds / "algo_rf_metric__test_io.joblib"
+        self.assertTrue(expected_joblib.exists(), "Joblib file was not written to disk!")
+        
+        # Actually load the joblib file off the disk to verify its contents
+        saved_data = joblib.load(expected_joblib)
+        self.assertIn('pipeline', saved_data)
+        self.assertIn('mapie', saved_data)
+        self.assertIn('X_train_shape', saved_data)
+        self.assertEqual(saved_data['X_train_shape'], ate.X_train.shape)
+        
+        # 2. Test Metadata Organization
+        ate.org_metadata_alg()
+        
+        # Verify eval_df was built and populated with the correct string references
+        self.assertFalse(ate.eval_df.empty)
+        self.assertEqual(ate.eval_df['dataset'].iloc[0], 'test_io')
+        self.assertEqual(ate.eval_df['file_pipe'].iloc[0], "algo_rf_metric__test_io.joblib")
+        self.assertIn('mse', ate.eval_df.columns)
+        self.assertIn('r2', ate.eval_df.columns)
+
 #%% functions corresponding to fs_regn_params_gpkg.py
 
 @pytest.fixture
