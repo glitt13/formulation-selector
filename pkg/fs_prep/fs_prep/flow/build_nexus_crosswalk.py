@@ -4,6 +4,18 @@ build_nexus_crosswalk.py
 Traverses the hydrofabric flowpath network to map EVERY nexus to all of its 
 upstream contributing divides. Writes a RaFTS-compatible crosswalk parquet file 
 using the prediction configuration parameters.
+
+Note this script is not recommended for use since crosswalk files should be created
+in hfATLAS workflows.
+
+That said, an example use of this script would be:
+
+# 5. Prepare full-domain nexus crosswalk for prediction step 
+echo "--> Building full-domain nexus crosswalk..."
+uv run --project "${DIR_REPO}/pkg" python "${DIR_PREP}/build_nexus_crosswalk.py" "${DIR_CONFIG}/nex_test_pred_config_hf22.yaml" || {
+    echo "ERROR: Nexus crosswalk build failed."
+    exit 1
+}
 """
 
 import argparse
