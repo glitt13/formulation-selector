@@ -300,39 +300,22 @@ class AlgoTrainEval:
             }
     
         return ci_dict
-
     def calculate_bagging_ci(self, algo_str,best_algo):
         """
         Generalized function to calculate Bagging confidence intervals for any model.
         """
-        # algo_cfg = self.algo_config[algo_str]
         algo_cfg = self.algo_config.get(algo_str, self.algo_config_grid.get(algo_str))
         if algo_cfg is None:
             logging.error(f"Algorithm {algo_str} not found in configurations.")
             raise KeyError(f"Algorithm {algo_str} not found in configurations.")
 
-        # n_algos = self.bagging_ci_params['n_algos']
         n_algos = next(d['n_algos'] for d in self.uncertainty.get('bagging', []))
         predictions = []
-        # Extract the model if it's inside a pipeline
+        
+        # Safely extract the base ML model if it is wrapped inside a Pipeline
         if isinstance(best_algo, Pipeline):
-            # Try to find the model step
-            algo_step = None
-            for name, step in best_algo.named_steps.items():
-                # Check against all supported regression models
-                if isinstance(step, (
-                    RandomForestRegressor, 
-                    MLPRegressor, 
-                    AdaBoostRegressor, 
-                    xgb.XGBRegressor, 
-                    HistGradientBoostingRegressor, 
-                    GradientBoostingRegressor
-                )):
-                    algo_step = step
-                    break
-            if algo_step is None:
-                logging.error(f"Could not find '{algo_str}' in the pipeline steps.")
-                raise ValueError(f"Could not find '{algo_str}' in the pipeline steps.")
+            # The base estimator is universally the final step in a standard scikit-learn pipeline
+            algo_step = best_algo.steps[-1][1]
         else:
             algo_step = best_algo  # Direct model
     
@@ -372,6 +355,7 @@ class AlgoTrainEval:
         self.algs_dict[algo_str]['Uncertainty']['bagging_mean_pred'] = mean_pred
         self.algs_dict[algo_str]['Uncertainty']['bagging_std_pred'] = std_pred
         self.algs_dict[algo_str]['Uncertainty']['bagging_confidence_intervals'] = confidence_intervals
+
     
     def calculate_mapie(self):
         """Generalized function to calculate prediction uncertainty using MAPIE."""
@@ -447,28 +431,32 @@ class AlgoTrainEval:
                                      }
         if 'hgbr' in self.algo_config:  # HIST GRADIENT BOOSTING
             if self.verbose: logging.info(f"      Performing HistGradientBoostingRegressor Training")
-            hgbr = HistGradientBoostingRegressor(random_state=self.rs, **self.algo_config['hgbr'])
+            # Unpack defaults first, allowing config to override safely
+            hgbr = HistGradientBoostingRegressor(**{'random_state': self.rs, **self.algo_config['hgbr']})
             pipe_hgbr = make_pipeline(StandardScaler(), hgbr)
             pipe_hgbr.fit(self.X_train, self.y_train)
             self.algs_dict['hgbr'] = {'algo': hgbr, 'pipeline': pipe_hgbr, 'type': 'hist gradient boosting regressor', 'metric': self.metric, 'Uncertainty': {}}
 
         if 'gbr' in self.algo_config:  # GRADIENT BOOSTING
             if self.verbose: logging.info(f"      Performing GradientBoostingRegressor Training")
-            gbr = GradientBoostingRegressor(random_state=self.rs, **self.algo_config['gbr'])
+            gbr = GradientBoostingRegressor(**{'random_state': self.rs, **self.algo_config['gbr']})
             pipe_gbr = make_pipeline(StandardScaler(), gbr)
             pipe_gbr.fit(self.X_train, self.y_train)
             self.algs_dict['gbr'] = {'algo': gbr, 'pipeline': pipe_gbr, 'type': 'gradient boosting regressor', 'metric': self.metric, 'Uncertainty': {}}
 
         if 'adaboost' in self.algo_config:  # ADABOOST
             if self.verbose: logging.info(f"      Performing AdaBoostRegressor Training")
-            ada = AdaBoostRegressor(random_state=self.rs, **self.algo_config['adaboost'])
+            ada = AdaBoostRegressor(**{'random_state': self.rs, **self.algo_config['adaboost']})
             pipe_ada = make_pipeline(StandardScaler(), ada)
             pipe_ada.fit(self.X_train, self.y_train)
             self.algs_dict['adaboost'] = {'algo': ada, 'pipeline': pipe_ada, 'type': 'adaboost regressor', 'metric': self.metric, 'Uncertainty': {}}
 
         if 'xgb' in self.algo_config:  # XGBOOST
             if self.verbose: logging.info(f"      Performing XGBRegressor Training")
-            xgb_model = xgb.XGBRegressor(random_state=self.rs, n_jobs=-1, **self.algo_config['xgb'])
+            # Safely merge default arguments with user-provided config arguments
+            xgb_args = {'random_state': self.rs, 'n_jobs': -1}
+            xgb_args.update(self.algo_config['xgb'])
+            xgb_model = xgb.XGBRegressor(**xgb_args)
             pipe_xgb = make_pipeline(StandardScaler(), xgb_model)
             pipe_xgb.fit(self.X_train, self.y_train)
             self.algs_dict['xgb'] = {'algo': xgb_model, 'pipeline': pipe_xgb, 'type': 'xgboost regressor', 'metric': self.metric, 'Uncertainty': {}}
@@ -584,6 +572,7 @@ class AlgoTrainEval:
                                     'metric': self.metric,
                                      'Uncertainty': {}
                                      }
+            
         if 'hgbr' in self.algo_config_grid:  # HIST GRADIENT BOOSTING
             if self.verbose: logging.info(f"      Performing HistGradientBoostingRegressor Training with Grid Search")
             hgbr = HistGradientBoostingRegressor(random_state=self.rs)
