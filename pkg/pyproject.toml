@@ -4,7 +4,8 @@ version = "0.1.0"
 requires-python = "==3.12.11" 
 dependencies = [
     "fs_algo",
-    "fs_prep"
+    "fs_prep",
+    "xgboost>=3.4.0",
 ]
 
 [tool.uv.workspace]

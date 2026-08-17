@@ -352,26 +352,30 @@ if __name__ == "__main__":
                 df_X, y_all = train_eval.all_X_all_y()
 
                 if make_plots:
-                    # See if random forest was trained in the AlgoTrainEval class object:
-                    rfr = fsalgt._extr_rf_algo(train_eval)
-                    if rfr: # Generate & save the feature importance plot
-                        out_dir = Path(dir_out_viz_base) / ds
-
-                        # Save features importances from the trained RF to csv files
-                        imp = getattr(rfr, "feature_importances_", None)
+                    out_dir = Path(dir_out_viz_base) / ds
+                    
+                    # Iterate through all trained models to plot feature importances dynamically
+                    for algo_str, algo_info in train_eval.algs_dict.items():
+                        model = algo_info['algo']
+                        imp = getattr(model, "feature_importances_", None)
+                        
                         if imp is not None:
+                            # Save features importances from the trained model to csv files
                             fi_df = pd.DataFrame({"feature": df_X.columns, "importance": imp})
                             fi_df = fi_df.sort_values("importance", ascending=False)
-                            out_csv = out_dir / f"rf_feature_importance_{ds}_{metr}.csv"
+                            out_csv = out_dir / f"{algo_str}_feature_importance_{ds}_{metr}.csv"
                             fi_df.to_csv(out_csv, index=False)
-                            logging.info(f"Wrote RF feature importances to {out_csv}")
+                            logging.info(f"Wrote {algo_str} feature importances to {out_csv}")
 
-                        # Plot PNG of Feature Importance
-                        fsplot.save_feat_imp_fig_wrap(rfr=rfr,
+                            # Plot PNG of Feature Importance using the generalized wrapper
+                            fsplot.save_feat_imp_fig_wrap(
+                                model=model,
                                 attrs=df_X.columns,
                                 dir_out_viz_base=dir_out_viz_base,
-                                ds=ds,metr=metr)
-
+                                ds=ds, 
+                                metr=metr, 
+                                algo_str=algo_str
+                            )
                     
                     # Create learning curves for each algorithm
                     algo_plot_lc = fsalgt.AlgoEvalPlotLC(df_X,y_all)
