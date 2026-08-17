@@ -49,14 +49,7 @@ uv run --project "${DIR_REPO}/pkg" python "${DIR_PY}/fs_proc_algo_pool.py" "${DI
     exit 1
 }
 
-# 5. Prepare full-domain nexus crosswalk for prediction step 
-echo "--> Building full-domain nexus crosswalk..."
-uv run --project "${DIR_REPO}/pkg" python "${DIR_PREP}/build_nexus_crosswalk.py" "${DIR_CONFIG}/nex_test_pred_config_hf22.yaml" || {
-    echo "ERROR: Nexus crosswalk build failed."
-    exit 1
-}
-
-# 6. Run the Custom Nexus Attribute Aggregator (Prediction Mode)
+# 5. Run the Custom Nexus Attribute Aggregator (Prediction Mode)
 echo "--> Aggregating full-domain hfATLAS attributes to target nexuses..."
 uv run --project "${DIR_REPO}/pkg" python "${DIR_PREP}/fs_agg_nexus_hfatl.py" \
     --path_pred_config "${DIR_CONFIG}/nex_test_pred_config_hf22.yaml" || {
@@ -64,21 +57,21 @@ uv run --project "${DIR_REPO}/pkg" python "${DIR_PREP}/fs_agg_nexus_hfatl.py" \
     exit 1
 }
 
-# 7. Perform the prediction
+# 6. Perform the prediction
 echo "--> Performing process predictions across v2.2..."
 uv run --project "${DIR_REPO}/pkg" python "${DIR_PY}/fs_pred_algo.py" "${DIR_CONFIG}/nex_test_pred_config_hf22.yaml" || {
     echo "ERROR: Process predictions failed. Exiting."
     exit 1
 }
 
-# 8. Map the predictions (Optional, uncomment if static maps are desired)
+# 7. Map the predictions (Optional, uncomment if static maps are desired)
 echo "--> Plotting the process predictions on static map..."
 uv run --project "${DIR_REPO}/pkg" python "${DIR_PY}/fs_map_pred_hfatl.py" "${DIR_CONFIG}/nex_test_pred_config_hf22.yaml" || {
     echo "ERROR: Prediction mapping failed. Exiting."
     exit 1
 }
 
-# 9. Write Parameters to Compiled GeoPackage
+# 8. Write Parameters to Compiled GeoPackage
 echo "--> Compiling regionalized parameters into master GPKG..."
 uv run --project "${DIR_REPO}/pkg" python "${DIR_PY}/fs_regn_params_gpkg.py" "${DIR_CONFIG}/nex_test_pred_config_hf22.yaml" || {
     echo "ERROR: GPKG compilation failed. Exiting."
