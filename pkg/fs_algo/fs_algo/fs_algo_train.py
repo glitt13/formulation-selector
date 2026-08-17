@@ -1,7 +1,8 @@
 # fs_algo_train.py
 from __future__ import annotations # enables the | operator for function typehints back to python 3.7
 from sklearn.model_selection import train_test_split, GridSearchCV,learning_curve
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import RandomForestRegressor, HistGradientBoostingRegressor, GradientBoostingRegressor, AdaBoostRegressor
+import xgboost as xgb
 from sklearn.neural_network import MLPRegressor
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.preprocessing import StandardScaler
@@ -20,6 +21,7 @@ from sklearn.utils import resample
 from mapie.regression import MapieRegressor
 import fs_algo.utils as utils
 import fs_algo.plots as plots
+import matplotlib.pyplot as plt
 
 from sklearn.cluster import KMeans, AgglomerativeClustering
 from sklearn.metrics import silhouette_score, davies_bouldin_score, pairwise_distances
@@ -317,7 +319,15 @@ class AlgoTrainEval:
             # Try to find the model step
             algo_step = None
             for name, step in best_algo.named_steps.items():
-                if isinstance(step, (RandomForestRegressor, MLPRegressor)):  # Extend if more models are used
+                # Check against all supported regression models
+                if isinstance(step, (
+                    RandomForestRegressor, 
+                    MLPRegressor, 
+                    AdaBoostRegressor, 
+                    xgb.XGBRegressor, 
+                    HistGradientBoostingRegressor, 
+                    GradientBoostingRegressor
+                )):
                     algo_step = step
                     break
             if algo_step is None:
@@ -435,7 +445,34 @@ class AlgoTrainEval:
                                      'metric': self.metric,
                                      'Uncertainty': {}
                                      }
-            
+        if 'hgbr' in self.algo_config:  # HIST GRADIENT BOOSTING
+            if self.verbose: logging.info(f"      Performing HistGradientBoostingRegressor Training")
+            hgbr = HistGradientBoostingRegressor(random_state=self.rs, **self.algo_config['hgbr'])
+            pipe_hgbr = make_pipeline(StandardScaler(), hgbr)
+            pipe_hgbr.fit(self.X_train, self.y_train)
+            self.algs_dict['hgbr'] = {'algo': hgbr, 'pipeline': pipe_hgbr, 'type': 'hist gradient boosting regressor', 'metric': self.metric, 'Uncertainty': {}}
+
+        if 'gbr' in self.algo_config:  # GRADIENT BOOSTING
+            if self.verbose: logging.info(f"      Performing GradientBoostingRegressor Training")
+            gbr = GradientBoostingRegressor(random_state=self.rs, **self.algo_config['gbr'])
+            pipe_gbr = make_pipeline(StandardScaler(), gbr)
+            pipe_gbr.fit(self.X_train, self.y_train)
+            self.algs_dict['gbr'] = {'algo': gbr, 'pipeline': pipe_gbr, 'type': 'gradient boosting regressor', 'metric': self.metric, 'Uncertainty': {}}
+
+        if 'adaboost' in self.algo_config:  # ADABOOST
+            if self.verbose: logging.info(f"      Performing AdaBoostRegressor Training")
+            ada = AdaBoostRegressor(random_state=self.rs, **self.algo_config['adaboost'])
+            pipe_ada = make_pipeline(StandardScaler(), ada)
+            pipe_ada.fit(self.X_train, self.y_train)
+            self.algs_dict['adaboost'] = {'algo': ada, 'pipeline': pipe_ada, 'type': 'adaboost regressor', 'metric': self.metric, 'Uncertainty': {}}
+
+        if 'xgb' in self.algo_config:  # XGBOOST
+            if self.verbose: logging.info(f"      Performing XGBRegressor Training")
+            xgb_model = xgb.XGBRegressor(random_state=self.rs, n_jobs=-1, **self.algo_config['xgb'])
+            pipe_xgb = make_pipeline(StandardScaler(), xgb_model)
+            pipe_xgb.fit(self.X_train, self.y_train)
+            self.algs_dict['xgb'] = {'algo': xgb_model, 'pipeline': pipe_xgb, 'type': 'xgboost regressor', 'metric': self.metric, 'Uncertainty': {}}
+        # ---------------- UNSUPERVISED ALGORITHMS ------------- #
         if 'kmeans' in self.algo_config:  # K-MEANS CLUSTERING
             if self.verbose: logging.info(f"      Performing KMeans Clustering")
             
@@ -547,7 +584,41 @@ class AlgoTrainEval:
                                     'metric': self.metric,
                                      'Uncertainty': {}
                                      }
-            
+        if 'hgbr' in self.algo_config_grid:  # HIST GRADIENT BOOSTING
+            if self.verbose: logging.info(f"      Performing HistGradientBoostingRegressor Training with Grid Search")
+            hgbr = HistGradientBoostingRegressor(random_state=self.rs)
+            param_grid_hgbr = {f'histgradientboostingregressor__{k}': v for k, v in self.algo_config_grid['hgbr'].items()}
+            pipe_hgbr = make_pipeline(StandardScaler(), hgbr)
+            grid_hgbr = GridSearchCV(pipe_hgbr, param_grid_hgbr, cv=5, scoring='neg_mean_absolute_error', n_jobs=-1)
+            grid_hgbr.fit(self.X_train, self.y_train)
+            self.algs_dict['hgbr'] = {'algo': grid_hgbr.best_estimator_.named_steps['histgradientboostingregressor'], 'pipeline': grid_hgbr, 'gridsearchcv': grid_hgbr, 'type': 'hist gradient boosting regressor', 'metric': self.metric, 'Uncertainty': {}}
+
+        if 'gbr' in self.algo_config_grid:  # GRADIENT BOOSTING
+            if self.verbose: logging.info(f"      Performing GradientBoostingRegressor Training with Grid Search")
+            gbr = GradientBoostingRegressor(random_state=self.rs)
+            param_grid_gbr = {f'gradientboostingregressor__{k}': v for k, v in self.algo_config_grid['gbr'].items()}
+            pipe_gbr = make_pipeline(StandardScaler(), gbr)
+            grid_gbr = GridSearchCV(pipe_gbr, param_grid_gbr, cv=5, scoring='neg_mean_absolute_error', n_jobs=-1)
+            grid_gbr.fit(self.X_train, self.y_train)
+            self.algs_dict['gbr'] = {'algo': grid_gbr.best_estimator_.named_steps['gradientboostingregressor'], 'pipeline': grid_gbr, 'gridsearchcv': grid_gbr, 'type': 'gradient boosting regressor', 'metric': self.metric, 'Uncertainty': {}}
+
+        if 'adaboost' in self.algo_config_grid:  # ADABOOST
+            if self.verbose: logging.info(f"      Performing AdaBoostRegressor Training with Grid Search")
+            ada = AdaBoostRegressor(random_state=self.rs)
+            param_grid_ada = {f'adaboostregressor__{k}': v for k, v in self.algo_config_grid['adaboost'].items()}
+            pipe_ada = make_pipeline(StandardScaler(), ada)
+            grid_ada = GridSearchCV(pipe_ada, param_grid_ada, cv=5, scoring='neg_mean_absolute_error', n_jobs=-1)
+            grid_ada.fit(self.X_train, self.y_train)
+            self.algs_dict['adaboost'] = {'algo': grid_ada.best_estimator_.named_steps['adaboostregressor'], 'pipeline': grid_ada, 'gridsearchcv': grid_ada, 'type': 'adaboost regressor', 'metric': self.metric, 'Uncertainty': {}}
+
+        if 'xgb' in self.algo_config_grid:  # XGBOOST
+            if self.verbose: logging.info(f"      Performing XGBRegressor Training with Grid Search")
+            xgb_model = xgb.XGBRegressor(random_state=self.rs, n_jobs=-1)
+            param_grid_xgb = {f'xgbregressor__{k}': v for k, v in self.algo_config_grid['xgb'].items()}
+            pipe_xgb = make_pipeline(StandardScaler(), xgb_model)
+            grid_xgb = GridSearchCV(pipe_xgb, param_grid_xgb, cv=5, scoring='neg_mean_absolute_error', n_jobs=-1)
+            grid_xgb.fit(self.X_train, self.y_train)
+            self.algs_dict['xgb'] = {'algo': grid_xgb.best_estimator_.named_steps['xgbregressor'], 'pipeline': grid_xgb, 'gridsearchcv': grid_xgb, 'type': 'xgboost regressor', 'metric': self.metric, 'Uncertainty': {}}
         # --- CLUSTERING ALGORITHMS ---
         cluster_algs_to_run = [alg for alg in ['kmeans', 'gower_agglomerative'] if alg in self.algo_config_grid]
 
@@ -1076,41 +1147,59 @@ def _process_single_metric(args_dict):
         if args_dict['make_plots']:
             
             logging.info(f"{log_prefix} Generating plots...")
-            rfr = _extr_rf_algo(train_eval)
-            if rfr:
-                df_X, y_all = train_eval.all_X_all_y()
-                # Save importances
-                imp = getattr(rfr, "feature_importances_", None)
-                if imp is not None:
-                    fi_df = pd.DataFrame({"feature": df_X.columns, "importance": imp}).sort_values("importance", ascending=False)
-                    fi_df.to_csv(Path(args_dict['dir_out_viz_base']) / args_dict['ds'] / f"rf_feature_importance_{args_dict['ds']}_{metr}.csv", index=False)
-                # Plot importances
-                plots.save_feat_imp_fig_wrap(rfr=rfr, attrs=df_X.columns, dir_out_viz_base=args_dict['dir_out_viz_base'], ds=args_dict['ds'], metr=metr)
+            
+            # Extract data safely outside so learning curves can use them regardless of the model
+            df_X, y_all = train_eval.all_X_all_y()
+            out_viz_dir = Path(args_dict['dir_out_viz_base']) / args_dict['ds']
+            out_viz_dir.mkdir(parents=True, exist_ok=True)
+
+            # --- DYNAMIC FEATURE IMPORTANCE FOR ALL COMPATIBLE MODELS ---
+            for algo_str, algo_info in train_eval.algs_dict.items():
+                model = algo_info['algo']
+                # Retrieve .feature_importances_ natively if supported (rf, xgb, gbr, adaboost)
+                imp = getattr(model, "feature_importances_", None)
                 
-                # Create learning curves for each algorithm
-                algo_plot_lc = AlgoEvalPlotLC(df_X,y_all)
-                plot_learning_curve_save_wrap(algo_plot_lc,train_eval, 
+                if imp is not None:
+                    # Save importances to CSV
+                    fi_df = pd.DataFrame({"feature": df_X.columns, "importance": imp}).sort_values("importance", ascending=False)
+                    fi_csv = out_viz_dir / f"{algo_str}_feature_importance_{args_dict['ds']}_{metr}.csv"
+                    fi_df.to_csv(fi_csv, index=False)
+                    logging.info(f"{log_prefix} Wrote {algo_str} feature importances to {fi_csv}")
+
+                    # Plot importances using the generalized wrapper
+                    plots.save_feat_imp_fig_wrap(
+                        model=model, 
+                        attrs=df_X.columns, 
+                        dir_out_viz_base=args_dict['dir_out_viz_base'], 
+                        ds=args_dict['ds'], 
+                        metr=metr, 
+                        algo_str=algo_str
+                    )
+                
+            # Create learning curves for each algorithm
+            if args_dict['task_type'] != 'clustering':
+                algo_plot_lc = AlgoEvalPlotLC(df_X, y_all)
+                plot_learning_curve_save_wrap(algo_plot_lc, train_eval, 
                                 dir_out_viz_base=args_dict['dir_out_viz_base'],
                                 ds=args_dict['ds'],
-                                cv = 5,n_jobs=1,
-                                train_sizes = np.linspace(0.1, 1.0, 10),
-                                scoring = 'neg_mean_squared_error',
-                                ylabel_scoring = "Mean Squared Error (MSE)",
-                                training_uncn = False
+                                cv=5, n_jobs=1,
+                                train_sizes=np.linspace(0.1, 1.0, 10),
+                                scoring='neg_mean_squared_error',
+                                ylabel_scoring="Mean Squared Error (MSE)",
+                                training_uncn=False
                                 )
                 
-                # Calculate global min and max for consistent uncertainty scaling
-                min_err, max_err = float('inf'), float('-inf')
-                for algo_str in train_eval.algs_dict.keys():
-                    if train_eval.preds_dict[algo_str].get('y_pis', None) is not None:
-                        y_pred = train_eval.preds_dict[algo_str]['y_pred']
-                        y_pis = train_eval.preds_dict[algo_str]['y_pis']
-                        for alpha_val in next(d['alpha'] for d in args_dict['uncertainty_cfg'].get('mapie', [])):
-                            lower_err = y_pred - np.array([y_pis[i].loc['lower_limit', f'alpha_{alpha_val:.2f}'] for i in range(len(y_pred))])
-                            upper_err = np.array([y_pis[i].loc['upper_limit', f'alpha_{alpha_val:.2f}'] for i in range(len(y_pred))]) - y_pred
-                            total_err = lower_err + upper_err
-                            min_err, max_err = min(min_err, total_err.min()), max(max_err, total_err.max())
-
+            # Calculate global min and max for consistent uncertainty scaling
+            min_err, max_err = float('inf'), float('-inf')
+            for algo_str in train_eval.algs_dict.keys():
+                if train_eval.preds_dict[algo_str].get('y_pis', None) is not None:
+                    y_pred = train_eval.preds_dict[algo_str]['y_pred']
+                    y_pis = train_eval.preds_dict[algo_str]['y_pis']
+                    for alpha_val in next(d['alpha'] for d in args_dict['uncertainty_cfg'].get('mapie', [])):
+                        lower_err = y_pred - np.array([y_pis[i].loc['lower_limit', f'alpha_{alpha_val:.2f}'] for i in range(len(y_pred))])
+                        upper_err = np.array([y_pis[i].loc['upper_limit', f'alpha_{alpha_val:.2f}'] for i in range(len(y_pred))]) - y_pred
+                        total_err = lower_err + upper_err
+                        min_err, max_err = min(min_err, total_err.min()), max(max_err, total_err.max())
         # ----- Extract y_pred for each algorithm and build output DataFrames -----
         dict_test_gdf = dict()
         col_locid = args_dict['col_locid']
@@ -1207,7 +1296,6 @@ def _process_single_metric(args_dict):
 
     finally:
         # FORCE memory cleanup on the worker before it closes
-        import matplotlib.pyplot as plt
         plt.close('all')
         if 'train_eval' in locals():
             del train_eval

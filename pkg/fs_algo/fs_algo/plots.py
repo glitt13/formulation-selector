@@ -325,25 +325,8 @@ def plot_pca_save_wrap(df_X:pd.DataFrame,
     gc.collect()
     return None
 
-def std_feat_imp_plot_path(dir_out_viz_base:str|Path, ds:str,
-                            metr:str) -> pathlib.PosixPath:
-    """Generate a filepath of the feature_importance plot:
-
-    :param dir_out_viz_base: The standard output base directory for visualizations
-    :type dir_out_viz_base: str | os.PathLike
-    :param ds: The unique dataset name
-    :type ds: str
-    :param metr: The metric/response variable of interest
-    :type metr: str
-    :return: The path to the random forest feature importance plot as a .png
-    :rtype: pathlib.PosixPath
-    """
-    path_feat_imp_attrs = Path(f"{dir_out_viz_base}/{ds}/rf_feature_importance_{ds}_{metr}.png")
-    path_feat_imp_attrs.parent.mkdir(parents=True,exist_ok=True)
-    return path_feat_imp_attrs
-
-def plot_rf_importance(feat_imprt:np.ndarray,attrs:Iterable[str],
-                        title:str)->Figure:
+def plot_feature_importance(feat_imprt:np.ndarray, attrs:Iterable[str],
+                        title:str) -> Figure:
     """Generate the feature importance plot
 
     :param feat_imprt: Feature importance array from `rfr.feature_importances_`
@@ -367,32 +350,48 @@ def plot_rf_importance(feat_imprt:np.ndarray,attrs:Iterable[str],
     fig = plt.gcf()
     return fig
 
-def save_feat_imp_fig_wrap(rfr:RandomForestRegressor,
+def save_feat_imp_fig_wrap(model:any,
                            attrs: Iterable[str],
                            dir_out_viz_base:str|Path,
-                           ds:str,metr:str):
+                           ds:str, metr:str, algo_str:str):
     """Wrapper to generate & save to file the feature importance plot
 
-    :param rfr: The trained random forest regressor object
-    :type rfr: RandomForestRegressor
+    :param model: The trained regressor/classifier object containing .feature_importances_
+    :type model: any
     :param attrs: The attributes 
     :type attrs: Iterable[str]
-    :param dir_out_viz_base: _description_
+    :param dir_out_viz_base: The standard output base directory for visualizations
     :type dir_out_viz_base: str | os.PathLike
     :param ds: The unique dataset name
     :type ds: str
     :param metr: The metric/response variable of interest
     :type metr: str
-    """
-    feat_imprt = rfr.feature_importances_
-    title_rf_imp = f"Random Forest feature importance of {metr}: {ds}"
-    fig_feat_imp = plot_rf_importance(feat_imprt, attrs=attrs, title= title_rf_imp)
+    :param algo_str: The algorithm string identifier (e.g. 'xgb', 'rf')
+    :type algo_str: str
 
-    path_fig_imp = std_feat_imp_plot_path(dir_out_viz_base,
-                                          ds,metr)
+    Changelog/contributions
+    FY25 - originally created, GL
+    2026-08-14 refactor: generalize to other algoirthm strings, Gemni3.1Pro
+    """
+    feat_imprt = getattr(model, "feature_importances_", None)
+    
+    if feat_imprt is None:
+        logging.warning(f"Model {algo_str} does not contain .feature_importances_")
+        return
+        
+    # Generate dynamic title
+    title_imp = f"{algo_str.upper()} feature importance of {metr}: {ds}"
+    
+    # Use the renamed core plotting function
+    fig_feat_imp = plot_feature_importance(feat_imprt, attrs=attrs, title=title_imp)
+
+    # Generate dynamic save path (e.g., 'xgb_feature_importance_...')
+    path_fig_imp = Path(dir_out_viz_base) / ds / f"{algo_str}_feature_importance_{ds}_{metr}.png"
+    path_fig_imp.parent.mkdir(parents=True, exist_ok=True)
 
     fig_feat_imp.savefig(path_fig_imp)
     logging.info(f"Wrote feature importance plot to {path_fig_imp}")
+    
     plt.close(fig_feat_imp)
     plt.close('all')
     gc.collect()
@@ -605,7 +604,8 @@ def plot_pred_vs_obs_regr_mapie(y_pred: np.ndarray, y_obs: np.ndarray, ds:str,
 
     # Add alpha values as text box
     plt.gca().text(0.05, 0.95, f'alpha = {alpha_val:.2f}', transform=plt.gca().transAxes,
-                   fontsize=10, verticalalignment='top', bbox=dict(facecolor='white', alpha=0.5))
+                   fontsize=10, verticalalignment='bottom', horizontalalignment='right',
+                   bbox=dict(facecolor='white', alpha=0.5))
     metrics_text = []
     if r2_val is not None:
         metrics_text.append(f'$R^2 = {r2_val:.2f}$')
