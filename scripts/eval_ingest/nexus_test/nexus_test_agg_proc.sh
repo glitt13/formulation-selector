@@ -49,29 +49,21 @@ uv run --project "${DIR_REPO}/pkg" python "${DIR_PY}/fs_proc_algo_pool.py" "${DI
     exit 1
 }
 
-# 5. Run the Custom Nexus Attribute Aggregator (Prediction Mode)
-echo "--> Aggregating full-domain hfATLAS attributes to target nexuses..."
-uv run --project "${DIR_REPO}/pkg" python "${DIR_PREP}/fs_agg_nexus_hfatl.py" \
-    --path_pred_config "${DIR_CONFIG}/nex_test_pred_config_hf22.yaml" || {
-    echo "ERROR: Prediction attribute aggregation failed. Exiting."
-    exit 1
-}
-
-# 6. Perform the prediction
+# 5. Perform the prediction
 echo "--> Performing process predictions across v2.2..."
 uv run --project "${DIR_REPO}/pkg" python "${DIR_PY}/fs_pred_algo.py" "${DIR_CONFIG}/nex_test_pred_config_hf22.yaml" || {
     echo "ERROR: Process predictions failed. Exiting."
     exit 1
 }
 
-# 7. Map the predictions (Optional, uncomment if static maps are desired)
+# 6. Map the predictions (Optional, uncomment if static maps are desired)
 echo "--> Plotting the process predictions on static map..."
 uv run --project "${DIR_REPO}/pkg" python "${DIR_PY}/fs_map_pred_hfatl.py" "${DIR_CONFIG}/nex_test_pred_config_hf22.yaml" || {
     echo "ERROR: Prediction mapping failed. Exiting."
     exit 1
 }
 
-# 8. Write Parameters to Compiled GeoPackage
+# 7. Write Parameters to Compiled GeoPackage
 echo "--> Compiling regionalized parameters into master GPKG..."
 uv run --project "${DIR_REPO}/pkg" python "${DIR_PY}/fs_regn_params_gpkg.py" "${DIR_CONFIG}/nex_test_pred_config_hf22.yaml" || {
     echo "ERROR: GPKG compilation failed. Exiting."
