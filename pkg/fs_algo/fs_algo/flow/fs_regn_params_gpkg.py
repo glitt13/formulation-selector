@@ -68,6 +68,7 @@ if __name__ == "__main__":
     base_algos = pred_cfg.pred_cfg_dict.get('algo_type', [])
     resp_vars = pred_cfg.pred_cfg_dict.get('algo_response_vars', [])
     pred_gpkg_id_col = pred_cfg.pred_cfg_dict.get('pred_gpkg_id_col', 'featureID')
+    crosswalk_target_col = pred_cfg.pred_cfg_dict.get('crosswalk_target_col')
     algo_select = pred_cfg.pred_cfg_dict.get('algo_select', [])
     if isinstance(algo_select, str):
         algo_select = [algo_select]
@@ -162,14 +163,10 @@ if __name__ == "__main__":
                     # Determine expected ID column based on whether the file was crosswalk-mapped
                     is_mapped = "mapped" in param_file.name
                     
-                    try:
-                        map_divide_id_col = col_schema_df.iloc[0].dropna().to_dict().get('map_divide_id_col', 'divide_id')
-                    except Exception:
-                        map_divide_id_col = 'divide_id'
-                    
                     expected_cols = []
                     if is_mapped:
-                        expected_cols.extend([map_divide_id_col, 'divide_id'])
+                        if crosswalk_target_col: expected_cols.append(crosswalk_target_col)
+                        expected_cols.append('divide_id')
                         
                     expected_cols.extend([pred_gpkg_id_col, 'featureID'])
                     
@@ -249,13 +246,8 @@ if __name__ == "__main__":
                         logging.info(f"Applying crosswalk mapping from {path_crosswalk_ids}")
                         
                         df_crosswalk = pd.read_parquet(path_crosswalk_ids).astype(str) if str(path_crosswalk_ids).endswith('.parquet') else pd.read_csv(path_crosswalk_ids, dtype=str)
-                        
-                        try:
-                            map_divide_id_col = col_schema_df.iloc[0].dropna().to_dict().get('map_divide_id_col', 'divide_id')
-                        except Exception:
-                            map_divide_id_col = 'divide_id'
-                            
-                        desired_id_col = fsutil.get_crosswalk_target_col(df_crosswalk, pred_gpkg_id_col, map_divide_id_col)
+
+                        desired_id_col = fsutil.get_crosswalk_target_col(df_crosswalk, pred_gpkg_id_col, crosswalk_target_col)    
                         
                         if desired_id_col:
                             

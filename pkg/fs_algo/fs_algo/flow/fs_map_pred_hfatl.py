@@ -51,6 +51,7 @@ if __name__ == "__main__":
     path_gpkg_pred = pred_cfg.pred_cfg_dict.get('path_gpkg_pred',None)
     pred_gpkg_lyr = pred_cfg.pred_cfg_dict.get('pred_gpkg_lyr', None)
     pred_gpkg_id_col = pred_cfg.pred_cfg_dict.get('pred_gpkg_id_col',None)
+    crosswalk_target_col = pred_cfg.pred_cfg_dict.get('crosswalk_target_col')
 
     #%%  READ CONTENTS FROM THE ATTRIBUTE CONFIG
     path_attr_config = fsutil.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_attr_config',None))
@@ -108,17 +109,10 @@ if __name__ == "__main__":
             if path_crosswalk_ids.exists():
                 df_crosswalk = pd.read_parquet(path_crosswalk_ids).astype(str) if str(path_crosswalk_ids).endswith('.parquet') else pd.read_csv(path_crosswalk_ids, dtype=str)
                 crosswalk_cols = list(df_crosswalk.columns)
-                # Dynamically retrieve map_divide_id_col from prep config, defaulting to 'divide_id'
-                try:
-                    name_prep_config = [x for x in attr_cfig.attr_config.get('file_io', []) if 'name_prep_config' in x][0]['name_prep_config']
-                    path_prep_config = fsutil.build_cfig_path(path_pred_config, name_prep_config)
-                    config_df = pem.read_schm_ls_of_dict(path_prep_config)
-                    map_divide_id_col = config_df.iloc[0].dropna().to_dict().get('map_divide_id_col', 'divide_id')
-                except Exception:
-                    map_divide_id_col = 'divide_id'
+
 
                 # Use the centralized hierarchy to find the target column
-                desired_id_col = fsutil.get_crosswalk_target_col(df_crosswalk, pred_gpkg_id_col, map_divide_id_col)
+                desired_id_col = fsutil.get_crosswalk_target_col(df_crosswalk, pred_gpkg_id_col, crosswalk_target_col)
                 
                 if not desired_id_col:
                     logging.error("Could not identify a valid target identifier column in crosswalk.")

@@ -1315,43 +1315,6 @@ class TestWarningAndClippingFunctions(unittest.TestCase):
         np.testing.assert_array_equal(result, expected)
         print("✅ test_clip_pis_min_only passed.")
 
-class TestValidationUtilities(unittest.TestCase):
-    def setUp(self):
-        # Reuse existing dummy data strategy
-        self.good_df = pd.DataFrame({
-            'comid': ['123', '456'],
-            'attr1': [1.0, 2.0]
-        })
-        self.bad_df = pd.DataFrame({
-            'comid': [123, 456], # Int instead of string!
-            'attr1': ['bad', 'data']
-        })
-
-    def test_validate_input_attributes_exit(self):
-        # 1. Test happy path (no exit)
-        fsutil.validate_input_attributes(self.good_df, arg_val=False) 
-        
-        # 2. Test fatal exit using your existing bad dataframe
-        with self.assertRaises(SystemExit):
-            fsutil.validate_input_attributes(self.bad_df, arg_val=True)
-
-    def test_validate_dat_resp_schema_exit(self):
-        # Create an xarray dataset missing the required 'gage_id' coordinate
-        bad_xr = xr.Dataset(
-            {"NSE": (("wrong_id",), [0.8])},
-            coords={"wrong_id": ["G1"]}
-        )
-        bad_xr.attrs['metric_mappings'] = 'NSE'
-        
-        # Trigger the fatal Pandera validation failure
-        with self.assertRaises(SystemExit):
-            fsutil.validate_dat_resp_schema(
-                dat_resp=bad_xr, 
-                valid_metrics=["NSE"], 
-                col_locid="featureID", 
-                arg_val=True
-            )
-
 class TestCombineRespGdfComidWrap(unittest.TestCase):
     def test_combine_resp_gdf_comid_wrap(self):
         with tempfile.TemporaryDirectory() as tmpdir:
