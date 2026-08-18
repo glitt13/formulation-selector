@@ -109,7 +109,7 @@ When configuring a new workflow, the following are common considerations/gotchas
   - **pred config**:
     - `path_meta` points to the prediction watershed attribute dataset. This dataset must contain the same column names used for training.
     - `path_gpkg_pred` points to the corresponding .gpkg providing geospatial context to the locations in `path_meta`. Optional, but strongly recommended when dealing with customized prediction locations (e.g. hydrofabric divides aggregated to a larger scale.)
-    - `path_crosswalk_ids` Optional. This is the crosswalk (.csv or parquet file) translates the aggregated basin identifiers to individual hydrofabric divide ids. This file is only guaranteed to work by containing two columns for both identifiers.
+    - `path_crosswalk_ids` Optional. This is the crosswalk (.csv or parquet file) translates the aggregated basin identifiers to individual hydrofabric divide ids. This file is only guaranteed to work by containing two columns for both identifiers. Use the `crosswalk_target_col` to specify the column name of the gpkg-standard identifier for the target of interest (e.g. 'divide_id').
     - `path_hf_finl_gpkg` This is only used when running `fs_regn_params_gpkg.py`. This is the path to the 'official' hydrofabric .gpkg file that will be used for `ngen` simulations. A copy of the hydrofabric .gpkg will be made within a RaFTS regionalization subdirectory, and populated with new tables for each `ngen` formulation containing the regionalized parameters. Also specify `layr_hf_finl_gpkg` for good measure.
     - 
 
@@ -322,7 +322,9 @@ Configures the out-of-sample prediction step and downstream mapping.
 
 * `pred_gpkg_id_col`: The column name corresponding to `path_gpkg_pred`. Default None. The fallback reads the gpkg used in the response variable preparation (`path_gpkg_fs_prep`)
 
-* `path_crosswalk_ids`: Optional. Path to the .parquet file used to crosswalk aggregated identifiers (e.g. huc12) to the standard identifier (e.g. divide_id). Only used in `fs_pair_donors.py`. Should also specify `path_hf_finl_gpkg`.
+* `path_crosswalk_ids`: Optional. Path to the .parquet file used to crosswalk aggregated identifiers (e.g. huc12) to the standard identifier (e.g. divide_id). Used in `fs_agg_nexus_hfatl.py`, `fs_map_pred_hfatl.py`, `fs_regn_params_gpkg.py` and `fs_pair_donors.py`. Should also specify `crosswalk_target_col` and `path_hf_finl_gpkg`.
+
+* `crosswalk_target_col`: The column name in `path_crosswalk_ids` representing the gpkg target identifier of interest (e.g. `divide_id`).
 
 * `overwrite_sql`: Boolean. Should the sqlite tables for each parameter set be overwritten? Recommended when running `fs_regn_params_gpkg.py`. Default `False`. 
 

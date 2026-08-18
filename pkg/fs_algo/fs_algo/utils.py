@@ -2643,7 +2643,7 @@ def update_database(db_path: Path, df_data: pd.DataFrame, table_name: str, id_co
         logging.error(f"SQLite error occurred while writing to {db_path.name}: {e}")
         sys.exit(1)
 
-def get_crosswalk_target_col(df_crosswalk: pd.DataFrame, pred_gpkg_id_col: str, map_divide_id_col: str = 'divide_id') -> str:
+def get_crosswalk_target_col(df_crosswalk: pd.DataFrame, pred_gpkg_id_col: str, crosswalk_target_col: str = 'divide_id') -> str:
     """
     Dynamically identify the target identifier column in a crosswalk using a strict 
     hierarchy: User Config -> Native Default -> Subtraction Fallback.
@@ -2656,12 +2656,16 @@ def get_crosswalk_target_col(df_crosswalk: pd.DataFrame, pred_gpkg_id_col: str, 
         logging.error(f"Prediction ID '{pred_gpkg_id_col}' not found in crosswalk columns.")
         return None
         
-    # 1. PRIORITY: The explicitly configured map_divide_id_col from the prep config
-    if map_divide_id_col in crosswalk_cols:
-        return map_divide_id_col
+    # 1. PRIORITY: The explicitly configured crosswalk_target_col from the prediction config
+    if crosswalk_target_col and crosswalk_target_col in crosswalk_cols:
+        return crosswalk_target_col
         
+    # 2. DEFAULT: Check standard hydrofabric names if no target was explicitly configured
+    for default_target in ['divide_id', 'comid']:
+        if default_target in crosswalk_cols:
+            return default_target
 
-    # 2. FALLBACK: Dynamically subtract the known prediction ID and common spatial metadata
+    # 3. FALLBACK: Dynamically subtract the known prediction ID and common spatial metadata
     ignore_meta = [pred_gpkg_id_col.lower(), 'vpuid', 'areasqkm', 'areasqmi', 'lengthkm', 'gage_id', 'custom_id', 'site_id']
     possible_cols = [c for c in crosswalk_cols if c.lower() not in ignore_meta]
     
@@ -2670,7 +2674,6 @@ def get_crosswalk_target_col(df_crosswalk: pd.DataFrame, pred_gpkg_id_col: str, 
         if len(possible_cols) > 1:
             logging.warning(f"Multiple unknown columns found in crosswalk {possible_cols}. Defaulting to '{desired_id_col}'.")
         logging.warning(f"Assuming crosswalk target column to be the first column in the crosswalk file: {desired_id_col}")
-
         return desired_id_col
         
     logging.error("Could not identify a valid topological target identifier column in the crosswalk file.")
