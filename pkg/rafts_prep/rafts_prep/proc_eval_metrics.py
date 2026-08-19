@@ -293,8 +293,9 @@ def std_form_id(col_schema_df:pd.DataFrame)->str:
     :type col_schema_df: pd.DataFrame
     :return: The standardized name describing a formulation
     :rtype: str
-    # TODO generate a unique formulation-id checker
     """
+    # TODO generate a unique formulation-id checker
+    
     formulation_id =  col_schema_df.loc[0, 'formulation_id']
     formulation_base =  col_schema_df.loc[0, 'formulation_base']
 

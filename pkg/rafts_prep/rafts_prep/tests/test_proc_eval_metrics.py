@@ -8,15 +8,13 @@ or if interested in unit testing coverage:
 > python -m coverage run -m unittest
 > python -m coverage report 
 # and may also run the following to generate an html: > python -m coverage html 
-
-
-notes::
-Changelog/contributions
-    2024-07-11 Originally created, GL
-    2024-10-14 Add nwissite testing, GL
-    2025-08-19 adapted for logging, GL
-    2026-05-05 update logging for pytest compatibility, Gemini3Pro
 '''
+# Changelog/contributions
+#     2024-07-11 Originally created, GL
+#     2024-10-14 Add nwissite testing, GL
+#     2025-08-19 adapted for logging, GL
+#     2026-05-05 update logging for pytest compatibility, Gemini3Pro
+
 
 import unittest
 from pathlib import Path

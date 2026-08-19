@@ -40,18 +40,19 @@ jobs:
         run: uv sync --all-groups
 
       - name: Generate API stubs
-        working-directory: ./pkg
-        run: uv run sphinx-apidoc -o rafts_algo/docs/source rafts_algo/rafts_algo
+        run: |
+          uv run sphinx-apidoc -o doc/source pkg/rafts_algo/rafts_algo
+          uv run sphinx-apidoc -o doc/source pkg/rafts_prep/rafts_prep
 
       - name: Build HTML
-        working-directory: ./pkg/rafts_algo/docs
+        working-directory: ./doc
         run: uv run make html
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           # Point this to where Sphinx outputs the HTML
-          path: 'pkg/rafts_algo/docs/build/html'
+          path: 'doc/build/html'
 
       - name: Deploy to GitHub Pages
         id: deployment

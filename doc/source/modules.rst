@@ -1,7 +1,7 @@
-rafts_algo
+rafts_prep
 ==========
 
 .. toctree::
    :maxdepth: 4
 
-   rafts_algo
+   rafts_prep
