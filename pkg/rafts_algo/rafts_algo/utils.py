@@ -1117,7 +1117,7 @@ def discover_dynamic_algos(search_dir: Path, base_algos: list, metric: str,
     :type metric: str
     :param dataset_id: The unique dataset identifier.
     :type dataset_id: str
-    :param file_prefix: The prefix of the saved files (e.g., 'algo_' or 'pred_').
+    :param file_prefix: The prefix of the saved files (e.g., ``'algo_'`` or ``'pred_'``).
     :type file_prefix: str
     :param file_extension: The file extension (e.g., '.joblib' or '.parquet').
     :type file_extension: str
@@ -2313,6 +2313,7 @@ def generate_algo_points_gpkg_wrap(
       reading only the necessary rows based on the provided divide_ids.
       It also ensures that the resulting GeoDataFrame is standardized with the expected columns and CRS, 
       and can be written to a specified output path for use in downstream processing.
+      
     :param div_ids: A pandas Series of divide_ids for which to extract points.
     :type div_ids: pd.Series
     :param path_hf_gpkg: Path to the hydrofabric GPKG file or directory containing multiple GPKG files.

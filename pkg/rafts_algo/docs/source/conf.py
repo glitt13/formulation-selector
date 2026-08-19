@@ -6,35 +6,35 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
+project = 'rafts_algo'
+copyright = '2026, NOAA-OWP'
+author = 'NOAA-OWP'
+release = '0.1.0'
 
-project = 'Formulation Selector Algorithms'
-copyright = '2024, Guy Litt'
-author = 'Guy Litt'
-release = "0.0.4"
+import os
+import sys
+# Tell Sphinx where to find the rafts_algo python module
+# Adjust the path depending on if your code is in a 'src' layout or directly in 'rafts_algo'
+sys.path.insert(0, os.path.abspath('../../rafts_algo'))
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = [
-    'sphinx.ext.autosummary',
     'sphinx.ext.autodoc',
-    'sphinx.ext.napoleon',
-    'sphinx.ext.viewcode',
-    'sphinx.ext.intersphinx'
+    'sphinx.ext.napoleon', # Supports Google and NumPy style docstrings
+    'sphinx.ext.viewcode', # Adds links to highlighted source code
 ]
 
-templates_path = ['_templates']
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
+html_theme = 'sphinx_rtd_theme'
 
-intersphinx_mapping = {
-    'python': ('https://docs.python.org/3', None),
-    'sklearn': ('https://scikit-learn.org/stable/',None)
-    # other mappings
-}
+templates_path = ['_templates']
+exclude_patterns = []
+
 
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
-html_theme = 'pydata_sphinx_theme' # conda install pydata-sphinx-theme --channel conda-forge
+html_theme = 'alabaster'
 html_static_path = ['_static']
