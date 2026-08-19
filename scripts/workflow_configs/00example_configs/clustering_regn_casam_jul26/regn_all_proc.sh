@@ -18,7 +18,7 @@ set -euo pipefail || { echo "..."; exit 1; }
 # -----------------------------------------------------------------------------
 echo "Using system home directory as basis for all paths: $HOME"
 DIR_REPO="$HOME/git/formulation-selector"
-DIR_CONFIG="${DIR_REPO}/scripts/workflow_configs/regn_hf4vpu1_clst_jul26_test2"
+DIR_CONFIG="${DIR_REPO}/scripts/workflow_configs/00example_configs/clustering_regn_casam_jul26"
 DIR_PREP="${DIR_REPO}/pkg/fs_prep/fs_prep/flow"
 DIR_PY="${DIR_REPO}/pkg/fs_algo/fs_algo/flow"
 
@@ -28,7 +28,7 @@ echo "Running processing from $DIR_CONFIG"
 # EXECUTION WORKFLOW
 # -----------------------------------------------------------------------------
 # Define the unique prefixes for each model to iterate over
-MODELS=("casam" "cfex" "cfes" "sac" "top")
+MODELS=("casam")
 
 for MODEL in "${MODELS[@]}"; do
     echo "========================================================================"

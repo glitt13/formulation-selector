@@ -24,7 +24,7 @@ file_io: # May define {home_dir} for python's '{home_dir}/string_path'.format(ho
   # - 'gage_id_col_gpkg': #'gageID' # The gage_id column in the path_hf_basins_gpkg if present, otherwise do not provide and use gpkg_filename_pattern instead
   - 'gpkg_filename_pattern': "USGS-(.*)-ngen" # The pattern used to extract the gage_id (designated as *) from the .gpkg filenames contained inside path_hf_basins_gpkg (when it's a dir w/ many gpkg).   Default 'gage_{gage_id}.gpkg')
 formulation_metadata:  
-  - 'dataset_name': 'regn_jul26_casamnom_clust_test2' # Required. 
+  - 'dataset_name': 'an_ex_regn_jul26_casamnom_clust' # Required. 
   - 'formulation_base': 'casamnom' # Required. Basename of formulation. the rr, sp, and gw will be added to this if 'formulation_id' is left empty
   - 'formulation_id':  # Optional alternative in lieu of generating a formulation_id based on 'formulation_base'. Should leave empty if automatic formulation_id generation desired.
   - 'formulation_ver': # Optional. The version of the formulation
