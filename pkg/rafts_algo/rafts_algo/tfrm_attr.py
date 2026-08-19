@@ -1,6 +1,6 @@
 """Attribute Aggregation and Transformation
 Attribute transformation functionality has been deprecated in 2026 in favor
- of custom-generated hfATLAS watershed attributes.
+of custom-generated hfATLAS watershed attributes.
 """
 # Changelog/contributions
 #     2025-10-10 refactor to renamed rafts_algo modules, GL
@@ -431,7 +431,8 @@ def std_path_miss_tfrm(dir_db_attrs: str | os.PathLike) -> os.PathLike:
     :return: The path inside 
     `Path(dir_db_attrs/Path(missing/needed_loc_attrs.csv))`
     :rtype: os.PathLike
-    ..seealso::
+
+    .. seealso::
         `proc.attr.hydfab::std_path_miss_tfrm` companion function
     """
     path_need_attrs = Path(Path(dir_db_attrs) / Path('missing_tform/needed_loc_attrs_for_tform.csv'))
@@ -444,14 +445,13 @@ def write_missing_attrs(attrs_retr_sub:list, dir_db_attrs: str | os.PathLike,
 
     :param attrs_retr_sub: The list of attributes for aggregation and eventual transformation
     :type attrs_retr_sub: list
-    :param dir_db_attrs: Directory where parquet files of attribute data
-      stored
+    :param dir_db_attrs: Directory where parquet files of attribute data stored
     :type dir_db_attrs: str | os.PathLike
     :param comid:  USGS NHDplus common identifier for a catchment
     :type comid: str
     :param path_tfrm_cfig: Filepath of config file. Optional. Used as a descriptor in 
-    missing attributes file writing to help understand which transformation
-    processing config identified missing attributes
+                           missing attributes file writing to help understand which transformation
+                           processing config identified missing attributes
     :type path_tfrm_cfig: str | os.PathLike
     """
     # Changelog / Contributions
@@ -500,6 +500,7 @@ def tfrm_attr_comids_wrap(comids: Iterable, path_tfrm_cfig: str | os.PathLike):
     :type comids: Iterable
     :param path_tfrm_cfig: Path to transformation config file (the attribute config file must also be in same directory!)
     :type path_tfrm_cfig: str | os.PathLike
+
     .. seealso::
         The `rafts_tfrm_attrs.py` script, which calls this wrapper function
 
