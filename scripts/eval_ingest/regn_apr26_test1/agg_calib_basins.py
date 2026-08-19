@@ -4,7 +4,7 @@
 import pandas as pd
 import geopandas as gpd
 from pathlib import Path
-import fs_algo.utils as fsutil
+import rafts_algo.utils as raftsutil
 import ast
 import logging
 from typing import Union, List
@@ -41,7 +41,7 @@ def read_hfatlas_subset_dask(
         logging.error("No valid parquet files found in the provided paths.")
         return pd.DataFrame()
 
-    ddfs_to_merge = []
+    ddrafts_to_merge = []
     found_attrs = set()
 
     # 2. PEEK phase: Read only the schema metadata
@@ -82,18 +82,18 @@ def read_hfatlas_subset_dask(
         
         ddf = ddf.rename(columns=rename_dict)
         ddf = ddf.set_index(map_id_col)
-        ddfs_to_merge.append(ddf)
+        ddrafts_to_merge.append(ddf)
 
-    if not ddfs_to_merge:
+    if not ddrafts_to_merge:
         logging.warning("None of the requested attributes were found.")
         expected_cols = [map_id_col] if attrs_sel == 'all' else [map_id_col] + (attrs_sel if isinstance(attrs_sel, list) else [])
         return pd.DataFrame(columns=expected_cols)
 
     # 4. MERGE phase
     logging.info("Building Dask merge graph...")
-    combined_ddf = ddfs_to_merge[0]
-    for i in range(1, len(ddfs_to_merge)):
-        combined_ddf = combined_ddf.join(ddfs_to_merge[i], how='outer')
+    combined_ddf = ddrafts_to_merge[0]
+    for i in range(1, len(ddrafts_to_merge)):
+        combined_ddf = combined_ddf.join(ddrafts_to_merge[i], how='outer')
 
     # 5. COMPUTE phase
     logging.info("Executing computations and pulling subset to memory...")

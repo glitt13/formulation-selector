@@ -8,7 +8,7 @@ retr_attr_hydatl(
   hf_ids,
   path_ha,
   ha_vars,
-  hf_id_col = c("hf_uid", "hf_id")[2],
+  hf_id_col = c("hf_uid", "hf_id", "divide-id")[2],
   s3_ha = "s3://lynker-spatial/tabular/hydroATLAS/hydroatlas_vars.parquet"
 )
 }

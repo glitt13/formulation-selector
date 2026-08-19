@@ -17,6 +17,6 @@ standardized path to attribute parquet file
 \seealso{
 \link[proc.attr.hydfab]{proc_attr_wrap}
 
-\code{fs_algo.utils.fs_read_attr_comid()} python function
+\code{rafts_algo.utils.rafts_read_attr_comid()} python function
 that reads these files
 }

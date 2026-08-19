@@ -639,7 +639,7 @@ retr_hfab_id_wrap <- function(dt_need_hf, path_oconus_hfab_config,
                                      y=sub_need_hf_nomor,
                                      all.x = TRUE,all.y = FALSE,by = col_usgsId)
 
-      # Standardize the unique identifiers to the format used across formulation-selector
+      # Standardize the unique identifiers to the format used across rafts
       dt_have_hf <- proc.attr.hydfab::std_feat_id(df=dt_need_hf_mrge,
                                                   name_featureSource ="custom_hfuid",
                                                   col_featureID = "hf_uid")
@@ -744,7 +744,7 @@ get_linestring_midpoint <- function(sf_lines) {
 }
 
 retr_hfuids <- function(loc_ids,
-                        path_oconus_hfab_config, # e.g. "~/git/formulation-selector/scripts/eval_ingest/bm_test25/bm_oconus_config.yaml"
+                        path_oconus_hfab_config, # e.g. "~/git/rafts/scripts/eval_ingest/bm_test25/bm_oconus_config.yaml"
                         featureSource = c("nwissite","wqp","comid","location")[1]
   ){
   #' @title Retrieve the hydrofabric unique id

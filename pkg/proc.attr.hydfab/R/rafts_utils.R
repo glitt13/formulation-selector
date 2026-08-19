@@ -1,6 +1,6 @@
 # A collection of convenience functions used in some RaFTS scripts that are not
 #. core to RaFTS processing (e.g. not dependent on generating data for further
-#. use in the python fs_algo package)
+#. use in the python rafts_algo package)
 
 # Changelog / Contributions
 # 2025-08-14 Added logr, GL
@@ -130,7 +130,7 @@ retrieve_attr_exst <- function(comids, vars, dir_db_attrs, bucket_conn=NA){
 std_dir_logs <- function(dir_db_attrs){
   #' @title Define the standard directory used for storing log files
   #' @param dir_db_attrs The path where attribute data are stored
-  #' @seealso fs_prep.std_dir_log (python w/ different arg)
+  #' @seealso rafts_prep.std_dir_log (python w/ different arg)
   #' @export
   base_dir <- dir_db_attrs %>% base::dirname() %>% base::dirname()
   dir_log <- file.path(base_dir,"logs")
@@ -145,7 +145,7 @@ std_path_log <- function(dir_log, path_attr_config,script=''){
   #' @param dir_log The RaFTS project's standard log directory
   #' @param path_attr_config Filepath to the attribute config file
   #' @param script The string of the script name to add to the log's filename. Default ''.
-  #' @seealso fs_prep.std_path_log (python similar w/ different args)
+  #' @seealso rafts_prep.std_path_log (python similar w/ different args)
   #' @export
   ds_dir <- base::basename(base::dirname(path_attr_config))
   config_fn <- base::basename(tools::file_path_sans_ext(path_attr_config))

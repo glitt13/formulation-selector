@@ -1,7 +1,7 @@
 '''
 @title: Generate a test dataset from hfATLAS outputs
 @author: Guy Litt <guy.litt@noaa.gov>
-@description: This is the first fs_select output from the Apr 2026 calibration
+@description: This is the first rafts_select output from the Apr 2026 calibration
  experiments. Selection criteria: multiobj function, equally weighting NNSE & MAPPE
 @usage: python prep_regn_test.py "/full/path/to/regn_prep_config.yaml"
 
@@ -13,7 +13,7 @@ import argparse
 import pandas as pd
 from pathlib import Path
 import yaml
-import fs_prep.proc_eval_metrics as pem
+import rafts_prep.proc_eval_metrics as pem
 import logging
 import geopandas as gpd
 
@@ -22,7 +22,7 @@ if __name__ == "__main__":
     parser.add_argument('path_config', type=str, help='Path to the YAML configuration file')
     args = parser.parse_args()
     # The path to the configuration
-    path_config = Path(args.path_config).expanduser() # path_config = Path('~/git/formulation-selector/scripts/eval_ingest/regn_apr26_test1/regn_prep_config.yaml').expanduser() 
+    path_config = Path(args.path_config).expanduser() # path_config = Path('~/git/rafts/scripts/eval_ingest/regn_apr26_test1/regn_prep_config.yaml').expanduser() 
 
     if not Path(path_config).exists():
         raise ValueError("The provided path to the configuration file does not exist: {path_config}")

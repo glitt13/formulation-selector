@@ -12,7 +12,7 @@ library(dplyr)
 library(glue)
 library(proc.attr.hydfab)
 
-path_rfc_locs <-   "~/git/formulation-selector/scripts/prediction/rfc_locs/nws_nwm_crosswalk.txt"
+path_rfc_locs <-   "~/git/rafts/scripts/prediction/rfc_locs/nws_nwm_crosswalk.txt"
 dir_save_nhdp <- file.path("~/noaa/regionalization/data/analyses/nhdpv2/") # Place the final output
 dir_save_nhdp_chunk <- file.path(dir_save_nhdp,"chunk") # Place the geopackage chunks here
 if(!dir.exists(dir_save_nhdp_chunk)){

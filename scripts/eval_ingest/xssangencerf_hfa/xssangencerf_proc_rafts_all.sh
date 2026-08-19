@@ -17,10 +17,10 @@ set -euo pipefail || { echo "..."; exit 1; }
 # PATH DEFINITIONS
 # -----------------------------------------------------------------------------
 echo "Using system home directory as basis for all paths: $HOME"
-DIR_REPO="$HOME/git/formulation-selector"
+DIR_REPO="$HOME/git/rafts"
 DIR_CONFIG="${DIR_REPO}/scripts/eval_ingest/xssangencerf_hfa"
-DIR_PREP="${DIR_REPO}/pkg/fs_prep/fs_prep/flow"
-DIR_PY="${DIR_REPO}/pkg/fs_algo/fs_algo/flow"
+DIR_PREP="${DIR_REPO}/pkg/rafts_prep/rafts_prep/flow"
+DIR_PY="${DIR_REPO}/pkg/rafts_algo/rafts_algo/flow"
 
 echo "Running processing from $DIR_CONFIG"
 
@@ -38,7 +38,7 @@ uv run --project "${DIR_REPO}/pkg" python "${DIR_CONFIG}/prep_xssaus_metrics.py"
 
 # 2 Aggregate they hydrofabric based on the gage_id (CAMELS basins subset)
 echo "--> Aggregating the hydrofabric attributes based on the gage_id (CAMELS basins subset)..."
-uv run --project "${DIR_REPO}/pkg" python "${DIR_PREP}/fs_agg_hfatl_basin.py" \
+uv run --project "${DIR_REPO}/pkg" python "${DIR_PREP}/rafts_agg_hfatl_basin.py" \
     --path_prep_config "${DIR_CONFIG}/xssangencerf_prep_config.yaml" \
     --path_attr_config "${DIR_CONFIG}/xssangencerf_attr_config.yaml" || {
     echo "ERROR: Hydrofabric aggregation failed. Exiting."
@@ -49,7 +49,7 @@ echo "Hydrofabric aggregation completed successfully!"
 
 # 3. Train the algorithms 
 echo "--> Training & testing algorithms..."
-uv run --project "${DIR_REPO}/pkg" python "${DIR_PY}/fs_proc_algo_pool.py" "${DIR_CONFIG}/xssangencerf_algo_config.yaml" --chunk_size 4 || {
+uv run --project "${DIR_REPO}/pkg" python "${DIR_PY}/rafts_proc_algo_pool.py" "${DIR_CONFIG}/xssangencerf_algo_config.yaml" --chunk_size 4 || {
     echo "ERROR: Algorithm training failed. Exiting."
     exit 1
 }

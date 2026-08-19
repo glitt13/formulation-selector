@@ -39,7 +39,7 @@ dir_user <- system.file("extdata","user_data_std", package="proc.attr.hydfab") #
 dir_dataset <- file.path(dir_user,'xssa-mini')
 path_mini_ds <- file.path(dir_dataset,'xSSA-mini_Raven_blended.nc')
 
-ls_fs_std <- proc.attr.hydfab::proc_attr_read_gage_ids_fs(dir_dataset)
+ls_rafts_std <- proc.attr.hydfab::proc_attr_read_gage_ids_fs(dir_dataset)
 
 ha_vars <- c('pet_mm_s01', 'cly_pc_sav')#, 'cly_pc_uav') # hydroatlas variables
 sc_vars <- c() # TODO look up variables. May need to select datasets first

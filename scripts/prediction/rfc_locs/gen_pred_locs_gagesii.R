@@ -10,7 +10,7 @@
 #' FALSE and full generation of the prediction metadata parquet file will take
 #' tens of minutes instead (because some locations will never be found)
 #' @example \dontrun{Rscript gen_pred_locs_gagesii.R
-#' "{home_dir}/git/formulation-selector/scripts/eval_ingest/xssa_us/xssaus_pred_config.yaml"
+#' "{home_dir}/git/rafts/scripts/eval_ingest/xssa_us/xssaus_pred_config.yaml"
 #' "{home_dir}/noaa/data/HARBOR/collated_basins_all.tsv""}
 
 # Changelog/contributions

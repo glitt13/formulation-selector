@@ -12,11 +12,11 @@ REM 4. Run the script by typing its name and pressing Enter: xssaus_proc_rafts_a
 echo "Using system home directory as basis for all paths: %USERPROFILE%"
 
 REM --- Set Directory Paths ---
-REM The system-specific path to the formulation-selector repo
-set "DIR_REPO=%USERPROFILE%\git\formulation-selector\"
+REM The system-specific path to the rafts repo
+set "DIR_REPO=%USERPROFILE%\git\rafts\"
 set "DIR_CONFIG=%DIR_REPO%scripts\eval_ingest\xssa_us\"
 set "DIR_PRED=%DIR_REPO%scripts\prediction\rfc_locs\"
-set "DIR_PY=%DIR_REPO%pkg\fs_algo\fs_algo\flow\"
+set "DIR_PY=%DIR_REPO%pkg\rafts_algo\rafts_algo\flow\"
 set "DIR_R=%DIR_REPO%pkg\proc.attr.hydfab\flow\"
 
 echo "Running processing from %DIR_CONFIG%"
@@ -29,17 +29,17 @@ echo "Starting execution of xssa_us process sensitivity scripts..."
 
 REM Run the R script to grab attributes
 echo "Grabbing attributes"
-Rscript "%DIR_R%fs_attrs_grab.R" "%DIR_CONFIG%xssaus_attr_config.yaml"
+Rscript "%DIR_R%rafts_attrs_grab.R" "%DIR_CONFIG%xssaus_attr_config.yaml"
 echo "Attribute grabbing completed!"
 
 REM Run attribute transformer
 echo "Generating transformed attributes"
-python "%DIR_PY%fs_tfrm_attrs.py" "%DIR_CONFIG%xssaus_attrs_tform.yaml"
+python "%DIR_PY%rafts_tfrm_attrs.py" "%DIR_CONFIG%xssaus_attrs_tform.yaml"
 echo "Attribute transformations completed!"
 
 REM Train the algorithms
 echo "Training & testing algorithms..."
-python "%DIR_PY%fs_proc_algo_viz.py" "%DIR_CONFIG%xssaus_algo_config_uncn.yaml"
+python "%DIR_PY%rafts_proc_algo_viz.py" "%DIR_CONFIG%xssaus_algo_config_uncn.yaml"
 echo "Algorithm training completed!"
 
 echo "Attribute grabbing, transformation, and algorithm training executed successfully!"
@@ -54,16 +54,16 @@ echo "Acquired prediction location attribute data and geometry data"
 
 REM 4.2 Perform transformations on prediction locations
 echo "Transforming prediction location attribute data"
-python "%DIR_PY%fs_tfrm_attrs.py" "%DIR_CONFIG%xssaus_attrs_tform.yaml"
+python "%DIR_PY%rafts_tfrm_attrs.py" "%DIR_CONFIG%xssaus_attrs_tform.yaml"
 echo "Transformed prediction location attribute data"
 
 REM 4.3 Perform the prediction
 echo "Performing process predictions"
-python "%DIR_PY%fs_pred_algo.py" "%DIR_CONFIG%xssaus_pred_config_uncn.yaml"
+python "%DIR_PY%rafts_pred_algo.py" "%DIR_CONFIG%xssaus_pred_config_uncn.yaml"
 
 REM 4.4 Map the predictions (static map)
 echo "Plotting the process predictions on static map"
-python "%DIR_CONFIG%fs_proc_viz_xssaus.py" "%DIR_CONFIG%xssaus_pred_config_uncn.yaml"
+python "%DIR_CONFIG%rafts_proc_viz_xssaus.py" "%DIR_CONFIG%xssaus_pred_config_uncn.yaml"
 echo "Completed prediction mapping"
 
 echo "Finished the xSSA process sensitivity mapping predictions"

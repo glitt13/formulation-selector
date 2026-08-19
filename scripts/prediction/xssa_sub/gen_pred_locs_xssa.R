@@ -5,10 +5,10 @@
 #' @reference https://www.nature.com/articles/s41467-022-28010-7
 #' @param path_cfig_pred The path to the prediction configuration yaml file. May use glue formatting for {home_dir}
 #' @examples
-#' \dontrun{Rscript gen_pred_locs_xssa.R --path_cfig_pred "{home_dir}/git/formulation-selector/path/to/pred_config.yaml"
+#' \dontrun{Rscript gen_pred_locs_xssa.R --path_cfig_pred "{home_dir}/git/rafts/path/to/pred_config.yaml"
 #' }
 #' # When wanting to randomly subsample from a dataset, set the total # of samples and optionally the seed number
-#' \dontrun{Rscript gen_pred_locs_xssa.R --path_cfig_pred "{home_dir}/git/formulation-selector/path/to/pred_config.yaml"
+#' \dontrun{Rscript gen_pred_locs_xssa.R --path_cfig_pred "{home_dir}/git/rafts/path/to/pred_config.yaml"
 #'                                       --subsamp_n 20
 #'                                       --subsamp_seed 123
 #' }
@@ -28,7 +28,7 @@ main <- function(){
   }
   # Define args supplied to command line
   home_dir <- Sys.getenv("HOME")
-  path_cfig_pred <- glue::glue(as.character(args[1])) # path_cfig_pred <- glue::glue("{home_dir}/git/formulation-selector/scripts/eval_ingest/xssa/xssa_pred_config.yaml")
+  path_cfig_pred <- glue::glue(as.character(args[1])) # path_cfig_pred <- glue::glue("{home_dir}/git/rafts/scripts/eval_ingest/xssa/xssa_pred_config.yaml")
   subsamp_n <- ifelse(length(args) >= 2, base::as.integer(args[2]), 20) #subsamp_n <- 20
   subsamp_seed <- ifelse(length(args) >=3, base::as.integer(args[2]), 432) # subsamp_seed <- 432
 
@@ -64,7 +64,7 @@ main <- function(){
   ###################### DATASET-SPECIFIC CUSTOM MUNGING #########################
   # USER INPUT: Paths to relevant config files
   name_prep_config <- cfig_pred[['name_prep_config']]
-  path_raw_config <- proc.attr.hydfab::build_cfig_path(path_cfig_pred,name_prep_config)#glue::glue("{home_dir}/git/formulation-selector/scripts/eval_ingest/xssa/xssa_prep_config.yaml")
+  path_raw_config <- proc.attr.hydfab::build_cfig_path(path_cfig_pred,name_prep_config)#glue::glue("{home_dir}/git/rafts/scripts/eval_ingest/xssa/xssa_prep_config.yaml")
 
 
   # --------------------------- INPUT DATA READ -------------------------------- #
@@ -100,17 +100,17 @@ main <- function(){
 
   dir_dataset <- proc.attr.hydfab::std_dir_dataset(Retr_Params$paths$dir_std_base,datasets)
 
-  # Retrieve the gage_ids, featureSource, & featureID from fs_proc standardized output
-  ls_fs_std <- proc.attr.hydfab::proc_attr_read_gage_ids_fs(dir_dataset)
+  # Retrieve the gage_ids, featureSource, & featureID from rafts_proc standardized output
+  ls_rafts_std <- proc.attr.hydfab::proc_attr_read_gage_ids_fs(dir_dataset)
 
   # TODO add option to read in gage ids from a separate data source
-  #gage_ids <- ls_fs_std$gage_ids
-  featureSource <- ls_fs_std$featureSource
-  featureID <- ls_fs_std$featureID
-  fs_path <- ls_fs_std$path_dat_in
+  #gage_ids <- ls_rafts_std$gage_ids
+  featureSource <- ls_rafts_std$featureSource
+  featureID <- ls_rafts_std$featureID
+  rafts_path <- ls_rafts_std$path_dat_in
 
   # The standardized geopackage filepath
-  path_save_gpkg <- proc.attr.hydfab:::std_path_retr_gpkg(fs_path)
+  path_save_gpkg <- proc.attr.hydfab:::std_path_retr_gpkg(rafts_path)
 
 
 

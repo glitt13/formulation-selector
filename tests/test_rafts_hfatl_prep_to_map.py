@@ -12,16 +12,16 @@ import geopandas as gpd
 import xarray as xr
 import numpy as np
 from shapely.geometry import LineString
-import fs_algo.utils as fsutil
+import rafts_algo.utils as raftsutil
 
 class TestHfAtlasRaftsWorkflow(unittest.TestCase):
     """
     Integration test for the hfATLAS-based RaFTS workflow without mocking.
     
-    1) Data Ingestion: fs_hfatlas_to_rafts_prep.py (Python-based attribute/geometry extraction)
-    2) Training: fs_proc_algo_pool.py (Parallelized multiprocessing & clustering)
-    3) Prediction: fs_pred_algo.py (Dynamic cluster discovery)
-    4) Mapping: fs_map_pred_hfatl.py (CONUS-wide cluster mapping)
+    1) Data Ingestion: hfatlas_to_rafts_prep.py (Python-based attribute/geometry extraction)
+    2) Training: rafts_proc_algo_pool.py (Parallelized multiprocessing & clustering)
+    3) Prediction: rafts_pred_algo.py (Dynamic cluster discovery)
+    4) Mapping: rafts_map_pred_hfatl.py (CONUS-wide cluster mapping)
     """
 
     @classmethod
@@ -40,9 +40,9 @@ class TestHfAtlasRaftsWorkflow(unittest.TestCase):
         
         # Resolve script paths dynamically from repo root (assuming tests/ is 1 level down)
         cls.dir_repo = Path(__file__).resolve().parents[1] 
-        cls.path_fs_proc_algo_pool = cls.dir_repo / "pkg" / "fs_algo" / "fs_algo" / "flow" / "fs_proc_algo_pool.py"
-        cls.path_fs_pred_algo = cls.dir_repo / "pkg" / "fs_algo" / "fs_algo" / "flow" / "fs_pred_algo.py"
-        cls.path_fs_map_pred = cls.dir_repo / "pkg" / "fs_algo" / "fs_algo" / "flow" / "fs_map_pred_hfatl.py"
+        cls.path_rafts_proc_algo_pool = cls.dir_repo / "pkg" / "rafts_algo" / "rafts_algo" / "flow" / "rafts_proc_algo_pool.py"
+        cls.path_rafts_pred_algo = cls.dir_repo / "pkg" / "rafts_algo" / "rafts_algo" / "flow" / "rafts_pred_algo.py"
+        cls.path_rafts_map_pred = cls.dir_repo / "pkg" / "rafts_algo" / "rafts_algo" / "flow" / "rafts_map_pred_hfatl.py"
         
         # 1. GENERATE DYNAMIC YAML CONFIGURATIONS
         cls.path_attr_cfg = cls.dir_base / "attr_config.yaml"
@@ -105,7 +105,7 @@ class TestHfAtlasRaftsWorkflow(unittest.TestCase):
             yaml.dump(pred_cfg, f)
             
         # Output Directories
-        dirs_std_dict = fsutil.fs_save_algo_dir_struct(cls.dir_base)
+        dirs_std_dict = raftsutil.rafts_save_algo_dir_struct(cls.dir_base)
         cls.dir_out = dirs_std_dict.get('dir_out')
         cls.dir_out_alg_ds = Path(dirs_std_dict.get('dir_out_alg_base')) / cls.dataset
         cls.dir_out_preds_ds = Path(dirs_std_dict.get('dir_out_preds_base')) / cls.dataset
@@ -172,10 +172,10 @@ class TestHfAtlasRaftsWorkflow(unittest.TestCase):
 
         # 2. Generate the loc.gpkg using the utility and our dummy HF
         print("Generating points GPKG...")
-        gdf_hf_points = fsutil.generate_algo_points_gpkg_wrap(
+        gdf_hf_points = raftsutil.generate_algo_points_gpkg_wrap(
             div_ids=pd.Series(div_ids),
             path_hf_gpkg=dummy_hf_path, 
-            path_gpkg_fs_prep=gpkg_loc_path,
+            path_gpkg_rafts_prep=gpkg_loc_path,
             hf_layer='flowpaths',
             map_id_col='divide_id',
             featureSource='hf_test_source'
@@ -184,10 +184,10 @@ class TestHfAtlasRaftsWorkflow(unittest.TestCase):
         # 3. Extract Parquet Attributes from our dummy HA
         print("Lazy-loading and merging hfATLAS attributes...")
         ha_vars = ['pet_mm_s01', 'cly_pc_sav', 'cly_pc_uav']
-        df_hfatlas = fsutil.read_hfatlas_wrap_dask([dummy_ha_path], attrs_sel=ha_vars, map_id_col='divide_id')
+        df_hfatlas = raftsutil.read_hfatlas_wrap_dask([dummy_ha_path], attrs_sel=ha_vars, map_id_col='divide_id')
         
         # 4. Combine and Write to VPU-partitioned directories
-        fsutil.hfatl_hf_cmbo_wrap(
+        raftsutil.hfatl_hf_cmbo_wrap(
             df_hfatlas=df_hfatlas,
             gdf_hf=gdf_hf_points,
             ds=self.dataset,
@@ -201,10 +201,10 @@ class TestHfAtlasRaftsWorkflow(unittest.TestCase):
         self.assertGreater(len(parq_files), 0, "hfATLAS parquet files were not generated.")
         self.assertTrue(gpkg_loc_path.exists(), "The companion GPKG was not generated.")
 
-    def test_02_fs_proc_algo_pool(self):
-        """Integration test for the parallelized fs_proc_algo_pool.py script"""
+    def test_02_rafts_proc_algo_pool(self):
+        """Integration test for the parallelized rafts_proc_algo_pool.py script"""
         cmd_algo_train = [
-            sys.executable, str(self.path_fs_proc_algo_pool), 
+            sys.executable, str(self.path_rafts_proc_algo_pool), 
             str(self.path_algo_cfg), 
             "--chunk_size", "2"
         ]
@@ -212,7 +212,7 @@ class TestHfAtlasRaftsWorkflow(unittest.TestCase):
         try:
             subprocess.run(cmd_algo_train, check=True, capture_output=True, text=True)
         except subprocess.CalledProcessError as e:
-            self.fail(f"Subprocess {self.path_fs_proc_algo_pool.name} failed.\nStderr: {e.stderr}\nStdout: {e.stdout}")
+            self.fail(f"Subprocess {self.path_rafts_proc_algo_pool.name} failed.\nStderr: {e.stderr}\nStdout: {e.stdout}")
 
         self.assertTrue(self.dir_out_alg_ds.exists())
         
@@ -224,29 +224,29 @@ class TestHfAtlasRaftsWorkflow(unittest.TestCase):
         joblib_files = list(self.dir_out_alg_ds.glob("*.joblib"))
         self.assertGreater(len(joblib_files), 0, "No trained algorithm .joblib files found.")
 
-    def test_03_fs_pred_algo(self):
+    def test_03_rafts_pred_algo(self):
         """Integration test for the dynamic cluster prediction step"""
-        cmd_pred = [sys.executable, str(self.path_fs_pred_algo), str(self.path_pred_cfg)]
+        cmd_pred = [sys.executable, str(self.path_rafts_pred_algo), str(self.path_pred_cfg)]
         print(f"Running {cmd_pred}")
         try: 
             subprocess.run(cmd_pred, check=True, capture_output=True, text=True)
         except subprocess.CalledProcessError as e:
-            self.fail(f"Subprocess {self.path_fs_pred_algo.name} failed.\nStderr: {e.stderr}\nStdout: {e.stdout}")
+            self.fail(f"Subprocess {self.path_rafts_pred_algo.name} failed.\nStderr: {e.stderr}\nStdout: {e.stdout}")
 
         self.assertTrue(self.dir_out_preds_ds.exists())
         
-        # Verify that fsutil.discover_dynamic_algos successfully found the models and predicted them
+        # Verify that raftsutil.discover_dynamic_algos successfully found the models and predicted them
         pred_files = list(self.dir_out_preds_ds.glob("*.parquet"))
         self.assertGreater(len(pred_files), 0, "No prediction parquet files were generated.")
 
-    def test_04_fs_map_pred_hfatl(self):
+    def test_04_rafts_map_pred_hfatl(self):
         """Integration test for final visual mapping across the hfATLAS hydrofabric"""
-        cmd_map = [sys.executable, str(self.path_fs_map_pred), str(self.path_pred_cfg), "--analysis_str", "hfatl_test"]
+        cmd_map = [sys.executable, str(self.path_rafts_map_pred), str(self.path_pred_cfg), "--analysis_str", "hfatl_test"]
         print(f"Running {cmd_map}")
         try: 
             subprocess.run(cmd_map, check=True, capture_output=True, text=True)
         except subprocess.CalledProcessError as e:
-            self.fail(f"Subprocess {self.path_fs_map_pred.name} failed.\nStderr: {e.stderr}")
+            self.fail(f"Subprocess {self.path_rafts_map_pred.name} failed.\nStderr: {e.stderr}")
 
         self.assertTrue(self.dir_out_viz_ds.exists())
         

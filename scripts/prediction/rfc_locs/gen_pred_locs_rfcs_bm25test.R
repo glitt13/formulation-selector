@@ -10,8 +10,8 @@
 #' FALSE and full generation of the prediction metadata parquet file will take
 #' tens of minutes instead (because some locations will never be found)
 #' @example \dontrun{Rscript gen_pred_locs_rfcs_bm25test.R
-#' "{home_dir}/git/formulation-selector/scripts/eval_ingest/bm_test25/bm25_pred_config.yaml"
-#' "{home_dir}/git/formulation-selector/scripts/prediction/rfc_locs/nws_nwm_crosswalk.txt"}
+#' "{home_dir}/git/rafts/scripts/eval_ingest/bm_test25/bm25_pred_config.yaml"
+#' "{home_dir}/git/rafts/scripts/prediction/rfc_locs/nws_nwm_crosswalk.txt"}
 
 # Changelog/contributions
 #. 2025-05-21 adapted from gen_pred_locs_rfcs.R for bm25 oconus testing
@@ -36,8 +36,8 @@ main <- function(){
   testing_dataset <- FALSE
   # Define args supplied to command line
   home_dir <- Sys.getenv("HOME")
-  path_cfig_pred <- glue::glue(as.character(args[1])) # path_cfig_pred <- glue::glue("{home_dir}/git/formulation-selector/scripts/eval_ingest/bm_test25/bm25_pred_config.yaml")
-  path_nwm_crosswalk <- glue::glue(as.character(args[2])) #path_nwm_crosswalk <- "~/git/formulation-selector/scripts/prediction/rfc_locs/nws_nwm_crosswalk.txt"
+  path_cfig_pred <- glue::glue(as.character(args[1])) # path_cfig_pred <- glue::glue("{home_dir}/git/rafts/scripts/eval_ingest/bm_test25/bm25_pred_config.yaml")
+  path_nwm_crosswalk <- glue::glue(as.character(args[2])) #path_nwm_crosswalk <- "~/git/rafts/scripts/prediction/rfc_locs/nws_nwm_crosswalk.txt"
   # Read in config file
   if(!base::file.exists(path_cfig_pred)){
     stop(glue::glue("The provided path_cfig_pred does not exist: {path_cfig_pred}"))
@@ -56,12 +56,12 @@ main <- function(){
   dir_log <- proc.attr.hydfab::std_dir_logs(Retr_Params$paths$dir_db_attrs)
   path_log <- proc.attr.hydfab::std_path_log(dir_log,path_attr_config,script = "gen_pred_locs_rfcs_bm25test")
   logr::log_open(path_log)#file_name=base::basename(path_log),logdir=base::dirname(path_log))
-  logr::log_print(glue::glue("Running fs_attrs_miss.R {path_attr_config} at {Sys.time()}"))
+  logr::log_print(glue::glue("Running rafts_attrs_miss.R {path_attr_config} at {Sys.time()}"))
   if(base::length(args)!=2){
     logr::log_print("Expected to have two arguments in
                   Rscript gen_pred_locs_rfcs_bm25test.R
-                  {home_dir}/git/formulation-selector/scripts/eval_ingest/bm_test25/bm25_pred_config.yaml
-                  {home_dir}/git/formulation-selector/scripts/prediction/rfc_locs/nws_nwm_crosswalk.txt",
+                  {home_dir}/git/rafts/scripts/eval_ingest/bm_test25/bm25_pred_config.yaml
+                  {home_dir}/git/rafts/scripts/prediction/rfc_locs/nws_nwm_crosswalk.txt",
                     level="ERROR")
   }
   logr::log_print("Retrieving comid-attribute pairings for RFC locations using gen_pred_locs_rfcs_bm25test.R",level="INFO")

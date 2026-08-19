@@ -17,11 +17,11 @@ set -euo pipefail || { echo "..."; exit 1; }
 # PATH DEFINITIONS
 # -----------------------------------------------------------------------------
 echo "Using system home directory as basis for all paths: $HOME"
-DIR_REPO="$HOME/git/formulation-selector"
+DIR_REPO="$HOME/git/rafts"
 DIR_CONFIG="${DIR_REPO}/scripts/eval_ingest/hfatl_huc12_clust"
 #DIR_PRED="${DIR_REPO}/scripts/prediction/rfc_locs"
-DIR_PREP="${DIR_REPO}/pkg/fs_prep/fs_prep/flow"
-DIR_PY="${DIR_REPO}/pkg/fs_algo/fs_algo/flow"
+DIR_PREP="${DIR_REPO}/pkg/rafts_prep/rafts_prep/flow"
+DIR_PY="${DIR_REPO}/pkg/rafts_algo/rafts_algo/flow"
 
 echo "Running processing from $DIR_CONFIG"
 
@@ -39,7 +39,7 @@ uv run --project "${DIR_REPO}/pkg" python "${DIR_CONFIG}/prep_hfatl_clust.py" "$
 
 # 2 Aggregate they hydrofabric based on the gage_id (CAMELS basins subset)
 echo "--> Aggregating the hydrofabric attributes based on the gage_id (CAMELS basins subset)..."
-uv run --project "${DIR_REPO}/pkg" python "${DIR_PREP}/fs_agg_hfatl_basin.py" \
+uv run --project "${DIR_REPO}/pkg" python "${DIR_PREP}/rafts_agg_hfatl_basin.py" \
     --path_prep_config "${DIR_CONFIG}/hfatl_prep_config.yaml" \
     --path_attr_config "${DIR_CONFIG}/hfatl_attr_config.yaml" || {
     echo "ERROR: Hydrofabric aggregation failed. Exiting."
@@ -49,7 +49,7 @@ echo "Hydrofabric aggregation completed successfully!"
 
 # 3. Train the algorithms 
 echo "--> Training & testing algorithms..."
-uv run --project "${DIR_REPO}/pkg" python "${DIR_PY}/fs_proc_algo_pool.py" "${DIR_CONFIG}/hfatl_algo_config.yaml" --chunk_size 4 || {
+uv run --project "${DIR_REPO}/pkg" python "${DIR_PY}/rafts_proc_algo_pool.py" "${DIR_CONFIG}/hfatl_algo_config.yaml" --chunk_size 4 || {
     echo "ERROR: Algorithm training failed. Exiting."
     exit 1
 }
@@ -57,7 +57,7 @@ echo "Algorithm training completed successfully!"
 
 # 4. Perform the prediction
 echo "--> Performing predictions..."
-uv run --project "${DIR_REPO}/pkg" python "${DIR_PY}/fs_pred_algo.py" "${DIR_CONFIG}/hfatl_pred_config.yaml" || {
+uv run --project "${DIR_REPO}/pkg" python "${DIR_PY}/rafts_pred_algo.py" "${DIR_CONFIG}/hfatl_pred_config.yaml" || {
     echo "ERROR: Process predictions failed. Exiting."
     exit 1
 }
@@ -65,7 +65,7 @@ echo "Predictions completed successfully!"
 
 # 5. Pair the donor-receivers
 echo "--> Performing donor-receiver pairing..."
-uv run --project "${DIR_REPO}/pkg" python "${DIR_PY}/fs_pair_donors.py" "${DIR_CONFIG}/hfatl_pred_config.yaml" || {
+uv run --project "${DIR_REPO}/pkg" python "${DIR_PY}/rafts_pair_donors.py" "${DIR_CONFIG}/hfatl_pred_config.yaml" || {
     echo "ERROR: Process predictions failed. Exiting."
     exit 1
 }
@@ -73,7 +73,7 @@ echo "Process predictions completed successfully!"
 
 # 6. Map the predictions
 echo "--> Plotting the process predictions on static map..."
-uv run --project "${DIR_REPO}/pkg" python "${DIR_PY}/fs_map_pred_hfatl.py" "${DIR_CONFIG}/hfatl_pred_config.yaml" || {
+uv run --project "${DIR_REPO}/pkg" python "${DIR_PY}/rafts_map_pred_hfatl.py" "${DIR_CONFIG}/hfatl_pred_config.yaml" || {
     echo "ERROR: Prediction mapping failed. Exiting."
     exit 1
 }

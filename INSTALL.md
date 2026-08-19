@@ -4,12 +4,12 @@ Detailed instructions on how to install, configure, and get the project running.
 
 # RaFTS Installation
 
-First, clone the [formulation-selector](https://github.com/NOAA-OWP/formulation-selector) git repo.
+First, clone the [rafts](https://github.com/NOAA-OWP/rafts) git repo.
 
 ```
 cd [your-desired-local-directory-here]
-git clone https://github.com/NOAA-OWP/formulation-selector.git
-cd formulation-selector
+git clone https://github.com/NOAA-OWP/rafts.git
+cd rafts
 ```
 
 ## Python environment configuration
@@ -41,15 +41,15 @@ Linux and macOS:
 - wget -qO- https://astral.sh/uv/install.sh | sh
 
 2. Create a virtual environment:
-- Navigate to the install directory of RaFTS in the command line (e.g., C:/GITDIR/formulation-selector/install),
-   - e.g., ```cd C:/GITDIR/formulation-selector/install```
+- Navigate to the install directory of RaFTS in the command line (e.g., C:/GITDIR/rafts/install),
+   - e.g., ```cd C:/GITDIR/rafts/install```
 
 - With UV, you can specify the python version when creating your virtual environment
    - E.g., If I use ```--python 3.12``` as a flage to create my virtual environment, that environment will have python 3.11 associated with it.
 
    - ```uv venv ../.venv --python 3.12```
 
-   - NOTE: .venv will be the name of your virtual environment and it will be at formulation-selector/.venv
+   - NOTE: .venv will be the name of your virtual environment and it will be at rafts/.venv
 - Activate your new virtual environment:
 - Windows:
    - ```../.venv/Script/activate```
@@ -65,15 +65,15 @@ Linux and macOS:
 - https://www.python.org/downloads/
 
 2. Create a virtual environment:
-- Navigate to the install directory of RaFTS in the command line (e.g., C:/GITDIR/formulation-selector/install),
-   - e.g., ```cd C:\GITDIR\formulation-selector/install```
+- Navigate to the install directory of RaFTS in the command line (e.g., C:/GITDIR/rafts/install),
+   - e.g., ```cd C:\GITDIR\rafts/install```
 - The python.exe you use to create the virtual environment defines which python version will be associated with you environment.
    - E.g., If I use python3.11/python.exe to create my virtual environment, that environment will have python 3.11 associated with it.
    - If you want to specify a specific python version other than the default in your path, you can point to it explicitly, e.g.,
    - ```../Path/To/Your/Python/python.exe -m venv ../.venv```
    - Or use the default python version,
    - ```python -m venv ../.venv```
-   - NOTE: .venv will be the name of your virtual environment and it will be at formulation-selector/.venv
+   - NOTE: .venv will be the name of your virtual environment and it will be at rafts/.venv
 - Activate your new virtual environment:
 - Windows:
    - ```../.venv/Script/activate```
@@ -115,8 +115,8 @@ Linux and macOS:
       - Close and reopen your terminal to activate the newly install conda instance.
 
 2. Create a virtual environment:
-- Navigate to the install directory of RaFTS (e.g., C:/GITDIR/formulation-selector/install),
-   - e.g., ```cd C:\GITDIR\formulation-selector/install```
+- Navigate to the install directory of RaFTS (e.g., C:/GITDIR/rafts/install),
+   - e.g., ```cd C:\GITDIR\rafts/install```
 - By default the environment will be named *rafts_env*. If you would like to change the name, open *install/requirements.yml* and update the *name: rafts_env* option with your preferred environment name.
 
 3. Install the python dependencies:
@@ -132,10 +132,10 @@ TODO: Fill out better R install instructions
 
 
 ## Install the `proc.attr.hydfab` R Package
-The features of the formulation-selector that acquire catchment attributes that feed into the model prediction algorithm (which, as noted above, is in Python) are written in R to promote compatibility with the [NOAA-OWP/hydrofabric](https://github.com/NOAA-OWP/hydrofabric).
+The features of the rafts that acquire catchment attributes that feed into the model prediction algorithm (which, as noted above, is in Python) are written in R to promote compatibility with the [NOAA-OWP/hydrofabric](https://github.com/NOAA-OWP/hydrofabric).
 
-Modify the path to `fs_dir` inside
-[flow.install.proc.attr.hydfab.R](https://github.com/NOAA-OWP/formulation-selector/tree/main/pkg/proc.attr.hydfab/flow/flow.install.proc.attr.hydfab.R)
+Modify the path to `rafts_dir` inside
+[flow.install.proc.attr.hydfab.R](https://github.com/NOAA-OWP/rafts/tree/main/pkg/proc.attr.hydfab/flow/flow.install.proc.attr.hydfab.R)
 
 If you do not wish to run unit tests, set `RunTest <- FALSE` inside this install script.
 

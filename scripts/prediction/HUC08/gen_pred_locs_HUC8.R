@@ -10,9 +10,9 @@ library(future.apply) #IMPORTANT Must call to avoid import error
 
 # Set important params (Retr_Params) ----------------------------------
 home_dir <- Sys.getenv("HOME")
-path_cfig_pred <- glue::glue("{home_dir}/Lauren/FSDS/formulation-selector/scripts/eval_ingest/xssa_NWM_domain/xssanwm_pred_config.yaml")
+path_cfig_pred <- glue::glue("{home_dir}/Lauren/FSDS/rafts/scripts/eval_ingest/xssa_NWM_domain/xssanwm_pred_config.yaml")
 
-dir_repo <- glue::glue("{home_dir}/Lauren/FSDS/formulation-selector/")
+dir_repo <- glue::glue("{home_dir}/Lauren/FSDS/rafts/")
 
 # Read in config file
 if(!base::file.exists(path_cfig_pred)){
@@ -135,7 +135,7 @@ for(ds in datasets){
   # TODO add in attribute transformation of prediction variables by calling python transformation script
   # TODO make sure user activates appropriate conda environment before running!
 
-  path_tfrm_script <- glue::glue("{dir_repo}/pkg/fs_algo/fs_algo/fs_tfrm_attrs.py")
+  path_tfrm_script <- glue::glue("{dir_repo}/pkg/rafts_algo/rafts_algo/rafts_tfrm_attrs.py")
   path_tfrm_config <- glue::glue("{dir_repo}/scripts/eval_ingest/xssa_us/xssaus_attrs_tform.yaml")
   if(!file.exists(path_tfrm_script)){
     stop(glue::glue("Does not exist: {path_tfrm_script}"))
@@ -147,8 +147,8 @@ for(ds in datasets){
   source(text_script)
 
   # Run python function from the tfrm_attr.py file:
-  reticulate::use_condaenv(condaenv="rafts_env",required=TRUE) # The anaconda environment that has the fs_algo RaFTS package installed
-  fta <- reticulate::import("fs_algo.tfrm_attr")
+  reticulate::use_condaenv(condaenv="rafts_env",required=TRUE) # The anaconda environment that has the rafts_algo RaFTS package installed
+  fta <- reticulate::import("rafts_algo.tfrm_attr")
   result <- try(fta$tfrm_attr_comids_wrap(comids = df[,col_comid],
                                           path_tfrm_cfig = path_tfrm_config))
   if("try-error" %in% class(result)){
@@ -237,7 +237,7 @@ for(ds in datasets){
   # # TODO add in attribute transformation of prediction variables by calling python transformation script
   # # TODO make sure user activates appropriate conda environment before running!
   #
-  # path_tfrm_script <- glue::glue("{dir_repo}/pkg/fs_algo/fs_algo/fs_tfrm_attrs.py")
+  # path_tfrm_script <- glue::glue("{dir_repo}/pkg/rafts_algo/rafts_algo/rafts_tfrm_attrs.py")
   # path_tfrm_config <- glue::glue("{dir_repo}/scripts/eval_ingest/xssa_us/xssaus_attrs_tform.yaml")
   # if(!file.exists(path_tfrm_script)){
   #   stop(glue::glue("Does not exist: {path_tfrm_script}"))
@@ -249,8 +249,8 @@ for(ds in datasets){
   # source(text_script)
   #
   # # Run python function from the tfrm_attr.py file:
-  # reticulate::use_condaenv(condaenv="py312",required=TRUE) # The anaconda environment that has the fs_algo RaFTS package installed
-  # fta <- reticulate::import("fs_algo.tfrm_attr")
+  # reticulate::use_condaenv(condaenv="py312",required=TRUE) # The anaconda environment that has the rafts_algo RaFTS package installed
+  # fta <- reticulate::import("rafts_algo.tfrm_attr")
   # result <- try(fta$tfrm_attr_comids_wrap(comids = df[,col_comid],
   #                                         path_tfrm_cfig = path_tfrm_config))
   # if("try-error" %in% class(result)){

@@ -1,6 +1,6 @@
 """
 Script to identify the insensitive processes corresponding to the ngenCERF locations 
-Originally conceptualized inside formulation-selector/scripts/anlaysis/calibration/visualize_process_sens_dists.R
+Originally conceptualized inside rafts/scripts/anlaysis/calibration/visualize_process_sens_dists.R
 Changelog/contributions
     2026-06-03 GeminiPro3.1 auto-converted/condensed from aforementioned R script, GL
 """

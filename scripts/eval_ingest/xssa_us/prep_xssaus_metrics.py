@@ -3,7 +3,7 @@
 @author: Guy Litt <guy.litt@noaa.gov>
 @description: Reads in the xSSA dataset, 
     subset xSSA data to just NHDplus basins, 
-    and converts to a standard format expected by the formulation-selector tooling.
+    and converts to a standard format expected by the rafts tooling.
 @usage: python proc_xssa_metrics.py "/full/path/to/xssaus_config.yaml"
 
 Changelog/contributions
@@ -14,7 +14,7 @@ import argparse
 import pandas as pd
 from pathlib import Path
 import yaml
-from fs_prep.proc_eval_metrics import read_schm_ls_of_dict, proc_col_schema
+from rafts_prep.proc_eval_metrics import read_schm_ls_of_dict, proc_col_schema
 import numpy as np
 import re
 if __name__ == "__main__":
@@ -22,7 +22,7 @@ if __name__ == "__main__":
     parser.add_argument('path_config', type=str, help='Path to the YAML configuration file')
     args = parser.parse_args()
     # The path to the configuration
-    path_config = args.path_config # '~/git/formulation-selector/scripts/eval_ingest/xssa_us/xssaus_prep_config.yaml' 
+    path_config = args.path_config # '~/git/rafts/scripts/eval_ingest/xssa_us/xssaus_prep_config.yaml' 
 
     if not Path(path_config).exists():
         raise ValueError("The provided path to the configuration file does not exist: {path_config}")
@@ -91,7 +91,7 @@ if __name__ == "__main__":
         df_xssa_wt = dat_all_xssa.apply(lambda x: x*dat_all_xssa[' weight '] if x.name in cols_proc else x)
 
         # Rename columns
-        # These are the standardized column names defined in formulation-selector/pkg/fs_prep/fs_prep/fs_categories.yaml:
+        # These are the standardized column names defined in rafts/pkg/rafts_prep/rafts_prep/rafts_categories.yaml:
 
         df_cols_mtch = pd.DataFrame({'new_cols': new_cols})
         df_cols_mtch['key'] = [x.split('_')[0] for x in df_cols_mtch['new_cols']]

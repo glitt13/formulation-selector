@@ -4,10 +4,10 @@ col_schema:   # required column mappings in the input attributes dataset
   - 'featureID': '{gage_id}' # python f-string / R glue() format; converting the 'gage_id' to the standardized featureID used by nhdplusTools. Must use '{gage_id}' e.g. 'USGS-{gage_id}'
   - 'featureSource': 'hfv22_id' # The standardized nhdplusTools featureSource. Possible featureSources might be 'nwissite', 'comid', 'hfv22_id', hfv30_id
   - 'metric_cols': "b|satdk|satpsi|slope|maxsmc|wltsmc|max_gw_storage|Cgw|expon|alpha_fc|Kn|Klf|Kinf_nash_surface|retention_depth_nash_surface|a_Xinanjiang_inflection_point_parameter|b_Xinanjiang_shape_parameter|x_Xinanjiang_shape_parameter|MFSNO|SCAMAX|RSURF_SNOW|CWP|VCMX25|MP" # Column(s) in the dataset corresponding to the evaluation metrics. If multiple exist, separate each string by '|' e.g. 'rmse|kge|nse'
-  - 'metric_mappings': "b|satdk|satpsi|slope|maxsmc|wltsmc|max_gw_storage|Cgw|expon|alpha_fc|Kn|Klf|Kinf_nash_surface|retention_depth_nash_surface|a_Xinanjiang_inflection_point_parameter|b_Xinanjiang_shape_parameter|x_Xinanjiang_shape_parameter|MFSNO|SCAMAX|RSURF_SNOW|CWP|VCMX25|MP" # The mapping of metric_cols to the standardized format as specified in fs_categories.yaml, separate each metric name by '|' e.g. 'RMSE|KGE|NSE'
+  - 'metric_mappings': "b|satdk|satpsi|slope|maxsmc|wltsmc|max_gw_storage|Cgw|expon|alpha_fc|Kn|Klf|Kinf_nash_surface|retention_depth_nash_surface|a_Xinanjiang_inflection_point_parameter|b_Xinanjiang_shape_parameter|x_Xinanjiang_shape_parameter|MFSNO|SCAMAX|RSURF_SNOW|CWP|VCMX25|MP" # The mapping of metric_cols to the standardized format as specified in rafts_categories.yaml, separate each metric name by '|' e.g. 'RMSE|KGE|NSE'
   - 'val_metrics': 'False'
 file_io: # May define {home_dir} for python's '{home_dir}/string_path'.format(home_dir =str(Path.home())) functionality
-  - 'home_dir': '~' # OPTIONAL, define the home_dir path. If undefined, fs_prep will automatically assume default '~' 
+  - 'home_dir': '~' # OPTIONAL, define the home_dir path. If undefined, rafts_prep will automatically assume default '~' 
   - 'path_data': '{home_dir}/noaa/regionalization/data/raw/regn_apr26_test1/sloth_noahowp_cfe_x_selected_params.parquet' # Where the raw input data are stored.
   - 'data_source': 'hfATLAS_hf22' # The hydrofabricATLAS dataset version (may need to update with major version changes, or somehow integrate with dvc tracking)
   - 'dir_save': '{home_dir}/noaa/regionalization/data/input' # Required. The save location of standardized output
@@ -26,7 +26,7 @@ formulation_metadata:
   - 'formulation_id':  # Optional alternative in lieu of generating a formulation_id based on 'formulation_base'. Should leave empty if automatic formulation_id generation desired.
   - 'formulation_ver': # Optional. The version of the formulation
   - 'temporal_res': '' # The temporal resolution corresponding to the modeled data
-  - 'target_var': 'param' # Required. The target variable modeled. This is standardized. See target_var_mappings in fs_categories.yaml
+  - 'target_var': 'param' # Required. The target variable modeled. This is standardized. See target_var_mappings in rafts_categories.yaml
   - 'start_date': '1980-01-01' # Required. The YYYY-MM-DD start date corresponding to the evaluation metric's modeled timeseries
   - 'end_date':  '2010-01-01' # Required. The YYYY-MM-DD end date corresponding to the evaluation metric's modeled timeseries
   - 'modeled notes': 'Test case using data that does not matter, the wltsmc created in the hfATLAS pipeline'

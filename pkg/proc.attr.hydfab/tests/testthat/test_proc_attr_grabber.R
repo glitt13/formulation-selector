@@ -47,7 +47,7 @@ dir_user <- system.file("extdata","user_data_std", package="proc.attr.hydfab") #
 dir_dataset <- file.path(dir_user,'xssa-mini')
 path_mini_ds <- file.path(dir_dataset,'xSSA-mini_Raven_blended.nc')
 
-ls_fs_std <- proc.attr.hydfab::proc_attr_read_gage_ids_fs(dir_dataset)
+ls_rafts_std <- proc.attr.hydfab::proc_attr_read_gage_ids_fs(dir_dataset)
 
 ha_vars <- c('pet_mm_s01', 'cly_pc_sav')#, 'cly_pc_uav') # hydroatlas variables
 sc_vars <- c() # TODO look up variables. May need to select datasets first
@@ -361,14 +361,14 @@ testthat::test_that('proc_attr_gageids',{
 
   path_save_gpkg <- file.path(temp_dir,"comid_check_new.gpkg")
 
-  dt_comids <- proc.attr.hydfab::proc_attr_gageids(gage_ids=ls_fs_std$gage_ids[2],
-                                      featureSource=ls_fs_std$featureSource,
-                                      featureID=ls_fs_std$featureID,
+  dt_comids <- proc.attr.hydfab::proc_attr_gageids(gage_ids=ls_rafts_std$gage_ids[2],
+                                      featureSource=ls_rafts_std$featureSource,
+                                      featureID=ls_rafts_std$featureID,
                                       path_save_gpkg = path_save_gpkg,
                                       Retr_Params=Retr_Params_usgs,
                                       lyrs="network",overwrite=FALSE) %>%
                 pkgcond::suppress_warnings()
-  testthat::expect_identical(unique(dt_comids$gage_id),ls_fs_std$gage_ids[2])
+  testthat::expect_identical(unique(dt_comids$gage_id),ls_rafts_std$gage_ids[2])
   testthat::expect_true("data.frame" %in% class(dt_comids))
 
   # test just hydroatlas var\
@@ -379,9 +379,9 @@ testthat::test_that('proc_attr_gageids',{
     file.remove(path_meta_loc)
   }
 
-  dt_comids_ha <- proc.attr.hydfab::proc_attr_gageids(gage_ids=ls_fs_std$gage_ids[2],
-                                                   featureSource=ls_fs_std$featureSource,
-                                                   featureID=ls_fs_std$featureID,
+  dt_comids_ha <- proc.attr.hydfab::proc_attr_gageids(gage_ids=ls_rafts_std$gage_ids[2],
+                                                   featureSource=ls_rafts_std$featureSource,
+                                                   featureID=ls_rafts_std$featureID,
                                                    Retr_Params=Retr_Params_ha,
                                                    path_save_gpkg = path_save_gpkg,
                                                    lyrs="network",overwrite=FALSE) %>%
@@ -389,16 +389,16 @@ testthat::test_that('proc_attr_gageids',{
   testthat::expect_true(all(unlist(unname(Retr_Params_ha$vars)) %in% dt_comids_ha$attribute))
 
   # test a wrong featureSource
-  out_wrong0 <- testthat::capture_output(proc.attr.hydfab::proc_attr_gageids(gage_ids=ls_fs_std$gage_ids[2],
+  out_wrong0 <- testthat::capture_output(proc.attr.hydfab::proc_attr_gageids(gage_ids=ls_rafts_std$gage_ids[2],
                                              featureSource='notasource',
-                                             featureID=ls_fs_std$featureID,
+                                             featureID=ls_rafts_std$featureID,
                                              Retr_Params=Retr_Params,
                                              path_save_gpkg=path_save_gpkg,
                                              lyrs="network",overwrite=FALSE))
   # Run it a second time just-in-case there is was a need to create a gpkg
-  out_wrong <- testthat::capture_error(proc.attr.hydfab::proc_attr_gageids(gage_ids=ls_fs_std$gage_ids[2],
+  out_wrong <- testthat::capture_error(proc.attr.hydfab::proc_attr_gageids(gage_ids=ls_rafts_std$gage_ids[2],
                                                                             featureSource='notasource',
-                                                                            featureID=ls_fs_std$featureID,
+                                                                            featureID=ls_rafts_std$featureID,
                                                                             Retr_Params=Retr_Params,
                                                                             path_save_gpkg=path_save_gpkg,
                                                                             lyrs="network",overwrite=FALSE))
@@ -419,7 +419,7 @@ testthat::test_that('proc_attr_gageids',{
   out  <- testthat::capture_output(
     proc.attr.hydfab::proc_attr_gageids(gage_ids=c(NA),
                       featureSource='nwissite',
-                      featureID=ls_fs_std$featureID,
+                      featureID=ls_rafts_std$featureID,
                       Retr_Params=Retr_Params,
                       path_save_gpkg = path_save_gpkg,
                       lyrs="network",overwrite=FALSE))
@@ -468,7 +468,7 @@ testthat::test_that('comid_instead_of_nwissite',{
 
 
   testthat::expect_true(base::any(base::grepl(non_comid,test_nonexst$gage_id)))
-  # NOTE 20240414: Code now expects the provided comid to be returned as featureID: https://github.com/NOAA-OWP/formulation-selector/commit/5aafac9bf01b7cce9a9e7947d9fd5dec152a8286
+  # NOTE 20240414: Code now expects the provided comid to be returned as featureID: https://github.com/NOAA-OWP/rafts/commit/5aafac9bf01b7cce9a9e7947d9fd5dec152a8286
   # testthat::expect_true(base::is.na(test_nonexst$featureID))
 
   # Test a mix of comid and non-comid:
@@ -538,26 +538,26 @@ testthat::test_that("retr_nldi_feat returns expected result with mocked get_nldi
 
 
 
-testthat::test_that("fs_retr_nhdp_comids_geom_wrap",{
+testthat::test_that("rafts_retr_nhdp_comids_geom_wrap",{
   # Testing the comid/gage_id/geometry mappings wrapper
   # UNITTEST TASKS FOR MARCH 13
   # TODO Enforce CRS 4326 across all nhdplus queries
   # TODO A multipoint reach converts to a single point
   path_save_gpkg <- file.path(temp_dir,"chck_map_gid_geom.gpkg")
 
-  rslt_normal <- proc.attr.hydfab::fs_retr_nhdp_comids_geom_wrap(path_save_gpkg=path_save_gpkg,
-                          gage_ids=ls_fs_std$gage_ids,featureSource='nwissite',
+  rslt_normal <- proc.attr.hydfab::rafts_retr_nhdp_comids_geom_wrap(path_save_gpkg=path_save_gpkg,
+                          gage_ids=ls_rafts_std$gage_ids,featureSource='nwissite',
                                 featureID = 'USGS-{gage_id}')
   required_cols <- c("featureID","featureSource","gage_id","geometry")
   testthat::expect_true(file.exists(path_save_gpkg))
-  testthat::expect_true(all(ls_fs_std$gage_ids %in% rslt_normal$gage_id))
+  testthat::expect_true(all(ls_rafts_std$gage_ids %in% rslt_normal$gage_id))
   testthat::expect_s3_class(rslt_normal$geometry,"sfc_POINT")
   testthat::expect_s3_class(rslt_normal,"sf")
   testthat::expect_true(all(required_cols %in% base::names(rslt_normal)))
 
   rm_gpkg <- file.remove(path_save_gpkg)
   comids_exst <- c("1520007","1623207","1638559","1722317")
-  rslt_comid_query <- proc.attr.hydfab::fs_retr_nhdp_comids_geom_wrap(
+  rslt_comid_query <- proc.attr.hydfab::rafts_retr_nhdp_comids_geom_wrap(
                           path_save_gpkg=path_save_gpkg,
                           gage_ids=comids_exst,featureSource='comid',
                           featureID = '{gage_id}')
@@ -571,24 +571,24 @@ testthat::test_that("fs_retr_nhdp_comids_geom_wrap",{
 })
 
 
-testthat::test_that("fs_retr_nhdp_comids_geom",{
+testthat::test_that("rafts_retr_nhdp_comids_geom",{
   # Test the function that retrieves geometry based on comid
-  retr_geom <- proc.attr.hydfab::fs_retr_nhdp_comids_geom(
-              gage_ids = ls_fs_std$gage_ids)
+  retr_geom <- proc.attr.hydfab::rafts_retr_nhdp_comids_geom(
+              gage_ids = ls_rafts_std$gage_ids)
   testthat::expect_equal(unique(retr_geom$featureSource),
-            formals(proc.attr.hydfab::fs_retr_nhdp_comids_geom)$featureSource)
+            formals(proc.attr.hydfab::rafts_retr_nhdp_comids_geom)$featureSource)
   required_cols <- c("featureID","featureSource","gage_id","geometry")
-  testthat::expect_equal(nrow(retr_geom), length(ls_fs_std$gage_ids))
-  testthat::expect_true(all(ls_fs_std$gage_ids %in% retr_geom$gage_id))
+  testthat::expect_equal(nrow(retr_geom), length(ls_rafts_std$gage_ids))
+  testthat::expect_true(all(ls_rafts_std$gage_ids %in% retr_geom$gage_id))
   testthat::expect_s3_class(retr_geom$geometry,"sfc_POINT")
   testthat::expect_s3_class(retr_geom,"data.table")
   testthat::expect_true(all(required_cols %in% base::names(retr_geom)))
 
-  bad_comid_out <- testthat::capture_output(proc.attr.hydfab::fs_retr_nhdp_comids_geom(
+  bad_comid_out <- testthat::capture_output(proc.attr.hydfab::rafts_retr_nhdp_comids_geom(
     gage_ids = "daklsteja",featureID = "{gage_id}",featureSource = "comid")) %>%
     pkgcond::suppress_warnings()
   testthat::expect_true(base::grepl( "Could not retrieve geometry",bad_comid_out))
-  bad_comid <- proc.attr.hydfab::fs_retr_nhdp_comids_geom(
+  bad_comid <- proc.attr.hydfab::rafts_retr_nhdp_comids_geom(
     gage_ids = "daklsteja",featureID = "{gage_id}",featureSource = "comid") %>%
     pkgcond::suppress_messages() %>% pkgcond::suppress_warnings()
   testthat::expect_equal(sf::st_crs(bad_comid$geometry)$epsg,4326)
@@ -697,7 +697,7 @@ testthat::test_that("gen_ds_gpkg reads and subsets geopackage correctly", {
 })
 
 
-testthat::test_that("grab_attrs_datasets_fs_wrap", {
+testthat::test_that("grab_attrs_datasets_rafts_wrap", {
   # COPY retrieve params stored in package into temp dir for standard processing
   dir_attrs_pah <- file.path(Retr_Params$paths$dir_std_base,'../attributes_pah/')
   fs::dir_copy(dir_attrs_pah, Retr_Params$paths$dir_db_attrs,overwrite = TRUE)
@@ -706,10 +706,10 @@ testthat::test_that("grab_attrs_datasets_fs_wrap", {
 
   # Mock `path_save_gpkg` inside `save_to_gpkg`
   mock_path_save_gpkg <- file.path(temp_dir,"unit_test.gpkg")
-  mockery::stub(grab_attrs_datasets_fs_wrap, "path_save_gpkg", mock_path_save_gpkg)
+  mockery::stub(grab_attrs_datasets_rafts_wrap, "path_save_gpkg", mock_path_save_gpkg)
 
   # mockery::stub(gen_ds_gpkg,"new_loc_db",TRUE)
-  ls_comids_all <- proc.attr.hydfab::grab_attrs_datasets_fs_wrap(Retr_Params,
+  ls_comids_all <- proc.attr.hydfab::grab_attrs_datasets_rafts_wrap(Retr_Params,
                                                                lyrs="network",
                                                                overwrite=FALSE) %>%
     base::suppressWarnings()
@@ -720,7 +720,7 @@ testthat::test_that("grab_attrs_datasets_fs_wrap", {
   Retr_Params_bad_ds <- Retr_Params
   Retr_Params_bad_ds$datasets <- c("bad","xssa-mini")
   testthat::expect_error(
-    proc.attr.hydfab::grab_attrs_datasets_fs_wrap(Retr_Params_bad_ds,
+    proc.attr.hydfab::grab_attrs_datasets_rafts_wrap(Retr_Params_bad_ds,
                                                     lyrs="network",
                                                     overwrite=FALSE))
   # Test when path_meta requirements not provided:
@@ -728,7 +728,7 @@ testthat::test_that("grab_attrs_datasets_fs_wrap", {
   Retr_Params_missing_meta$write_type <- NULL
   Retr_Params_missing_meta$ds_type <- NULL
   testthat::expect_error(
-    proc.attr.hydfab::grab_attrs_datasets_fs_wrap(Retr_Params_missing_meta,
+    proc.attr.hydfab::grab_attrs_datasets_rafts_wrap(Retr_Params_missing_meta,
                                                   lyrs="network",
                                                   overwrite=FALSE) %>%
       base::suppressWarnings(),
@@ -737,7 +737,7 @@ testthat::test_that("grab_attrs_datasets_fs_wrap", {
   # Test that all datasets are processed
   Retr_Params_all_ds <- Retr_Params
   Retr_Params_all_ds$datasets <- "all"
-  ls_comids_all_ds <- proc.attr.hydfab::grab_attrs_datasets_fs_wrap(Retr_Params_all_ds,
+  ls_comids_all_ds <- proc.attr.hydfab::grab_attrs_datasets_rafts_wrap(Retr_Params_all_ds,
                                                                       lyrs="network",
                                                                       overwrite=FALSE) %>%
                         base::suppressWarnings()
@@ -761,7 +761,7 @@ testthat::test_that("grab_attrs_datasets_fs_wrap", {
   fs::file_copy(path_ha_vars_pkg,path_ha_vars_tmp ,overwrite = TRUE)
   Retr_Params_no_ds$paths$paths_ha <- path_ha_vars_tmp
 
-  dat_gid_ex <- proc.attr.hydfab::grab_attrs_datasets_fs_wrap(Retr_Params = Retr_Params_no_ds,
+  dat_gid_ex <- proc.attr.hydfab::grab_attrs_datasets_rafts_wrap(Retr_Params = Retr_Params_no_ds,
                                                   lyrs="network",
                                                   path_save_gpkg_cstm = mock_path_save_gpkg,
                                                   overwrite=FALSE) %>% suppressWarnings()
@@ -939,10 +939,10 @@ if(base::dir.exists(base::dirname(path_db_gpkg_temp))){
   base::unlink(dirname(path_db_gpkg_temp),recursive = TRUE)
 }
 
-# TODO unit testing for fs_attrs_miss_wrap()
-# testthat::test_that("fs_attrs_miss_wrap",{
+# TODO unit testing for rafts_attrs_miss_wrap()
+# testthat::test_that("rafts_attrs_miss_wrap",{
 #   path_attr_config <- file.path(dir_base,"xssa_attr_config_all_vars_avail.yaml")
-#   rslt <- proc.attr.hydfab::fs_attrs_miss_wrap(path_attr_config)
+#   rslt <- proc.attr.hydfab::rafts_attrs_miss_wrap(path_attr_config)
 #
 #
 # })

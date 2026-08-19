@@ -19,12 +19,12 @@ Standardizes into common format with the following columns:
 \item \code{attribute} The attribute name from the external source
 \item \code{value} The value of the attribute
 }
-Additionally, uses the internal function \code{read_fs_attr_menu_config} to
+Additionally, uses the internal function \code{read_rafts_attr_menu_config} to
 check if the entries in the \code{attribute} column are consistent with
 expected forms, and removes those that are not defined in the menu.
 }
 \seealso{
 \link[proc.attr.hydfab]{retr_attr_new}
 
-\link[proc.attr.hydfab]{read_fs_attr_menu_config}
+\link[proc.attr.hydfab]{read_rafts_attr_menu_config}
 }

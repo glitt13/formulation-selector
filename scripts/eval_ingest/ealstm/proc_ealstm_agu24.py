@@ -54,14 +54,14 @@ import argparse
 import pandas as pd
 from pathlib import Path
 import yaml
-import fs_prep.proc_eval_metrics as pem
+import rafts_prep.proc_eval_metrics as pem
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process the YAML config file.')
     parser.add_argument('path_config', type=str, help='Path to the YAML configuration file')
     args = parser.parse_args()
     # The path to the configuration
-    path_config = args.path_config # "~/git/formulation-selector/scripts/eval_ingest/ealstm/ealstm_proc_config.yaml"
+    path_config = args.path_config # "~/git/rafts/scripts/eval_ingest/ealstm/ealstm_proc_config.yaml"
 
     if not Path(path_config).exists():
         raise ValueError("The provided path to the configuration file does not exist: {path_config}")
