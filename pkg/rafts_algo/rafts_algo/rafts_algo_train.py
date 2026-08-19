@@ -134,10 +134,10 @@ class AlgoTrainEval:
     def split_data(self):
         """Split dataframe into training and testing predictors (X) and response (y)
           variables using :func:`sklearn.model_selection.train_test_split`
-
-        Changelog:
-        2024-12-02 Add in the explicitly provided comid option
         """
+        # Changelog:
+        #     2024-12-02 Add in the explicitly provided comid option
+
         if self.task_type == 'clustering':
             # Unsupervised: No 'metric' required!
             self.df_non_na = self.df.dropna(subset=self.attrs)

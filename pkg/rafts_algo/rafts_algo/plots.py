@@ -368,11 +368,11 @@ def save_feat_imp_fig_wrap(model:any,
     :type metr: str
     :param algo_str: The algorithm string identifier (e.g. 'xgb', 'rf')
     :type algo_str: str
+    """ 
+    # Changelog/contributions
+    #     FY25 - originally created, GL
+    #     2026-08-14 refactor: generalize to other algoirthm strings, Gemni3.1Pro
 
-    Changelog/contributions
-    FY25 - originally created, GL
-    2026-08-14 refactor: generalize to other algoirthm strings, Gemni3.1Pro
-    """
     feat_imprt = getattr(model, "feature_importances_", None)
     
     if feat_imprt is None:
@@ -691,12 +691,10 @@ def gen_conus_basemap(dir_out_basemap:str | Path, # This should be the data_visu
     :type fn_basemap: str, optional
     :return: The geopandas dataframe of the basemap
     :rtype: gpd.geodataframe.GeoDataFrame
-
-    Changelog / contributions:
-    2024 Originally created
-    2025-09-22, changed from using urlib to using requests to avoid SSL error, GL
     """
-
+    # Changelog / contributions:
+    #     2024 Originally created
+    #     2025-09-22, changed from using urlib to using requests to avoid SSL error, GL
 
 
     #url = 'https://www2.census.gov/geo/tiger/GENZ2018/shp/cb_2018_us_state_500k.zip'
