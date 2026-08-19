@@ -1,8 +1,9 @@
 """Attribute Aggregation and Transformation
-
-Changelog/contributions
-2025-10-10 refactor to renamed rafts_algo modules, GL
+Attribute transformation functionality has been deprecated in 2026 in favor
+ of custom-generated hfATLAS watershed attributes.
 """
+# Changelog/contributions
+#     2025-10-10 refactor to renamed rafts_algo modules, GL
 import yaml
 import pandas as pd
 from pathlib import Path
@@ -255,11 +256,10 @@ def _sub_tform_attr_ddf(all_attr_ddf: dd.DataFrame,
     :type func: Callable[[Iterable[float]]]
     :return: Aggregated attribute value
     :rtype: float
-
-    Changelog/contributions
-    2024 originally created, GL
-    2025-05-20 fix to enforce float64 type for value column, GL
     """
+    # Changelog/contributions
+    #     2024 originally created, GL
+    #     2025-05-20 fix to enforce float64 type for value column, GL
     sub_attr_ddf= all_attr_ddf[all_attr_ddf['attribute'].isin(retr_vars)]
     sub_attr_ddf['value'] = sub_attr_ddf['value'].astype('float64') # ensure the value column is float
     attr_val = sub_attr_ddf['value'].map_partitions(func, meta=('value','float64')).compute()
@@ -388,11 +388,10 @@ def _id_need_tfrm_attrs(all_attr_ddf: dd.DataFrame|None,
     :type overwrite_tfrm: bool, optional
     :return: dict with keys of 'vars' and 'funcs' respectively representing the variables or functions that need to be created
     :rtype: dict
-
+    """
     # Changelog / Contributions
     #  2024-Nov or Dec, originally created, GL
     #  2025-03-28 add None handling for all_attr_ddf for situations when a comid doesn't exist
-    """
 
     if overwrite_tfrm or all_attr_ddf is None: # TODO double check this
         # We simply need all the variables in these situations
@@ -454,12 +453,12 @@ def write_missing_attrs(attrs_retr_sub:list, dir_db_attrs: str | os.PathLike,
     missing attributes file writing to help understand which transformation
     processing config identified missing attributes
     :type path_tfrm_cfig: str | os.PathLike
-
-    # Changelog / Contributions
-    # 2024 originally created, GL
-    # 2025-05-20 refactor to write featureID col instead of comid, GL
-
     """
+    # Changelog / Contributions
+        # 2024 originally created, GL
+        # 2025-05-20 refactor to write featureID col instead of comid, GL
+
+
     # Create path where needed attributes are saved
     path_need_attrs = std_path_miss_tfrm(dir_db_attrs)
 

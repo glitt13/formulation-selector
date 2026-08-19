@@ -1,10 +1,8 @@
 '''
-proc_eval_metrics.py
+Helper functions for processing response variable datasets in a standardized fashion. 
+In addition some limited functionality to also prepare & standardize hfATLAS predictor datasets.
 
-Helper functions for processing evaluation metrics datasets
-
-:author: Guy Litt <guy.litt@noaa.gov>
-:description: functions read in yaml schema and standardize metrics datasets
+:description: functions read in yaml schema and standardize response variable datasets
 :note: developed using python v3.12
 
 '''
@@ -295,7 +293,7 @@ def std_form_id(col_schema_df:pd.DataFrame)->str:
     :rtype: str
     """
     # TODO generate a unique formulation-id checker
-    
+
     formulation_id =  col_schema_df.loc[0, 'formulation_id']
     formulation_base =  col_schema_df.loc[0, 'formulation_base']
 
@@ -650,11 +648,10 @@ def check_fix_nwissite_gageids(df:pd.DataFrame, gage_id_col:str,
     :type replace_orig_gage_id_col: bool, optional
     :return: The provided `df`, modified in cases when inappropriate `gage_id_col`'s data format found
     :rtype: pd.DataFrame
-
-    Changelog/contributions:
-        2024 originally created, GL
-        2025-06-17 fix: ensure str in gage_id build, and ensure gage_id_col in dataframe contains all str type
     """
+    # Changelog/contributions:
+    #     2024 originally created, GL
+    #     2025-06-17 fix: ensure str in gage_id build, and ensure gage_id_col in dataframe contains all str type
 
     ls_still_bad = list()
     if featureSource == 'nwissite':
