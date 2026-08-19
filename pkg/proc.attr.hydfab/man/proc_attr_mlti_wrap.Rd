@@ -43,7 +43,7 @@ we want to be more efficient with retrieving only the needed variables as
 defined in Retr_Params$vars
 }
 \seealso{
-\link[proc.attr.hydfab]{proc_attrs_gageids}
+\link[proc.attr.hydfab]{proc_attr_gageids}
 
 \link[proc.attr.hydfab]{proc_attr_exst_wrap} Generates the need_vars
 }

@@ -13,18 +13,18 @@ import logging
 import xarray as xr
 import re
 
-import fs_algo.utils as fsutil
-import fs_prep.proc_eval_metrics as pem
+import rafts_algo.utils as raftsutil
+import rafts_prep.proc_eval_metrics as pem
 
 def prep_nexus_data(path_prep_config: Path):
     logging.info(f"Parsing configuration: {path_prep_config.name}")
     
-    # 1. Parse Config using RaFTS fs_prep utilities
+    # 1. Parse Config using RaFTS rafts_prep utilities
     config_df = pem.read_schm_ls_of_dict(path_prep_config)
     raw_config = config_df.iloc[0].dropna().to_dict()
     
     # Resolve f-strings across the entirely flattened configuration
-    fio = {k: fsutil.resolve_fstrings(v, raw_config) for k, v in raw_config.items()}
+    fio = {k: raftsutil.resolve_fstrings(v, raw_config) for k, v in raw_config.items()}
     
     # Extract schema mappings natively from the flattened dict
     orig_id_col = fio.get('gage_id', 'site_id')
@@ -162,7 +162,7 @@ def prep_nexus_data(path_prep_config: Path):
     dir_std_base = save_path_eval_metr.parent.parent.parent.parent
     
     # Let RaFTS dynamically find the .nc file that proc_col_schema just created
-    nc_paths = fsutil._std_fs_prep_ds_paths(dir_std_base=dir_std_base, ds=dataset_name, mtch_str='*.nc')
+    nc_paths = raftsutil._std_rafts_prep_ds_paths(dir_std_base=dir_std_base, ds=dataset_name, mtch_str='*.nc')
     if not nc_paths:
         logging.error("Could not locate the saved NetCDF file to build companion paths!")
         return
@@ -231,7 +231,7 @@ def prep_nexus_data(path_prep_config: Path):
             logging.error("Failed to generate 'custom_id' during geometry read. Ensure your filename pattern is correct.")
             return
             
-        out_gpkg_path = fsutil._std_fs_prep_ds_companion_gpkg_path(out_nc_path)
+        out_gpkg_path = raftsutil._std_rafts_prep_ds_companion_gpkg_path(out_nc_path)
         
         if gdf_loc.empty:
             logging.error("The resulting geometry dataframe is completely empty! Check identifier string matching.")

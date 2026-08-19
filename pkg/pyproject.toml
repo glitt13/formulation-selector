@@ -1,23 +1,23 @@
 [project]
-name = "formulation-selector"
+name = "rafts"
 version = "0.1.0"
 requires-python = "==3.12.11" 
 dependencies = [
-    "fs_algo",
-    "fs_prep",
+    "rafts_algo",
+    "rafts_prep",
     "xgboost>=3.4.0",
 ]
 
 [tool.uv.workspace]
 members = [
-    "fs_algo",
-    "fs_prep"
+    "rafts_algo",
+    "rafts_prep"
 ]
 
 # Tell the root project to look in the local workspace for these packages
 [tool.uv.sources]
-fs_algo = { workspace = true }
-fs_prep = { workspace = true }
+rafts_algo = { workspace = true }
+rafts_prep = { workspace = true }
 
 [dependency-groups]
 dev = [

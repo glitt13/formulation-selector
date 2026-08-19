@@ -29,7 +29,7 @@ library(mapdata)
 # state_name <- get_state_or_territory(latitude, longitude)
 #
 # print(state_name)
-path_oconus_hfab_config <- "~/git/formulation-selector/scripts/workflow_configs/legacy/bm_test25/bm_oconus_config.yaml"
+path_oconus_hfab_config <- "~/git/rafts/scripts/workflow_configs/legacy/bm_test25/bm_oconus_config.yaml"
 path_nwps_rpt  <- 'https://water.noaa.gov/resources/downloads/reports/nwps_all_gauges_report.csv'
 path_hads_sites <- 'https://hads.ncep.noaa.gov/USGS/ALL_USGS-HADS_SITES.txt'
 path_nwps_api <- "https://api.water.noaa.gov/nwps/v1/gauges"
@@ -151,7 +151,7 @@ path_attrs_conus <- file.path(dir_hfab_tab_dat,"hydroatlas_vars.parquet")
 # ---------------------------------------------------------------------------- #
 #. Trying to formalize here
 # ---------------------------------------------------------------------------- #
-path_attr_config <- "~/git/formulation-selector/scripts/workflow_configs/legacy/xssa/xssa_attr_config.yaml"
+path_attr_config <- "~/git/rafts/scripts/workflow_configs/legacy/xssa/xssa_attr_config.yaml"
 
 Retr_Params <- proc.attr.hydfab::attr_cfig_parse(path_attr_config)
 
@@ -162,16 +162,16 @@ Retr_Params$paths$path_attrs_all_oconus <- proc.attr.hydfab:::std_path_attrs_all
 
 # TODO generate hf_id using proc.attr.hydfab::custom_hf_id(dt_ha_oc, col_vpu = "vpu",col_id = "id")
 
-# Example of retrieving a .nc standardized dataset following fs_proc
+# Example of retrieving a .nc standardized dataset following rafts_proc
 ds <- Retr_Params$datasets[1]
-ls_fs_std <- proc.attr.hydfab::proc_attr_read_gage_ids_fs( proc.attr.hydfab::std_dir_dataset(Retr_Params$paths$dir_std_base,ds))
+ls_rafts_std <- proc.attr.hydfab::proc_attr_read_gage_ids_fs( proc.attr.hydfab::std_dir_dataset(Retr_Params$paths$dir_std_base,ds))
 # PROBLEM: this assumes every gage_ids uses the same featureSource
 # WORKAROUND: make a list of networks using standardized options e.g.
-# TODO implement a standardization of hydrofabric ids in the fs_proc Step 1 approach.
+# TODO implement a standardization of hydrofabric ids in the rafts_proc Step 1 approach.
 # Idea: Generate a separate .nc file for hydrofabric formatting & separate for nhdplus fomratting
 # Idea: Generate a separate
 
-ls_fs_std_ntwk <- list()
+ls_rafts_std_ntwk <- list()
 # TODO determine how to split up data between network options:
 # 1) conus vs. 2) oconus?
 # 2) networks: 1) nhdplus (aka conus) vs 2) hydrofabric (oconus) vs 3) HydroATLAS networks (global)
@@ -181,8 +181,8 @@ ls_fs_std_ntwk <- list()
 #. 3) coordinates
 #. 4) hydrofabric location ids
 
-ls_fs_std_ntwk[['nhdplus']] <- ls_fs_std # valid with historic versions of proc.attr.hydfab, specific to NHDPlus comid locations
-ls_fs_std_ntwk[['hydrofabric']] <- list(loc_id = c('ak-wb-10272','prvi-wb-'), # TODO how to handle coordinate searches??
+ls_rafts_std_ntwk[['nhdplus']] <- ls_rafts_std # valid with historic versions of proc.attr.hydfab, specific to NHDPlus comid locations
+ls_rafts_std_ntwk[['hydrofabric']] <- list(loc_id = c('ak-wb-10272','prvi-wb-'), # TODO how to handle coordinate searches??
                                         col_uid = c('hf_uid','hf_uid'), # TODO how to handle coordinate searches??
                                         path_dat_in = "TODO") # hydrofabric compatibility for OCONUS-relevant IDs
 
@@ -228,7 +228,7 @@ ha <- arrow::open_dataset(path_attrs_all_oconus) %>%
   dplyr::collect()
 
 # Now grab attributes for these watersheds
-path_attr_config <- "~/git/formulation-selector/scripts/analysis/benchmarking/oconus_attrs.yaml"
+path_attr_config <- "~/git/rafts/scripts/analysis/benchmarking/oconus_attrs.yaml"
 Retr_Params <- proc.attr.hydfab::attr_cfig_parse(path_attr_config)
 
 
@@ -236,12 +236,12 @@ Retr_Params <- proc.attr.hydfab::attr_cfig_parse(path_attr_config)
 
 # TODO add
 
-proc.attr.hydfab::fs_attrs_miss_mlti_wrap(path_attr_config)
+proc.attr.hydfab::rafts_attrs_miss_mlti_wrap(path_attr_config)
 
 
 #%%
 # PROCESS ATTRIBUTES
-dt_comids <- proc.attr.hydfab:::grab_attrs_datasets_fs_wrap(Retr_Params,overwrite = FALSE)
+dt_comids <- proc.attr.hydfab:::grab_attrs_datasets_rafts_wrap(Retr_Params,overwrite = FALSE)
 
 # --------------------------- Compile attributes --------------------------- #
 # Demonstration of how to retrieve attributes/comids that exist inside dir_db_attrs:

@@ -17,5 +17,5 @@ std_path_log(dir_log, path_attr_config, script = "")
 Define the path for storing log file specific to an atttribute config
 }
 \seealso{
-fs_prep.std_path_log (python similar w/ different args)
+rafts_prep.std_path_log (python similar w/ different args)
 }

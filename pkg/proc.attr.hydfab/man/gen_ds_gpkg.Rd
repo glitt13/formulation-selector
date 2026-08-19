@@ -29,7 +29,7 @@ while! The geopackage database reduces the total NLDI queries needed for
 any dataset.
 }
 \seealso{
-\link[proc.attr.hydfab]{grab_attrs_datasets_fs_wrap}
+\link[proc.attr.hydfab]{grab_attrs_datasets_rafts_wrap}
 
 \link[proc.attr.hydfab]{update_gpkg_db}
 }

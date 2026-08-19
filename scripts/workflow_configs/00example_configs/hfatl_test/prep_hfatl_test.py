@@ -11,7 +11,7 @@ import argparse
 import pandas as pd
 from pathlib import Path
 import yaml
-import fs_prep.proc_eval_metrics as pem
+import rafts_prep.proc_eval_metrics as pem
 import logging
 
 if __name__ == "__main__":
@@ -19,7 +19,7 @@ if __name__ == "__main__":
     parser.add_argument('path_config', type=str, help='Path to the YAML configuration file')
     args = parser.parse_args()
     # The path to the configuration
-    path_config = Path(args.path_config).expanduser() # path_config = Path('~/git/formulation-selector/scripts/workflow_configs/legacy/xssa/xssa_prep_config.yaml').expanduser() 
+    path_config = Path(args.path_config).expanduser() # path_config = Path('~/git/rafts/scripts/workflow_configs/legacy/xssa/xssa_prep_config.yaml').expanduser() 
 
     if not Path(path_config).exists():
         raise ValueError("The provided path to the configuration file does not exist: {path_config}")

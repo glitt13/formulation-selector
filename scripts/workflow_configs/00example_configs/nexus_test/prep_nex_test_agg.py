@@ -1,7 +1,7 @@
 '''
 @title: Generate a test dataset from hfATLAS outputs based on basin-aggregated values
 @author: Guy Litt <guy.litt@noaa.gov>
-@description: This is the first fs_select output from the July 2026 calibration
+@description: This is the first rafts_select output from the July 2026 calibration
  experiments. Selection criteria: multiobj function, equally weighting NNSE & MAPPE
 @usage: 
 python agg_calib_basins.py # Must run first
@@ -15,7 +15,7 @@ import argparse
 import pandas as pd
 from pathlib import Path
 import yaml
-import fs_prep.proc_eval_metrics as pem
+import rafts_prep.proc_eval_metrics as pem
 import logging
 import geopandas as gpd
 
@@ -24,7 +24,7 @@ if __name__ == "__main__":
     parser.add_argument('path_config', type=str, help='Path to the YAML configuration file')
     args = parser.parse_args()
     # The path to the configuration
-    path_config = Path(args.path_config).expanduser() # path_config = Path('~/git/formulation-selector/scripts/workflow_configs/regn_apr26_test1/regn_prep_config.yaml').expanduser() 
+    path_config = Path(args.path_config).expanduser() # path_config = Path('~/git/rafts/scripts/workflow_configs/regn_apr26_test1/regn_prep_config.yaml').expanduser() 
 
     if not Path(path_config).exists():
         raise ValueError("The provided path to the configuration file does not exist: {path_config}")
@@ -66,7 +66,7 @@ if __name__ == "__main__":
     # # From NOAA gdrive RegionalizationCollab/calibration/benchmark_hydrofabric/selected_subsets_edited_geom/
     # # [sites_new_ngsh_edited_geom.zip](https://drive.google.com/file/d/1Sh0lI2O8qXAmdJ8X2G8bvFu5z976kdcx/view?usp=drive_link)
     # data_list = []
-    # gdfs_to_concat = []
+    # gdrafts_to_concat = []
     # for gpkg_path in dir_hydfab_calib.glob("*.gpkg"):
     #     usgs_id = gpkg_path.name.replace(".gpkg","").replace("gage_","")
 
@@ -81,13 +81,13 @@ if __name__ == "__main__":
     #                     'divide_id': div_id_midsized
     #                     })
     #     closest_row['gage_id'] = usgs_id
-    #     # Convert the polygon into a Point geometry so fs_hfatlas_to_rafts_prep.py can extract X/Y coords
+    #     # Convert the polygon into a Point geometry so hfatlas_to_rafts_prep.py can extract X/Y coords
     #     closest_row['geometry'] = closest_row.geometry.centroid
-    #     gdfs_to_concat.append(closest_row)
+    #     gdrafts_to_concat.append(closest_row)
 
-    # if gdfs_to_concat:
+    # if gdrafts_to_concat:
     #     logging.info("Building consolidated GeoPackage for gages...")
-    #     combined_gdf = pd.concat(gdfs_to_concat, ignore_index=True)
+    #     combined_gdf = pd.concat(gdrafts_to_concat, ignore_index=True)
     #     # Ensure it remains a proper GeoDataFrame with the original CRS
     #     combined_gdf = gpd.GeoDataFrame(combined_gdf, geometry='geometry', crs=gdf.crs)
         

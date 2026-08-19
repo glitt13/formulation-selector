@@ -10,11 +10,11 @@
 #' @reference https://www.nature.com/articles/s41467-022-28010-7
 #' @param path_cfig_pred The path to the prediction configuration yaml file. May use glue formatting for {home_dir}
 #' @examples
-#' \dontrun{Rscript gen_pred_locs_xssaus_map.R "{home_dir}/git/formulation-selector/scripts/workflow_configs/legacy/xssa_us/xssaus_pred_config.yaml"
-#' "{home_dir}/noaa/regionalization/data/analyses/basin_selection" "{home_dir}/git/formulation-selector/"
+#' \dontrun{Rscript gen_pred_locs_xssaus_map.R "{home_dir}/git/rafts/scripts/workflow_configs/legacy/xssa_us/xssaus_pred_config.yaml"
+#' "{home_dir}/noaa/regionalization/data/analyses/basin_selection" "{home_dir}/git/rafts/"
 #' }
 #' # When wanting to randomly subsample from a dataset, set the total # of samples and optionally the seed number
-#' \dontrun{Rscript gen_pred_locs_xssa.R --path_cfig_pred "{home_dir}/git/formulation-selector/path/to/pred_config.yaml"
+#' \dontrun{Rscript gen_pred_locs_xssa.R --path_cfig_pred "{home_dir}/git/rafts/path/to/pred_config.yaml"
 #'                                       --subsamp_n 20
 #'                                       --subsamp_seed 123
 #' }
@@ -36,9 +36,9 @@ main <- function(){
   }
   # Define args supplied to command line
   home_dir <- Sys.getenv("HOME")
-  path_cfig_pred <- glue::glue(as.character(args[1])) # path_cfig_pred <- glue::glue("{home_dir}/git/formulation-selector/scripts/workflow_configs/legacy/xssa_us/xssaus_pred_config.yaml")
+  path_cfig_pred <- glue::glue(as.character(args[1])) # path_cfig_pred <- glue::glue("{home_dir}/git/rafts/scripts/workflow_configs/legacy/xssa_us/xssaus_pred_config.yaml")
   dir_base_huc08 <- glue::glue(as.character(args[2]))# dir_base_huc08 <- dir_repo <- glue::glue("{home_dir}/noaa/regionalization/data/analyses/basin_selection"
-  dir_repo <- glue::glue(as.character(args[3])) #dir_repo <- glue::glue("{home_dir}/git/formulation-selector/")
+  dir_repo <- glue::glue(as.character(args[3])) #dir_repo <- glue::glue("{home_dir}/git/rafts/")
   # Read in config file
   if(!base::file.exists(path_cfig_pred)){
     stop(glue::glue("The provided path_cfig_pred does not exist: {path_cfig_pred}"))
@@ -184,7 +184,7 @@ main <- function(){
     # TODO add in attribute transformation of prediction variables by calling python transformation script
     # TODO make sure user activates appropriate conda environment before running!
 
-    path_tfrm_script <- glue::glue("{dir_repo}/pkg/fs_algo/fs_algo/fs_tfrm_attrs.py")
+    path_tfrm_script <- glue::glue("{dir_repo}/pkg/rafts_algo/rafts_algo/rafts_tfrm_attrs.py")
     path_tfrm_config <- glue::glue("{dir_repo}/scripts/workflow_configs/legacy/xssa_us/xssaus_attrs_tform.yaml")
     if(!file.exists(path_tfrm_script)){
       stop(glue::glue("Does not exist: {path_tfrm_script}"))
@@ -196,8 +196,8 @@ main <- function(){
     source(text_script)
 
     # Run python function from the tfrm_attr.py file:
-    reticulate::use_condaenv(condaenv="py312",required=TRUE) # The anaconda environment that has the fs_algo RaFTS package installed
-    fta <- reticulate::import("fs_algo.tfrm_attr")
+    reticulate::use_condaenv(condaenv="py312",required=TRUE) # The anaconda environment that has the rafts_algo RaFTS package installed
+    fta <- reticulate::import("rafts_algo.tfrm_attr")
     result <- try(fta$tfrm_attr_comids_wrap(comids = df[,col_comid],
                                         path_tfrm_cfig = path_tfrm_config))
     if("try-error" %in% class(result)){

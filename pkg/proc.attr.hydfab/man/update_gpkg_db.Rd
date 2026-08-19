@@ -27,5 +27,5 @@ to the gpkg database.
 \seealso{
 \link[proc.attr.hydfab]{gen_ds_gpkg}
 
-\link[proc.attr.hydfab]{grab_attrs_datasets_fs_wrap}
+\link[proc.attr.hydfab]{grab_attrs_datasets_rafts_wrap}
 }

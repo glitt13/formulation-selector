@@ -33,7 +33,7 @@ needed to acquire variables of interest. List objects include the following:
 \item \code{paths} list of directories or paths used to acquire and save data These include the following:
 \item \code{path$dir_db_attrs} local path for saving catchment attributes as parquet files
 \item \code{path$paths_ha} the local or s3 location(s) of tabular data file with HydroATLAS downscaled to hydrofabric divide
-\item \code{path$dir_std_base} the location of user_data_std containing dataset that were standardized by \pkg{fs_prep}.
+\item \code{path$dir_std_base} the location of user_data_std containing dataset that were standardized by \pkg{rafts_prep}.
 \item \code{datasets} character vector. A list of datasets of interest inside \code{paths$dir_std_base}. Not used in \code{proc_attr_gageids}
 }}
 
@@ -55,10 +55,10 @@ that corresponded to the gage_ids.
 \details{
 Intendended for a single dataset, aka input file directory
 containing data. For multiple datasets, refer to dataset looping inside
-\link[proc.attr.hydfab]{grab_attrs_datasets_fs_wrap}
+\link[proc.attr.hydfab]{grab_attrs_datasets_rafts_wrap}
 }
 \seealso{
-\link[proc.attr.hydfab]{grab_attrs_datasets_fs_wrap} loops over multiple datasets in calling this gage_id retrieval
+\link[proc.attr.hydfab]{grab_attrs_datasets_rafts_wrap} loops over multiple datasets in calling this gage_id retrieval
 
 \link[proc.attr.hydfab]{proc_attr_mlti_wrap} Acquire attributes
 }

@@ -12,7 +12,7 @@ import argparse
 import pandas as pd
 from pathlib import Path
 import yaml
-from fs_prep.proc_eval_metrics import read_schm_ls_of_dict, proc_col_schema
+from rafts_prep.proc_eval_metrics import read_schm_ls_of_dict, proc_col_schema
 import numpy as np
 import re
 if __name__ == "__main__":
@@ -21,7 +21,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     # The path to the configuration
     home_dir = Path.home()
-    path_prep_config = args.path_config.format(home_dir = str(Path.home())) #  Path(f'{home_dir}/git/formulation-selector/scripts/workflow_configs/legacy/bm_test25/bm25test_prep_config.yml')
+    path_prep_config = args.path_config.format(home_dir = str(Path.home())) #  Path(f'{home_dir}/git/rafts/scripts/workflow_configs/legacy/bm_test25/bm25test_prep_config.yml')
 
     print("Converting schema to DataFrame")
     # Read in the config file & convert to pd.DataFrame

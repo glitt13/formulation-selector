@@ -6,9 +6,9 @@ ds_type: 'prediction' # Required string. Strongly recommended to select 'predict
 write_type: 'parquet' # Required filetype for writing NLDI feature metadata. Default 'parquet'. May also select 'csv'
 path_meta: "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.{write_type}" # Required. Prediction attribute metadata filepath formatted for R's glue() & py f-strings as generated using `proc.attr.hydfab::write_meta_nldi_feat()`. Strongly suggested default format:  "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.{write_type}"
 pred_file_comid_colname: 'featureID' # REQUIRED. The column name containing the location identifiers used for prediction in the prediction metadata file as defined above as path_meta.
-path_tfrm_script: "{home_dir}/git/formulation-selector/pkg/fs_algo/fs_algo/fs_tfrm_attrs.py" # Required. The filepath to the transformation script
-conda_env: 'py312' # Required. The anaconda environment with fs_algo installed so that the fs_tfrm_attrs.py script may run.
-#path_attr_config: "{home_dir}/git/formulation-selector/scripts/workflow_configs/legacy/xssa_us/xssaus_attr_config.yaml" # TODO Remove this! Use name_attr_config instead
+path_tfrm_script: "{home_dir}/git/rafts/pkg/rafts_algo/rafts_algo/rafts_tfrm_attrs.py" # Required. The filepath to the transformation script
+conda_env: 'py312' # Required. The anaconda environment with rafts_algo installed so that the rafts_tfrm_attrs.py script may run.
+#path_attr_config: "{home_dir}/git/rafts/scripts/workflow_configs/legacy/xssa_us/xssaus_attr_config.yaml" # TODO Remove this! Use name_attr_config instead
 basepath_algos:
 algo_response_vars: # List out the desired response variables (e.g. metrics, hydrologic signatures) for prediction. # TODO offer 'all'
   - 'W_wt_precip_corr'
