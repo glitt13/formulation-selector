@@ -22,6 +22,7 @@ from pathlib import Path
 import rafts_algo.rafts_algo_train as raftsalgt
 import rafts_algo.utils as raftsutil
 import rafts_algo.plots as raftsplot
+import rafts_algo.schemas.schemas as schemas
 import numpy as np
 import os
 import matplotlib
@@ -32,7 +33,8 @@ import rafts_prep.proc_eval_metrics as pem
 from logging.handlers import MemoryHandler
 import logging
 import sys
-import rafts_algo.schemas.schemas as schemas
+from sklearn.inspection import permutation_importance
+
 import yaml 
 
 if __name__ == "__main__":
@@ -357,13 +359,47 @@ if __name__ == "__main__":
                     # Iterate through all trained models to plot feature importances dynamically
                     for algo_str, algo_info in train_eval.algs_dict.items():
                         model = algo_info['algo']
-                        imp = getattr(model, "feature_importances_", None)
+                        imp_train = getattr(model, "feature_importances_", None)
+
+                        if imp_train is None:
+                            # Calculate training permutation importance (requires X and y data)
+                            try:
+                                result = permutation_importance(
+                                    estimator=model, 
+                                    X=train_eval.X_train,
+                                    y=train_eval.y_train, 
+                                    n_repeats=5, 
+                                    random_state=seed,
+                                    n_jobs=-1 # Uses all processors to speed up the calculation
+                                )
+                                
+                                # Extract the mean importances to match the 1D array format of .feature_importances_
+                                imp_train = result.importances_mean
+
+                                path_feat_imp_train = raftsplot.std_feat_imp_path(dir_out_viz_base=dir_out_viz_base,
+                                                                                    ds=ds, algo_str=f"{algo_str}_train", metr=metr)
+                                out_csv_tr = out_dir / f"{algo_str}_feature_importance_train_{ds}_{metr}.csv"
+                                fi_df.to_csv(out_csv_tr, index=False)
+                                logging.info(f"Wrote {algo_str} feature importances to {out_csv}")
+
+                                fig_train = raftsplot.plot_feature_importance(
+                                                feat_imprt=imp_train, 
+                                                attrs=df_X.columns, 
+                                                title=f"{algo_str.upper()} Training Feature Importance: {ds}"
+                                                )
+                
+                                fig_train.savefig(path_feat_imp_train, bbox_inches='tight')
+                                plt.close(fig_train)
+                    
+
+                            except: 
+                                logging.info(f"The {algo_str} does not estimate feature importance")
                         
-                        if imp is not None:
+                        else:
                             # Save features importances from the trained model to csv files
-                            fi_df = pd.DataFrame({"feature": df_X.columns, "importance": imp})
+                            fi_df = pd.DataFrame({"feature": df_X.columns, "importance": imp_train})
                             fi_df = fi_df.sort_values("importance", ascending=False)
-                            out_csv = out_dir / f"{algo_str}_feature_importance_{ds}_{metr}.csv"
+                            out_csv = out_dir / f"{algo_str}_feature_importance_train_{ds}_{metr}.csv"
                             fi_df.to_csv(out_csv, index=False)
                             logging.info(f"Wrote {algo_str} feature importances to {out_csv}")
 
@@ -374,8 +410,42 @@ if __name__ == "__main__":
                                 dir_out_viz_base=dir_out_viz_base,
                                 ds=ds, 
                                 metr=metr, 
-                                algo_str=algo_str
+                                algo_str=f"{algo_str}_Training"
                             )
+
+                        try: # Now create the feature importance plot on test data:
+                            result_test = permutation_importance(
+                                estimator=model, 
+                                X=train_eval.X_test,  
+                                y=train_eval.y_test,  
+                                n_repeats=5, 
+                                random_state=seed,
+                                n_jobs=-1 
+                            )
+                            imp_test = result_test.importances_mean
+
+                            path_feat_imp_test = raftsplot.std_feat_imp_path(dir_out_viz_base=dir_out_viz_base,
+                                                        ds=ds, algo_str=f"{algo_str}_test", metr=metr)
+                            out_viz_dir = path_feat_imp_test.parent
+      
+                            # --- Save and Plot Testing Importances ---
+                            fi_test_df = pd.DataFrame({"feature": df_X.columns, "importance": imp_test}).sort_values("importance", ascending=False)
+                            fi_test_csv = out_viz_dir / f"{algo_str}_feature_importance_test_{ds}_{metr}.csv"
+                            fi_test_df.to_csv(fi_test_csv, index=False)
+
+                            fig_test = raftsplot.plot_feature_importance(
+                                feat_imprt=imp_test, 
+                                attrs=df_X.columns, 
+                                title=f"{algo_str.upper()} Testing Feature Importance: {ds}"
+                            )
+
+                            fig_test.savefig(path_feat_imp_test, bbox_inches='tight')
+                            plt.close(fig_test)
+
+                            logging.info(f"Wrote {algo_str} test feature importances to {out_viz_dir}")
+                        except Exception as e: 
+                                logging.info(f"The {algo_str} does not estimate feature importance. Error: {e}")
+                        
                     
                     # Create learning curves for each algorithm
                     algo_plot_lc = raftsalgt.AlgoEvalPlotLC(df_X,y_all)
