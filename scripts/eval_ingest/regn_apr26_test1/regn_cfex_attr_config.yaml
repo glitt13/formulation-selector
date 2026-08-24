@@ -57,7 +57,6 @@ attr_select: # Required. The names of variable sublistings are standardized with
     - 'ari_ix_stats' # aridity index
     - 'lka_stats' # Lake area percentage 
     - 'slp_dg_mean' # Mean slope, degrees
-    - 'imperv_surf'
     - 'Forest_Cover_Extent_L07'
     - 'snw_pc_max'
     - 'area_sqkm'
