@@ -261,6 +261,7 @@ Configures the training and testing of algorithms that predict formulation metri
 
 * `seed`: The starting point for the random number generator. Default 32. (Required).
 
+* `n_jobs`: Only applicable for GridSearchCV operations. Default 1 when running `rafts_proc_algo_pool.py` and -1 when running `rafts_proc_algo_viz.py`. Number of jobs for grid search operations. Recommended to stay with the defaults, but this is configurable.
 
 * `name_attr_config`: Name of the corresponding dataset's attribute configuration file. (Required).
 
@@ -272,7 +273,6 @@ Configures the training and testing of algorithms that predict formulation metri
 
 
 * `make_plots`: Should plots be created & saved to file? (Optional).
-
 
 * `uncertainty`: Defines methods to quantify uncertainty in model training and predictions for regression-based algorithms, supporting methods like `bagging`, `forestci`, and `mapie`. (Optional).
 

@@ -84,6 +84,8 @@ if __name__ == "__main__":
     uncertainty_cfg = algo_cfig.algo_cfg_unc_dict["algo_unc_dict"]["uncertainty_cfg"]
     confidence_levels = algo_cfig.algo_cfg_unc_dict["algo_unc_dict"]["uncertainty_cfg"].get("confidence_levels")
     uncn_bnd_algo = algo_cfig.algo_cfg_unc_dict["algo_unc_dict"]["uncertainty_cfg"].get("uncn_bnd_algo",False)
+    n_jobs_cfg = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"].get("n_jobs",1) # The total number of jobs for GridSearchCV. Preferably n_jobs = 1 when pooling.
+    n_jobs = 1 if n_jobs_cfg is None else n_jobs_cfg
 
     #%% Attribute configuration
     # Initialize attribute configuration class for extracting attributes
@@ -345,7 +347,7 @@ if __name__ == "__main__":
                 'min_lim': min_lim, 'max_lim': max_lim, 'make_plots': make_plots,
                 'save_all_clusters': algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"].get('save_all_clusters', False),
                 'dir_out_viz_base': dir_out_viz_base, 'dir_out_anlys_base': dir_out_anlys_base,
-                'gdf_comid': gdf_comid,'test_ids': test_ids
+                'gdf_comid': gdf_comid,'test_ids': test_ids,'n_jobs':n_jobs,
             }
             tasks.append(args_dict)
 

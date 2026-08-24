@@ -154,7 +154,8 @@ class AlgoConfigParser:
                             'verbose': algo_cfg.get('verbose', True),
                             'name_attr_config': algo_cfg.get('name_attr_config', Path(self.path_algo_config).name.replace('algo', 'attr')),
                             'name_attr_csv': algo_cfg.get('name_attr_csv',None),
-                            'colname_attr_csv': algo_cfg.get('colname_attr_csv',None)
+                            'colname_attr_csv': algo_cfg.get('colname_attr_csv',None),
+                            'n_jobs': algo_cfg.get('n_jobs',None)
                             }
         
         algo_cfg_dict['path_attr_config'] = build_cfig_path(self.path_algo_config, algo_cfg_dict['name_attr_config'])
