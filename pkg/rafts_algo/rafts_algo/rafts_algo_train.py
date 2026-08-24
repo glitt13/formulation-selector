@@ -7,6 +7,7 @@ from sklearn.neural_network import MLPRegressor
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import make_pipeline, Pipeline
+from sklearn.inspection import permutation_importance
 from collections.abc import Iterable
 from pathlib import Path
 import pandas as pd
@@ -1146,12 +1147,32 @@ def _process_single_metric(args_dict):
             for algo_str, algo_info in train_eval.algs_dict.items():
                 model = algo_info['algo']
                 # Retrieve .feature_importances_ natively if supported (rf, xgb, gbr, adaboost)
-                imp = getattr(model, "feature_importances_", None)
+                imp_train = getattr(model, "feature_importances_", None)
+
+                if imp_train is None:
+                    # Calculate permutation importance (requires X and y data)
+                    # NOTE the following permutation importances are based on training data to be 
+                    #. consistent with getattr(model,'feature_importances_'). Using validation/testing
+                    #. data instead would be more appropriate
+                    try:
+                        result = permutation_importance(
+                            estimator=model, 
+                            X=train_eval.X_train,
+                            y=train_eval.y_train, 
+                            n_repeats=5, 
+                            random_state=args_dict['seed'],
+                            n_jobs=-1 # Uses all processors to speed up the calculation
+                        )
+                        
+                        # Extract the mean importances to match the 1D array format of .feature_importances_
+                        imp_train = result.importances_mean
+                    except: 
+                        logging.info(f"The {algo_str} does not estimate feature importance")
                 
-                if imp is not None:
+                if imp_train is not None:
                     # Save importances to CSV
-                    fi_df = pd.DataFrame({"feature": df_X.columns, "importance": imp}).sort_values("importance", ascending=False)
-                    fi_csv = out_viz_dir / f"{algo_str}_feature_importance_{args_dict['ds']}_{metr}.csv"
+                    fi_df = pd.DataFrame({"feature": df_X.columns, "importance": imp_train}).sort_values("importance", ascending=False)
+                    fi_csv = out_viz_dir / f"{algo_str}_feature_importance_train_{args_dict['ds']}_{metr}.csv"
                     fi_df.to_csv(fi_csv, index=False)
                     logging.info(f"{log_prefix} Wrote {algo_str} feature importances to {fi_csv}")
 
@@ -1162,9 +1183,40 @@ def _process_single_metric(args_dict):
                         dir_out_viz_base=args_dict['dir_out_viz_base'], 
                         ds=args_dict['ds'], 
                         metr=metr, 
-                        algo_str=algo_str
+                        algo_str=f"{algo_str}_Training"
                     )
+                    logging.info(f"{log_prefix} Wrote {algo_str} train feature importances to {out_viz_dir}")
+                                    
+            
+            try: # Now create the feature importance plot on test data:
+                result_test = permutation_importance(
+                    estimator=model, 
+                    X=train_eval.X_test,  
+                    y=train_eval.y_test,  
+                    n_repeats=5, 
+                    random_state=args_dict['seed'],
+                    n_jobs=-1 
+                )
+                imp_test = result_test.importances_mean
+                # --- Save and Plot Testing Importances ---
+                fi_test_df = pd.DataFrame({"feature": df_X.columns, "importance": imp_test}).sort_values("importance", ascending=False)
+                fi_test_csv = out_viz_dir / f"{algo_str}_feature_importance_test_{args_dict['ds']}_{metr}.csv"
+                fi_test_df.to_csv(fi_test_csv, index=False)
+
                 
+                fig_test = plots.plot_feature_importance(
+                    feat_imprt=imp_test, 
+                    attrs=df_X.columns, 
+                    title=f"{algo_str.upper()} Testing Feature Importance: {args_dict['ds']}"
+                )
+                path_fig_test = out_viz_dir / f"{algo_str}_feature_importance_test_{args_dict['ds']}_{metr}.png"
+                fig_test.savefig(path_fig_test, bbox_inches='tight')
+                plt.close(fig_test)
+
+                logging.info(f"{log_prefix} Wrote {algo_str} test feature importances to {out_viz_dir}")
+            except Exception as e: 
+                    logging.info(f"The {algo_str} does not estimate feature importance. Error: {e}")
+            
             # Create learning curves for each algorithm
             if args_dict['task_type'] != 'clustering':
                 algo_plot_lc = AlgoEvalPlotLC(df_X, y_all)

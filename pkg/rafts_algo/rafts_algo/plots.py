@@ -386,7 +386,8 @@ def save_feat_imp_fig_wrap(model:any,
     fig_feat_imp = plot_feature_importance(feat_imprt, attrs=attrs, title=title_imp)
 
     # Generate dynamic save path (e.g., 'xgb_feature_importance_...')
-    path_fig_imp = Path(dir_out_viz_base) / ds / f"{algo_str}_feature_importance_{ds}_{metr}.png"
+    path_fig_imp = std_feat_imp_path(dir_out_viz_base=dir_out_viz_base,
+                      ds=ds, algo_str=algo_str, metr=metr)
     path_fig_imp.parent.mkdir(parents=True, exist_ok=True)
 
     fig_feat_imp.savefig(path_fig_imp)
@@ -395,6 +396,12 @@ def save_feat_imp_fig_wrap(model:any,
     plt.close(fig_feat_imp)
     plt.close('all')
     gc.collect()
+
+def std_feat_imp_path(dir_out_viz_base: str|Path,
+                      ds:str, algo_str:str, metr:str):
+    path_fig_imp = Path(dir_out_viz_base) / ds / f"{algo_str}_feature_importance_{ds}_{metr}.png"
+    path_fig_imp.parent.mkdir(parents=True, exist_ok=True)
+    return path_fig_imp
 
 def std_lc_plot_path(dir_out_viz_base: str|Path,
                       ds:str, metr:str, algo_str:str
