@@ -45,7 +45,7 @@ class AlgoTrainEval:
                  verbose: bool = False,
                  confidence_levels: list[int] = [95],
                  uncn_bnd_algo: bool = False, min_lim: float = None, max_lim: float = None,
-                 save_all_clusters: bool = False
+                 save_all_clusters: bool = False,n_jobs: int = -1
                  ):
         """The algorithm training and evaluation class.
 
@@ -93,6 +93,8 @@ class AlgoTrainEval:
         :type max_lim: float, optional
         :param save_all_clusters: When performing unsupervised clustering, should all cluster numbers be considered? Default False
         :type save_all_clusters: bool, optional
+        :param n_jobs: Total number of jobs when performing GridSearchCV. Optional default -1 
+        :type n_jobs: int
         """
         # class args
         self.df = df # NOTE: df MUST NEVER CHANGE!! df represents the original data, and is used as an index reference in the algo-train script (e.g. rafts_proc_algo_viz.py)
@@ -123,6 +125,7 @@ class AlgoTrainEval:
         # grid search
         self.algo_config_grid = dict()
         self.grid_search_algs = list()
+        self.n_jobs = n_jobs
 
         # train/pred/eval metadata
         self.algs_dict = {}
@@ -455,7 +458,7 @@ class AlgoTrainEval:
         if 'xgb' in self.algo_config:  # XGBOOST
             if self.verbose: logging.info(f"      Performing XGBRegressor Training")
             # Safely merge default arguments with user-provided config arguments
-            xgb_args = {'random_state': self.rs, 'n_jobs': -1}
+            xgb_args = {'random_state': self.rs, 'n_jobs': self.n_jobs}
             xgb_args.update(self.algo_config['xgb'])
             xgb_model = xgb.XGBRegressor(**xgb_args)
             pipe_xgb = make_pipeline(StandardScaler(), xgb_model)
@@ -539,7 +542,7 @@ class AlgoTrainEval:
                 'randomforestregressor__min_samples_split': self.algo_config_grid['rf'].get('min_samples_split', [2, 5, 10])
             }
             pipe_rf = make_pipeline(rf)
-            grid_rf = GridSearchCV(pipe_rf, param_grid_rf, cv=5, scoring='neg_mean_absolute_error', n_jobs=-1)
+            grid_rf = GridSearchCV(pipe_rf, param_grid_rf, cv=5, scoring='neg_mean_absolute_error', n_jobs=self.n_jobs)
             
             grid_rf.fit(self.X_train, self.y_train)
 
@@ -565,7 +568,7 @@ class AlgoTrainEval:
                 'mlpregressor__max_iter': mlpcfg.get('max_iter', [200, 300])
             }
             pipe_mlp = make_pipeline(StandardScaler(), mlp)
-            grid_mlp = GridSearchCV(pipe_mlp, param_grid_mlp, cv=5, scoring='neg_mean_absolute_error', n_jobs=-1)
+            grid_mlp = GridSearchCV(pipe_mlp, param_grid_mlp, cv=5, scoring='neg_mean_absolute_error', n_jobs=self.n_jobs)
             grid_mlp.fit(self.X_train, self.y_train)
             self.algs_dict['mlp'] = {'algo': grid_mlp.best_estimator_,
                                     'pipeline': grid_mlp,
@@ -579,7 +582,7 @@ class AlgoTrainEval:
             hgbr = HistGradientBoostingRegressor(random_state=self.rs)
             param_grid_hgbr = {f'histgradientboostingregressor__{k}': v for k, v in self.algo_config_grid['hgbr'].items()}
             pipe_hgbr = make_pipeline(StandardScaler(), hgbr)
-            grid_hgbr = GridSearchCV(pipe_hgbr, param_grid_hgbr, cv=5, scoring='neg_mean_absolute_error', n_jobs=-1)
+            grid_hgbr = GridSearchCV(pipe_hgbr, param_grid_hgbr, cv=5, scoring='neg_mean_absolute_error', n_jobs=self.n_jobs)
             grid_hgbr.fit(self.X_train, self.y_train)
             self.algs_dict['hgbr'] = {'algo': grid_hgbr.best_estimator_.named_steps['histgradientboostingregressor'], 'pipeline': grid_hgbr, 'gridsearchcv': grid_hgbr, 'type': 'hist gradient boosting regressor', 'metric': self.metric, 'Uncertainty': {}}
 
@@ -588,7 +591,7 @@ class AlgoTrainEval:
             gbr = GradientBoostingRegressor(random_state=self.rs)
             param_grid_gbr = {f'gradientboostingregressor__{k}': v for k, v in self.algo_config_grid['gbr'].items()}
             pipe_gbr = make_pipeline(StandardScaler(), gbr)
-            grid_gbr = GridSearchCV(pipe_gbr, param_grid_gbr, cv=5, scoring='neg_mean_absolute_error', n_jobs=-1)
+            grid_gbr = GridSearchCV(pipe_gbr, param_grid_gbr, cv=5, scoring='neg_mean_absolute_error', n_jobs=self.n_jobs)
             grid_gbr.fit(self.X_train, self.y_train)
             self.algs_dict['gbr'] = {'algo': grid_gbr.best_estimator_.named_steps['gradientboostingregressor'], 'pipeline': grid_gbr, 'gridsearchcv': grid_gbr, 'type': 'gradient boosting regressor', 'metric': self.metric, 'Uncertainty': {}}
 
@@ -597,16 +600,16 @@ class AlgoTrainEval:
             ada = AdaBoostRegressor(random_state=self.rs)
             param_grid_ada = {f'adaboostregressor__{k}': v for k, v in self.algo_config_grid['adaboost'].items()}
             pipe_ada = make_pipeline(StandardScaler(), ada)
-            grid_ada = GridSearchCV(pipe_ada, param_grid_ada, cv=5, scoring='neg_mean_absolute_error', n_jobs=-1)
+            grid_ada = GridSearchCV(pipe_ada, param_grid_ada, cv=5, scoring='neg_mean_absolute_error', n_jobs=self.n_jobs)
             grid_ada.fit(self.X_train, self.y_train)
             self.algs_dict['adaboost'] = {'algo': grid_ada.best_estimator_.named_steps['adaboostregressor'], 'pipeline': grid_ada, 'gridsearchcv': grid_ada, 'type': 'adaboost regressor', 'metric': self.metric, 'Uncertainty': {}}
 
         if 'xgb' in self.algo_config_grid:  # XGBOOST
             if self.verbose: logging.info(f"      Performing XGBRegressor Training with Grid Search")
-            xgb_model = xgb.XGBRegressor(random_state=self.rs, n_jobs=-1)
+            xgb_model = xgb.XGBRegressor(random_state=self.rs, n_jobs=self.n_jobs)
             param_grid_xgb = {f'xgbregressor__{k}': v for k, v in self.algo_config_grid['xgb'].items()}
             pipe_xgb = make_pipeline(StandardScaler(), xgb_model)
-            grid_xgb = GridSearchCV(pipe_xgb, param_grid_xgb, cv=5, scoring='neg_mean_absolute_error', n_jobs=-1)
+            grid_xgb = GridSearchCV(pipe_xgb, param_grid_xgb, cv=5, scoring='neg_mean_absolute_error', n_jobs=self.n_jobs)
             grid_xgb.fit(self.X_train, self.y_train)
             self.algs_dict['xgb'] = {'algo': grid_xgb.best_estimator_.named_steps['xgbregressor'], 'pipeline': grid_xgb, 'gridsearchcv': grid_xgb, 'type': 'xgboost regressor', 'metric': self.metric, 'Uncertainty': {}}
         # --- CLUSTERING ALGORITHMS ---
@@ -1125,7 +1128,8 @@ def _process_single_metric(args_dict):
             test_id_col=args_dict['col_locid'], verbose=args_dict['verbose'], 
             confidence_levels=args_dict['confidence_levels'],
             uncn_bnd_algo=args_dict['uncn_bnd_algo'], min_lim=args_dict['min_lim'], 
-            max_lim=args_dict['max_lim'], save_all_clusters=args_dict['save_all_clusters']
+            max_lim=args_dict['max_lim'], save_all_clusters=args_dict['save_all_clusters'],
+            n_jobs=args_dict['n_jobs']
         )
         train_eval.train_eval()
 
@@ -1161,7 +1165,7 @@ def _process_single_metric(args_dict):
                             y=train_eval.y_train, 
                             n_repeats=5, 
                             random_state=args_dict['seed'],
-                            n_jobs=-1 # Uses all processors to speed up the calculation
+                            n_jobs=args_dict['n_jobs']
                         )
                         
                         # Extract the mean importances to match the 1D array format of .feature_importances_
@@ -1195,7 +1199,7 @@ def _process_single_metric(args_dict):
                     y=train_eval.y_test,  
                     n_repeats=5, 
                     random_state=args_dict['seed'],
-                    n_jobs=-1 
+                    n_jobs=args_dict['n_jobs']
                 )
                 imp_test = result_test.importances_mean
                 # --- Save and Plot Testing Importances ---
