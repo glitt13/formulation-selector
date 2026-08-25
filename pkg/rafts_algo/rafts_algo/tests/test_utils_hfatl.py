@@ -8,6 +8,7 @@ import pandas as pd
 import numpy as np
 import unittest
 from pathlib import Path
+import sqlite3
 
 # Assuming the target functions are imported from the relevant script (e.g., hfatlas_to_rafts_prep)
 # For the sake of this testing block, we assume they are accessible in the current namespace 
@@ -324,3 +325,271 @@ class TestRegionalizationPaths(unittest.TestCase):
             p3 = raftsutil.std_impute_log_path(base, 'my_ds', 'rf', 'param_a')
             self.assertEqual(p3.name, 'imputed_locations_rf_param_a__my_ds.csv')
 
+class TestHfAtlasParsing(unittest.TestCase):
+
+    def test_parse_hfatlas_colname_tuple_with_unit(self):
+        """Test parsing a string representation of a tuple with a clean name and a unit."""
+        raw = "('TOT_AET_hfa', 'millimeter')"
+        clean_name, unit = raftsutil.parse_hfatlas_colname(raw)
+        self.assertEqual(clean_name, "TOT_AET_hfa")
+        self.assertEqual(unit, "millimeter")
+
+    def test_parse_hfatlas_colname_tuple_no_unit(self):
+        """Test parsing a tuple that only contains a clean name."""
+        raw = "('TOT_ELEV',)"
+        clean_name, unit = raftsutil.parse_hfatlas_colname(raw)
+        self.assertEqual(clean_name, "TOT_ELEV")
+        self.assertIsNone(unit)
+
+    def test_parse_hfatlas_colname_not_a_tuple(self):
+        """Test parsing a standard string that is not formatted as a tuple."""
+        raw = "normal_column_name"
+        clean_name, unit = raftsutil.parse_hfatlas_colname(raw)
+        self.assertEqual(clean_name, "normal_column_name")
+        self.assertIsNone(unit)
+
+    def test_parse_hfatlas_colname_malformed_tuple(self):
+        """Test parsing a malformed tuple string that throws an evaluation error."""
+        raw = "('TOT_AET_hfa', 'millimeter'"  # Missing closing parenthesis
+        clean_name, unit = raftsutil.parse_hfatlas_colname(raw)
+        self.assertEqual(clean_name, raw)
+        self.assertIsNone(unit)
+
+    def test_clean_hfatlas_columns(self):
+        """Test renaming dataframe columns from raw pint-tuples to clean strings."""
+        df = pd.DataFrame(columns=[
+            "('TOT_AET_hfa', 'millimeter')", 
+            "('TOT_ELEV',)", 
+            "normal_col"
+        ])
+        cleaned_df = raftsutil.clean_hfatlas_columns(df)
+        expected_cols = ["TOT_AET_hfa", "TOT_ELEV", "normal_col"]
+        self.assertListEqual(list(cleaned_df.columns), expected_cols)
+
+    def test_create_hfatlas_unit_mapper(self):
+        """Test the creation of the hfATLAS mapping dataframe."""
+        raw_cols = [
+            "('TOT_AET_hfa', 'millimeter')", 
+            "normal_col",
+            "('TOT_PRSNOW', 'percent')"
+        ]
+        
+        mapper_df = raftsutil.create_hfatlas_unit_mapper(raw_cols)
+        
+        self.assertEqual(mapper_df.shape[0], 3)
+        self.assertListEqual(list(mapper_df.columns), ['raw_column', 'clean_column', 'unit'])
+        
+        # Verify first row
+        self.assertEqual(mapper_df.iloc[0]['raw_column'], "('TOT_AET_hfa', 'millimeter')")
+        self.assertEqual(mapper_df.iloc[0]['clean_column'], "TOT_AET_hfa")
+        self.assertEqual(mapper_df.iloc[0]['unit'], "millimeter")
+        
+        # Verify second row (no unit)
+        self.assertEqual(mapper_df.iloc[1]['raw_column'], "normal_col")
+        self.assertEqual(mapper_df.iloc[1]['clean_column'], "normal_col")
+        self.assertTrue(pd.isna(mapper_df.iloc[1]['unit']))
+
+class TestGeomAndResolvers(unittest.TestCase):
+    def test_resolve_fstrings(self):
+        """Test the recursive f-string resolver logic."""
+        context = {"home_dir": "/user/home", "ds": "camels"}
+        
+        # Standard Replacement
+        val1 = "{home_dir}/data/{ds}"
+        self.assertEqual(raftsutil.resolve_fstrings(val1, context), "/user/home/data/camels")
+        
+        # Missing keys are safely ignored
+        val2 = "{home_dir}/data/{missing_key}"
+        self.assertEqual(raftsutil.resolve_fstrings(val2, context), "/user/home/data/{missing_key}")
+        
+        # Max depth safety (Recursive substitution)
+        val3 = "{home_dir}/data/{recursive_dir}"
+        context_recursive = {"home_dir": "/user/home", "recursive_dir": "{ds}/stuff", "ds": "camels"}
+        self.assertEqual(raftsutil.resolve_fstrings(val3, context_recursive, max_depth=3), "/user/home/data/camels/stuff")
+
+    def test_get_middle_vertex(self):
+        """Test coordinate extraction for geometric midpoints."""
+        # LineString Midpoint
+        line = LineString([(0, 0), (1, 1), (2, 2), (3, 3), (4, 4)])
+        pt = raftsutil.get_middle_vertex(line)
+        self.assertEqual(pt.x, 2.0)
+        self.assertEqual(pt.y, 2.0)
+        
+        # MultiLineString Midpoint
+        mline = MultiLineString([[(0, 0), (1, 1)], [(2, 2), (3, 3), (4, 4)]])
+        pt2 = raftsutil.get_middle_vertex(mline)
+        self.assertEqual(pt2.x, 2.0)
+        self.assertEqual(pt2.y, 2.0)
+        
+        # Points pass through
+        pt3 = raftsutil.get_middle_vertex(Point(5, 5))
+        self.assertEqual(pt3.x, 5.0)
+        self.assertEqual(pt3.y, 5.0)
+        
+        # Empty/None fallbacks
+        self.assertIsNone(raftsutil.get_middle_vertex(None))
+        self.assertIsNone(raftsutil.get_middle_vertex(LineString()))
+
+class TestReadHfatlasWrapDask(unittest.TestCase):
+    def setUp(self):
+        """Set up physically real Parquet files in a temporary directory for Dask."""
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.test_path = Path(self.temp_dir.name)
+        
+        # Generate DataFrame with raw tuple column names
+        self.df_hfatlas = pd.DataFrame({
+            "divide_id": ["div1", "div2", "div3"],
+            "vpuid": ["01", "02", "01"],
+            "('TOT_AET', 'mm')": [10.5, 20.1, np.nan],
+            "('ELEV', 'm')": [100, 200, 300]
+        })
+        
+        self.path_hfatl_pq = self.test_path / "test_hfatlas.parquet"
+        self.df_hfatlas.to_parquet(self.path_hfatl_pq)
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def test_read_hfatlas_wrap_dask_success(self):
+        """Test successful Dask loading, parsing, and joining of hfATLAS Parquet."""
+        attrs_sel = ["TOT_AET", "ELEV"]
+        
+        # Run function on the real, temporary Parquet file
+        result_df = raftsutil.read_hfatlas_wrap_dask(
+            paths_hfatl=[self.path_hfatl_pq], 
+            attrs_sel=attrs_sel, 
+            map_id_col="divide_id",
+            query_clean=True # Cleans NaN values/units
+        )
+        
+        self.assertEqual(result_df.shape[0], 3)
+        self.assertIn("TOT_AET", result_df.columns)
+        self.assertIn("ELEV", result_df.columns)
+        self.assertNotIn("('TOT_AET', 'mm')", result_df.columns) # Verifies tuple parser worked
+        self.assertIn("divide_id", result_df.columns) # ID column retained
+        self.assertTrue(pd.api.types.is_string_dtype(result_df["divide_id"])) # ID coerced to string safely
+
+    def test_read_hfatlas_wrap_dask_missing_columns(self):
+        """Test behavior when requested attributes are not physically in the file."""
+        # 'FAKE_ATTR' does not exist in the Parquet file
+        result_df = raftsutil.read_hfatlas_wrap_dask(
+            paths_hfatl=[self.path_hfatl_pq], 
+            attrs_sel=["TOT_AET", "FAKE_ATTR"], 
+            map_id_col="divide_id"
+        )
+        
+        self.assertIn("TOT_AET", result_df.columns)
+        self.assertNotIn("FAKE_ATTR", result_df.columns) # Safely ignored
+
+    def test_read_hfatlas_wrap_dask_corrupt_file(self):
+        """Test Dask fallback behavior when encountering unreadable or empty files."""
+        bad_parquet = self.test_path / "corrupt.parquet"
+        bad_parquet.write_text("This is not a real parquet file")
+        
+        with self.assertLogs(level='WARNING') as cm:
+            result = raftsutil.read_hfatlas_wrap_dask([bad_parquet], ["TOT_AET"], "divide_id")
+            
+        self.assertTrue(any("Could not read schema" in log for log in cm.output))
+        # Returns an empty dataframe with the requested schema
+        self.assertTrue("TOT_AET" in result.columns)
+        self.assertEqual(len(result), 0)
+
+class TestDatabaseAndCrosswalks(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.test_path = Path(self.temp_dir.name)
+        self.db_path = self.test_path / "test_regionalization.sqlite"
+
+        # Create dummy gpkg table
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("CREATE TABLE gpkg_contents (table_name TEXT, data_type TEXT, identifier TEXT, description TEXT)")
+        
+        self.df_data = pd.DataFrame({
+            "featureID": ["div1", "div2"],
+            "param_a": [1.1, 2.2]
+        })
+
+    def tearDown(self):
+        self.temp_dir.cleanup()
+
+    def test_update_database_creation_and_registration(self):
+        """Test physical SQLite database creation, indexing, and GPKG registration."""
+        raftsutil.update_database(
+            db_path=self.db_path, 
+            df_data=self.df_data, 
+            table_name="params", 
+            id_col="featureID", 
+            overwrite=True
+        )
+        
+        self.assertTrue(self.db_path.exists())
+        
+        # Verify writing via native SQLite
+        with sqlite3.connect(self.db_path) as conn:
+            # 1. Verify Data Exists
+            df_read = pd.read_sql_query("SELECT * FROM params", conn)
+            self.assertEqual(len(df_read), 2)
+            self.assertEqual(df_read.loc[df_read['featureID'] == 'div1', 'param_a'].iloc[0], 1.1)
+            
+            # 2. Verify Index was created
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='params'")
+            indexes = [row[0] for row in cursor.fetchall()]
+            self.assertIn("idx_params_featureID", indexes)
+            
+            # 3. Verify GeoPackage attributes table registration
+            cursor.execute("SELECT table_name FROM gpkg_contents WHERE table_name='params'")
+            registered = cursor.fetchone()
+            self.assertIsNotNone(registered)
+
+    def test_get_crosswalk_target_col(self):
+        """Test the strict hierarchy of crosswalk target column resolution."""
+        # Hierarchy: User Config -> Native Default -> Subtraction Fallback
+        
+        # 1. User Config Priority
+        df_crosswalk = pd.DataFrame(columns=["divide_id", "comid", "custom_id_column", "some_value"])
+        target = raftsutil.get_crosswalk_target_col(
+            df_crosswalk, 
+            pred_gpkg_id_col="divide_id", 
+            crosswalk_target_col="custom_id_column"
+        )
+        self.assertEqual(target, "custom_id_column")
+        
+        # 2. Native Default (hydrofabric standards)
+        df_crosswalk2 = pd.DataFrame(columns=["divide_id", "comid", "some_value"])
+        target2 = raftsutil.get_crosswalk_target_col(
+            df_crosswalk2, 
+            pred_gpkg_id_col="divide_id", 
+            crosswalk_target_col=None
+        )
+        self.assertEqual(target2, "divide_id")
+
+        # 3. Subtraction Fallback (Isolates the remaining identifier)
+        df_crosswalk3 = pd.DataFrame(columns=["prediction_id", "areasqkm", "vpuid", "mystery_topology_id"])
+        target3 = raftsutil.get_crosswalk_target_col(
+            df_crosswalk3, 
+            pred_gpkg_id_col="prediction_id", 
+            crosswalk_target_col=None
+        )
+        self.assertEqual(target3, "mystery_topology_id")
+
+class TestStandardizationAndReshaping(unittest.TestCase):
+    def test_hfatl_std_long(self):
+        """Test wide-to-long reshaping of hfATLAS attributes while retaining identifiers."""
+        df_wide = pd.DataFrame({
+            "divide_id": ["div1"],
+            "vpuid": ["01"],
+            "TOT_AET": [10.5],
+            "ELEV": [100]
+        })
+        
+        df_long = raftsutil.hfatl_std_long(df_wide, map_id_col="divide_id", vpu_id_col="vpuid")
+        
+        self.assertEqual(df_long.shape[0], 2)
+        self.assertListEqual(list(df_long.columns), ["divide_id", "vpuid", "attribute", "value"])
+        self.assertIn("TOT_AET", df_long["attribute"].values)
+        self.assertIn("ELEV", df_long["attribute"].values)
+        self.assertEqual(df_long.loc[df_long['attribute'] == 'TOT_AET', 'value'].iloc[0], 10.5)
+
+if __name__ == '__main__':
+    unittest.main()
