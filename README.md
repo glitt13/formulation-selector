@@ -23,14 +23,14 @@ The RaFTS hfATLAS workflow is executed in a specific sequence to process raw inp
 
 Refer to scripts/workflow_configs/*/ for many examples of different workflows. Note additional configurations/workflows may not be tracked in this repo, but stored in [NOAA gdrive](https://drive.google.com/drive/folders/1ghSVlE890S3LXir1-JhexDlNf1zT6T6h?usp=drive_link)
 
-1. **Preparation**: Custom dataset munging is performed first to prepare the initial response variable dataset and write to file in a standardized NetCDF (`.nc`). Typically named `prep_*.py` inside the same directory as the corresponding config files. The prep script should culminate into properly calling `rafts_prep.proc_eval_metrics.proc_col_schema()`
+1. **Preparation**: Custom dataset munging is performed first to prepare the initial response variable dataset and write to file in a standardized NetCDF (`.nc`). Typically named `prep_*.py` inside the same directory as the corresponding config files (e.g. [scripts/workflow_configs/00example_configs/xgb_adaboost_regn_casam_jul26/prep_regn_test_agg.py](scripts/workflow_configs/00example_configs/xgb_adaboost_regn_casam_jul26/prep_regn_test_agg.py). The prep script should culminate into properly calling `rafts_prep.proc_eval_metrics.proc_col_schema()`
 
 
 2. **Aggregation**: Hydrofabric-based watershed attributes are aggregated based on the gage_id representing the basins of interest. Both methods create the RaFTS-standard form of watershed attribute data, whose column names include `['featureID', 'featureSource',  'data_source', 'dl_timestamp', 'attribute', 'value']`.
- - `rafts_agg_hfatl_basin.py`: aggregates hydrofabric divides to a larger basin scale.
- - `hfatlas_to_rafts_prep.py`: uses existing location identifiers (e.g. `divide_id`) and performs no aggregation.
- - `map_nexus_divides.py`: Optional for **nexus**-oriented workflows (e.g. ensemble algorithm applications). Routes the hydrofabric flowpath network to identify the downstream-most terminal nexus for each gaged location subset and creates a crosswalk mapping every upstream divide to that specific nexus.
- - `rafts_agg_nexus_hfatl.py`: Optional for **nexus**-oriented workflows. A "universal aggregator" that uses the crosswalk mappings from `map_nexus_divides.py` to perform area-weighted aggregations of raw divide-level hfATLAS attributes to the custom nexus point level. Intended for preparing training datasets. Note that prediction datasets are expected to already be prepared in the appropriate format using `hfATLAS` nexus-based processing. The same nexus-based `hfATLAS` workflow may also be used for the RaFTS training data, also preventing the need to run `rafts_agg_nexus_hfatl.py` entirely.
+ - `rafts_agg_hfatl_basin.py`: aggregates hydrofabric divides to a larger basin scale. Find it in [pkg/rafts_prep/rafts_prep/flow/rafts_agg_hfatl_basin.py](pkg/rafts_prep/rafts_prep/flow/rafts_agg_hfatl_basin.py)
+ - `hfatlas_to_rafts_prep.py`: uses existing location identifiers (e.g. `divide_id`) and performs no aggregation. Find it in [pkg/rafts_prep/rafts_prep/flow/hfatlas_to_rafts_prep.py](pkg/rafts_prep/rafts_prep/flow/hfatlas_to_rafts_prep.py)
+ - `map_nexus_divides.py`: Optional for **nexus**-oriented workflows (e.g. ensemble algorithm applications). Routes the hydrofabric flowpath network to identify the downstream-most terminal nexus for each gaged location subset and creates a crosswalk mapping every upstream divide to that specific nexus. Find it in [pkg/rafts_prep/rafts_prep/flow/map_nexus_divides.py](pkg/rafts_prep/rafts_prep/flow/map_nexus_divides.py)
+ - `rafts_agg_nexus_hfatl.py`: Optional for **nexus**-oriented workflows. A "universal aggregator" that uses the crosswalk mappings from `map_nexus_divides.py` to perform area-weighted aggregations of raw divide-level hfATLAS attributes to the custom nexus point level. Intended for preparing training datasets. Note that prediction datasets are expected to already be prepared in the appropriate format using `hfATLAS` nexus-based processing. The same nexus-based `hfATLAS` workflow may also be used for the RaFTS training data, also preventing the need to run `rafts_agg_nexus_hfatl.py` entirely. Find it in [pkg/rafts_prep/rafts_prep/flow/rafts_agg_nexus_hfatl.py](pkg/rafts_prep/rafts_prep/flow/rafts_agg_nexus_hfatl.py)
 
 ### Understanding `rafts_agg_hfatl_basin.py` vs. `hfatlas_to_rafts_prep.py`
 
@@ -44,36 +44,36 @@ These run after the initial custom prep script that generates the response varia
 * **`rafts_agg_hfatl_basin.py`**: Not recommended unless attribute data have not been pre-processed to the desired basin scale. This script is used specifically in cases where hydrofabric divides need to be aggregated to a larger scale. It reads a hydrofabric GPKG, extracts the divide-to-gage mapping, loads the raw hfATLAS attributes, and aggregates them to the gage level. It outputs analysis-ready aggregated attributes. Note that aggregation is assumed to take the area-weighted average of attributes across divides, unless it is an area column in which case the sum is taken. Code modification will be required for exceptions. A simpler approach would be to use aggregation methods via the custom attribute pre-processing tool `hfATLAS`.
 
 
-3. **Training & Testing**: Algorithms are trained and tested in parallel on the catchment attribute data to predict formulation metrics or hydrologic signatures. There are a few different algorithm training scripts contained inside `pkg/rafts_algo/rafts_algo/flow/`:
- - `rafts_proc_algo_pool.py`: The computationally-efficient parallelized algorithm training script. Recommended, especially when using the current workflow, with pre-processed attribute data.
- - `rafts_proc_algo_viz.py`: The legacy script which is kept in case historic workflow runs are desired (e.g. `/scripts/workflow_configs/legacy/xssa_us/`)
+3. **Training & Testing**: Algorithms are trained and tested in parallel on the catchment attribute data to predict formulation metrics or hydrologic signatures. There are a few different algorithm training scripts contained inside [`pkg/rafts_algo/rafts_algo/flow/`](pkg/rafts_algo/rafts_algo/flow/):
+ - `rafts_proc_algo_pool.py`: The computationally-efficient parallelized algorithm training script. Recommended, especially when using the current workflow, with pre-processed attribute data. See [rafts_proc_algo_pool.py](pkg/rafts_algo/rafts_algo/flow/rafts_proc_algo_pool.py).
+ - `rafts_proc_algo_viz.py`: The legacy script which is kept in case historic workflow runs are desired (e.g. `/scripts/workflow_configs/legacy/xssa_us/`). See [rafts_proc_algo_viz.py](pkg/rafts_algo/rafts_algo/flow/rafts_proc_algo_viz.py).
 
 Algorithm choices include supervised (i.e. random forest and MLP), and unsupervised (e.g. gower's distance, kmeans). **Develop separate workflows based on algorithm type - supervised or unsupervised.** In other words, build out separate processing workflows for supervised algorithms, and another workflow for unsupervised algorithms. Do not mix supervised and unsupervised algorithms together in the same workflow.
 
 4. **Prediction**  Using trained algorithms to make predictions of response variables in out-of-sample locations. The resulting predictions and their associated uncertainties are plotted onto static spatial maps across the hydrofabric.
 
- - `rafts_pred_algo.py`: Generates the predictions and optionally calculates uncertainty bounds (e.g., MAPIE prediction intervals or ForestCI).
+ - `rafts_pred_algo.py`: Generates the predictions and optionally calculates uncertainty bounds (e.g., MAPIE prediction intervals or ForestCI). See [rafts_pred_algo.py](pkg/rafts_algo/rafts_algo/flow/rafts_pred_algo.py).
 
 
 5. **Mapping**: The resulting predictions and their associated uncertainties are plotted onto static spatial maps across the hydrofabric.
 
 
- - `rafts_map_pred_hfatl.py`: Generates static `.png` maps of the predicted values and uncertainty bounds joined dynamically to the hydrofabric geometries.
+ - `rafts_map_pred_hfatl.py`: Generates static `.png` maps of the predicted values and uncertainty bounds joined dynamically to the hydrofabric geometries. See [rafts_map_pred_hfatl.py](pkg/rafts_algo/rafts_algo/flow/rafts_map_pred_hfatl.py).
 
 6. **Donor-Receiver Pairing**: Only used for unsupervised clustering algorithms. 
 
-- `rafts_pair_donors.py`: Pairs donor and receiver basins within the same cluster based on euclidean distance.
+- `rafts_pair_donors.py`: Pairs donor and receiver basins within the same cluster based on euclidean distance. See [rafts_pair_donors.py](pkg/rafts_algo/rafts_algo/flow/rafts_pair_donors.py).
 
 Note: The attribute transformation workflow has been deprecated for the current processing workflows. It's recommended to perform desired transformations on the input attribute data beforehand. If attribute transformation is desired, updates will need to be made to the prediction step.
 
 7. **Regionalized Parameter Integration with Hydrofabric**: This prepares the hydrofabric .gpkg to a standardized form of regionalized parameters accepted by nextgen. For regionalization purposes only.
 
- - `rafts_regn_params_gpkg.py`: Designed for unsupervised and supervised algorithms. Writes sqlite databases of regionalized parameters, writes selected parameters per formulation as new layers in a copy of the hydrofabric .gpkg
+ - `rafts_regn_params_gpkg.py`: Designed for unsupervised and supervised algorithms. Writes sqlite databases of regionalized parameters, writes selected parameters per formulation as new layers in a copy of the hydrofabric .gpkg. See [rafts_regn_params_gpkg.py](pkg/rafts_algo/rafts_algo/flow/rafts_regn_params_gpkg.py).
 
 
 ### Workflow Summary
 
-That's a lot of steps! Within a config file subdirectory, you can observe examples of how individual steps are selected within corresponding shell scripts. In some cases, there are multiple datasets being prepared, trained, and predicted, each with their own subset of shell scripts and config files. An overarching shell script (e.g. `regn_all_proc.sh`) may demonstrate how to run the workflow for each dataset in one go.
+That's a lot of steps! Within a config file subdirectory, you can observe examples of how individual steps are selected within corresponding shell scripts. In some cases, there are multiple datasets being prepared, trained, and predicted, each with their own subset of shell scripts and config files. An overarching shell script (e.g. [`regn_all_proc.sh`](scripts/workflow_configs/00example_configs/clustering_regn_casam_jul26/regn_all_proc.sh)) may demonstrate how to run the workflow for each dataset in one go.
 
 
 ---
@@ -186,7 +186,7 @@ When wanting to aggregate hydrofabric divides to a larger scale, the following c
   * `dataset_name`: The name to be assigned to this dataset. This name will be used to create a subdirectory inside `user_data_std` and is also used in various filenames. This serves as a unique identifier, so make it different from previous workflow runs! (Required).
   **NOTE** the dataset name of interest must also be specified in the attribute config.
   This was initially created to handle processing multiple datasets all at once, but present workflows have made it only possible to processing one dataset per config file (e.g. a required assumption in `rafts_agg_hfatl_basin.py`). 
-  Refer to `scripts/workflow_configs/legacy/ealstm/` for an example of processing multiple datasets.
+  Refer to [`scripts/workflow_configs/legacy/ealstm/`](scripts/workflow_configs/legacy/ealstm/) for an example of processing multiple datasets.
 
 
 
@@ -244,7 +244,7 @@ Configures the training and testing of algorithms that predict formulation metri
 
 * `save_all_clusters`: Boolean.  Should every distinct algorithm combination be saved, or just the best-performing algorithm based on the silhouette score? Only applicable to `task_type="clustering"`. Default `False`.
 
-* `algorithms`: Selected algorithm(s) to run, such as `kmeans`, `gower_agglomerative`, `rf`, or `mlp`. (Required). If more algorithms are desired, they may be inserted in the rafts_algo_train.py. Note that new supervised algorithms need a little more effort by also integrating them into the uncertainty pipeline.
+* `algorithms`: Selected algorithm(s) to run, such as `kmeans`, `gower_agglomerative`, `rf`, or `mlp`. (Required). If more algorithms are desired, they may be inserted in the [rafts_algo_train.py](pkg/rafts_algo/rafts_algo/rafts_algo_train.py). Note that new supervised algorithms need a little more effort by also integrating them into the uncertainty pipeline.
 
   * Custom configurations are then provided as nested subsets with the algorithm section. The first nesting level is the algorithm standard name e.g. (`rf:` or `kmeans`), which is followed by another nested level of optional algorithm hyperparameters e.g.:
   ```yaml
@@ -357,15 +357,15 @@ When describing the input datasets within the RaFTS workflow, use the following 
 ```yaml
 formulation_metadata:  
   - 'dataset_name': '' # [Required] The unique name of the dataset folder (e.g., 'hfatl_huc12_clust')
-  - 'formulation_base': '' # [Required] Basename of formulation (e.g., 'test_huc12')
-  - 'formulation_id': '' # [Optional] Alternative to automatically generated ID
-  - 'formulation_ver': '' # [Optional] Version of the formulation
+  - 'formulation_base': '' # [Ignore] Legacy use, ignore this.
+  - 'formulation_id': '' # [Required] Response variable identifier (pertaining to the formulation)
+  - 'formulation_ver': '' # [Ignore] Legacy use, ignore this.
   - 'temporal_res': '' # [Optional] The temporal resolution corresponding to the modeled data
-  - 'target_var': '' # [Required] The target variable modeled (e.g., 'param')
-  - 'start_date': '' # [Required] The YYYY-MM-DD start date of the modeled timeseries
-  - 'end_date': '' # [Required] The YYYY-MM-DD end date of the modeled timeseries
+  - 'target_var': '' # [Optional] The target variable modeled (e.g., 'param')
+  - 'start_date': '' # [Optional] The YYYY-MM-DD start date of the modeled timeseries
+  - 'end_date': '' # [Optional] The YYYY-MM-DD end date of the modeled timeseries
   - 'modeled notes': '' # [Optional] Any notes describing the dataset or test case
-  - 'cal_status': '' # [Required] Was the formulation model fully calibrated? ('Y','N', or 'S')
+  - 'cal_status': '' # [Optional] Was the formulation model fully calibrated? ('Y','N', or 'S')
   - 'start_date_cal': '' # [Optional] The YYYY-MM-DD start date of the calibration period
   - 'end_date_cal': '' # [Optional] The YYYY-MM-DD end date of the calibration period
   - 'cal_notes': '' # [Optional] Notes regarding the calibration process
