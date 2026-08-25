@@ -25,6 +25,7 @@ import joblib
 import sys 
 import sqlite3
 import json
+
 # Set up basic logging configuration
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -2174,28 +2175,41 @@ def read_hfatlas_wrap_dask(paths_hfatl: Union[Path, str, List[Union[Path, str]]]
         
     return combined_df
 
-def parse_hfatlas_colname(raw_col: str) -> tuple[str, str | None]:
-    """
-    Parses a raw hfATLAS column string representation of a tuple into a clean name and unit.
+import ast
+from typing import Any
 
-    Returns the original string if parsing fails or isn't a tuple.
+def parse_hfatlas_colname(raw_col: Any) -> tuple[str, str | None]:
+    """Parses an hfATLAS column representation (tuple or stringified tuple) into a clean name and unit.
 
-    :param raw_col: The raw column name string to parse.
-    :type raw_col: str
+    Returns the original stringified value if parsing fails.
+
+    :param raw_col: The raw column representation to parse (string or actual tuple).
+    :type raw_col: Any
     :return: A tuple containing the clean column name and the extracted unit (or None if no unit).
     :rtype: tuple[str, str | None]
     """
-    clean_name = raw_col
+    clean_name = str(raw_col)
     unit = None
     
-    if isinstance(raw_col, str) and raw_col.startswith("('") and raw_col.endswith("')"):
+    # 1. Handle actual Python tuples (e.g., from MultiIndex or .pint.dequantify)
+    if isinstance(raw_col, tuple):
+        if len(raw_col) > 0:
+            clean_name = str(raw_col[0])
+        if len(raw_col) >= 2:
+            unit = str(raw_col[1])
+            
+    # 2. Handle stringified tuples (e.g., "('TOT_AET_hfa', 'mm')")
+    elif isinstance(raw_col, str) and raw_col.startswith("(") and raw_col.endswith(")"):
         try:
+            # Safely evaluate the string back into a real tuple
             parsed_tuple = ast.literal_eval(raw_col)
             if isinstance(parsed_tuple, tuple):
-                clean_name = parsed_tuple[0]
+                if len(parsed_tuple) > 0:
+                    clean_name = str(parsed_tuple[0])
                 if len(parsed_tuple) >= 2:
-                    unit = parsed_tuple[1]
-        except (ValueError, SyntaxError):
+                    unit = str(parsed_tuple[1])
+        except Exception:
+            # Broadened exception catch to mimic strip_units fallback logic
             pass
             
     return clean_name, unit
