@@ -190,7 +190,11 @@ class AlgoTrainEval:
         # Combine the train/test splits into a single dataframe/array
         # This may be called after calling AlgoTrainEval.split_data()
         X = pd.concat([self.X_train,  self.X_test])
-        y = pd.concat([self.y_test, self.y_train])
+        # Check if y values exist before concatenating
+        if self.y_test is not None and self.y_train is not None:
+            y = pd.concat([self.y_test, self.y_train])
+        else: # e.g. for unsupervised clustering
+            y = None
         return X, y
 
     def convert_to_list(self,d:dict) ->dict:
@@ -1150,6 +1154,7 @@ def _process_single_metric(args_dict):
             # --- DYNAMIC FEATURE IMPORTANCE FOR ALL COMPATIBLE MODELS ---
             for algo_str, algo_info in train_eval.algs_dict.items():
                 model = algo_info['algo']
+                pipeline = algo_info['pipeline'] 
                 # Retrieve .feature_importances_ natively if supported (rf, xgb, gbr, adaboost)
                 imp_train = getattr(model, "feature_importances_", None)
 
@@ -1160,7 +1165,7 @@ def _process_single_metric(args_dict):
                     #. data instead would be more appropriate
                     try:
                         result = permutation_importance(
-                            estimator=model, 
+                            estimator=pipeline, 
                             X=train_eval.X_train,
                             y=train_eval.y_train, 
                             n_repeats=5, 
@@ -1194,7 +1199,7 @@ def _process_single_metric(args_dict):
             
             try: # Now create the feature importance plot on test data:
                 result_test = permutation_importance(
-                    estimator=model, 
+                    estimator=pipeline, 
                     X=train_eval.X_test,  
                     y=train_eval.y_test,  
                     n_repeats=5, 
