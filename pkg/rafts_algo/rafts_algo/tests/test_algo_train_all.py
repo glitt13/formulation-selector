@@ -1570,7 +1570,8 @@ class TestProcessSingleMetric(unittest.TestCase):
                 'save_all_clusters': False,
                 'dir_out_viz_base': tmp_path,
                 'dir_out_anlys_base': tmp_path,
-                'gdf_comid': gdf_comid
+                'gdf_comid': gdf_comid,
+                'n_jobs': None
             }
             
             # 3. Execute the worker function
