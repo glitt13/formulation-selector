@@ -344,7 +344,8 @@ if __name__ == "__main__":
 
                                     path_params_cw_out_gpkg = raftsutil.std_receiver_params_mapped_path(dir_regionalization, ds, algo, 
                                                                                                      resp_var, ext=".gpkg")
-                                    with sqlite3.connect(path_params_cw_out) as conn:
+                                  
+                                    with sqlite3.connect(path_params_cw_out_gpkg) as conn:
                                         df_mapped_params.to_sql("parameters", conn, if_exists='replace', index=False)
                                     logging.info(f"Saved crosswalk-mapped receiver parameters to {path_params_cw_out_gpkg}")
                                     
