@@ -2,7 +2,7 @@
 # Note: This alternative configuration of the algo_config file was used in early August 2025 to perform process sensitivity analysis and assess uncertainty bounds.
 name_attr_config: 'regn_casam_attr_config.yaml'  # REQUIRED. Name of the corresponding dataset's attribute configuration file, which should be in the same directory as this. If not provided, assumes 'attr' may be substituted for this filename's 'algo'
 name_algo_config: 'regn_casam_algo_config.yaml' # REQUIRED. The name of the algorithm configuration file if in same directory as this config file. Otherwise the full path to the file.
-name_tfrm_config: # 'xssaus_attrs_tform.yaml' # REQUIRED (if transforming predictor data). The name of transformation configuration file, stored in the same directory as the other config files.
+
 ds_type: 'prediction' # Required string. Strongly recommended to select 'prediction' in the prediction config file. This string will be used in the filename of the output metadata describing each data point's identifer, COMID, lat/lon, reach name of the location. This string should differ from the string used in the attribute config yaml file. Filename: `"nldi_feat_{dataset}_{ds_type}.csv"` inside `dir_std_base / dataset /`.
 write_type: 'parquet' # Required filetype for writing NLDI feature metadata. Default 'parquet'. May also select 'csv'
 path_meta: "{dir_std_base}/../../raw/hfv4_test26aug5_vpu01/huc12/" # Required. Prediction attribute metadata filepath formatted for R's glue() & py f-strings as generated using `proc.attr.hydfab::write_meta_nldi_feat()`. Fundamentally, this can be a path to any file containing the locations of interest. Strongly suggested default format when using proc.attr.hydfab:  "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.parquet"
@@ -15,7 +15,7 @@ overwrite_sql: True # Recommended for rafts_regn_params_gpkg.py. Should the sqli
 path_hf_finl_gpkg: '{home_dir}/noaa/hydrofabric/v4_aug26test/ngen_vpu01.gpkg' # Required when running rafts_regn_params_gpkg.py The hydrofabric gpkg containing the divides specified in the path_crosswalk_ids. 
 layr_hf_finl_gpkg: 'divides' # The layer to be read from the `path_hf_finl_gpkg`. Default 'divides'.
 path_tfrm_script: # "{home_dir}/git/rafts/pkg/rafts_algo/rafts_algo/rafts_tfrm_attrs.py" # Optional. The filepath to the transformation script
-conda_env: # 'py312' # Required. The anaconda environment with rafts_algo installed so that the rafts_tfrm_attrs.py script may run.
+
 basepath_algos:
 algo_response_vars: # List out the desired response variables (e.g. metrics, hydrologic signatures) for prediction. # TODO offer 'all'
   - 'cluster_labels'
