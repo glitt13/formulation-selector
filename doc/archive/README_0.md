@@ -92,7 +92,7 @@ We track these tasks inside `rafts/scripts/eval_ingest/_name_of_raw_dataset_here
 #### 1. `data_schema.yaml`
 The data schema yaml file contains the following fields:
  - `col_schema`:  required column mappings in the evaluation metrics dataset. These describe the column names in the raw data and how they'll map to standardized column names. 
-    - for `metric_mappings` refer to the the [rafts_categories.yaml](https://github.com/NOAA-OWP/rafts/blob/main/pkg/rafts_prep/rafts_prep/data/rafts_categories.yaml) 
+    - for `metric_mappings` refer to the the [rafts_categories.yaml](../../pkg/rafts_prep/rafts_prep/data/rafts_categories.yaml) 
  - `file_io`: The location of the input data and desired save location. Also specifies the save file format.
  - `formulation_metadata`: Descriptive traits of the model formulation that generated the metrics. Some of these are required fields while others are optional.
  - `references`: Optional but _very_ helplful metadata describing where the data came from.

@@ -3,9 +3,9 @@ col_schema:   # required column mappings in the evaluation metrics dataset
   - 'gage_id': 'divide_id' # The basin identifier/gage id used for each modeled location in the evaluation metrics dataset
   - 'featureID': '{gage_id}' # python f-string / R glue() format; converting the 'gage_id' to the standardized featureID used by nhdplusTools. Must use '{gage_id}' e.g. 'USGS-{gage_id}'
   - 'featureSource': 'hfv22_id' # The standardized nhdplusTools featureSource. Possible featureSources might be 'nwissite', 'comid', 'hfv22_id', hfv30_id
-  - 'metric_cols': 'snw_pc_max|gw_Expon' # Column(s) in the dataset corresponding to the evaluation metrics. If multiple exist, separate each string by '|' e.g. 'rmse|kge|nse'
-  - 'metric_mappings': 'snw_pc_max|gw_Expon' # The mapping of metric_cols to the standardized format as specified in rafts_categories.yaml, separate each metric name by '|' e.g. 'RMSE|KGE|NSE'
-  - 'val_metrics': 'False'
+  - 'respvar_cols': 'snw_pc_max|gw_Expon' # Column(s) in the dataset corresponding to the evaluation metrics. If multiple exist, separate each string by '|' e.g. 'rmse|kge|nse'
+  - 'respvar_mappings': 'snw_pc_max|gw_Expon' # OPTIONAL unless 'val_respvar' is True, which maps respvar_cols to the standardized format as specified in rafts_categories.yaml, separate each metric name by '|' e.g. 'RMSE|KGE|NSE'. When val_metrics is False (default), enter the same thing as respvar_cols.
+  - 'val_respvar': 'False' # Should respvar_mappings be validated against the options in rafts_categories.yaml? Default False.
 file_io: # May define {home_dir} for python's '{home_dir}/string_path'.format(home_dir =str(Path.home())) functionality
   - 'home_dir': '~' # OPTIONAL, define the home_dir path. If undefined, rafts_prep will automatically assume default '~' 
   - 'path_data': '{home_dir}/noaa/regionalization/data/raw/hfatl_test/resp_dataset.parquet' # Where the raw input data are stored.

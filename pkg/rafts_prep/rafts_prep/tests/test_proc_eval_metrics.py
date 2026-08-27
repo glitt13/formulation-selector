@@ -43,7 +43,7 @@ with open(schema_dir_test, 'r') as file:
 
 # Reads the testing config dataframe
 exp_config_df = pd.read_csv(Path(parent_dir_test,"test_config_df.csv"), index_col=None)
-exp_config_df['val_metrics'] = True
+exp_config_df['val_respvar'] = True
 home_dir = "~"
 # Transform the home_dir to user dir
 for col in exp_config_df.columns:
@@ -53,8 +53,8 @@ for col in exp_config_df.columns:
 
 # Load the user-specific metrics dataset from the testing data
 test_df = pd.read_csv(Path(parent_dir_test,"user_metric_data.csv"))
-raw_test_df = test_df.rename(columns = dict(zip(exp_config_df['metric_mappings'].str.split('|')[0],
-    exp_config_df['metric_cols'].str.split('|')[0])))
+raw_test_df = test_df.rename(columns = dict(zip(exp_config_df['respvar_mappings'].str.split('|')[0],
+    exp_config_df['respvar_cols'].str.split('|')[0])))
 
 
 class TestStdConfigFunctions(unittest.TestCase):
@@ -62,7 +62,7 @@ class TestStdConfigFunctions(unittest.TestCase):
     def test_conv_ls_dicts_df_long(self, mock_read_config):
         """Test converting the uncertainty config structure."""
         uncn_config = {
-            'metric_mappings': [
+            'respvar_mappings': [
                 {'resp_var': 'NSE', 'description': 'Nash-Sutcliffe Efficiency', 'Q_lims': {'min_lim': -999, 'max_lim': 1}}
             ],
             'target_var_mappings': [{'streamflow': 'Streamflow'}]
@@ -122,7 +122,7 @@ class TestProcColSchemaHier(unittest.TestCase):
         # specify netcdf config
         nc_config_df = exp_config_df.copy()
         nc_config_df['save_type'] = 'netcdf'
-        nc_config_df['val_metrics'] = 'True'
+        nc_config_df['val_respvar'] = 'True'
         cls.dsnc = proc_col_schema(raw_test_df,nc_config_df, dir_save)
 
     def test_hier_nc_exists(self):

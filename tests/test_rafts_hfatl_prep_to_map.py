@@ -155,7 +155,7 @@ class TestHfAtlasRaftsWorkflow(unittest.TestCase):
             {"dummy_var": (("gage_id",), np.random.rand(len(div_ids)))},
             coords={"gage_id": div_ids}
         )
-        ds_xr.attrs['metric_mappings'] = 'dummy_var'
+        ds_xr.attrs['respvar_mappings'] = 'dummy_var'
         ds_xr.attrs['featureSource'] = 'hf_test_source'
         ds_xr.attrs['featureID'] = '{gage_id}'
         ds_xr.to_netcdf(nc_path)

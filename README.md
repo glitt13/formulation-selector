@@ -88,9 +88,9 @@ When configuring a new workflow, the following are common considerations/gotchas
 
  - Next, `dataset_name` needs to be unique for each workflow, and consistently specified between a dataset's _prep_ and _attr_ configs. The `dataset_name` is used as a unique identifier in new subdirectories and filenames that are created when running a workflow.  #TODO remove defining `dataset_name` as a requirement in the attr config without breaking legacy multi-dataset processing.
 
-- Point to the new response variable dataset's location in the prep config's `path_data`. Ensure `metric_cols` and `metric_mappings` appropriately define the data columns of interest. Then, as-needed, adapt the custom prep python script in the same directory as the config files to appropriately munge those data.
+- Point to the new response variable dataset's location in the prep config's `path_data`. Ensure `respvar_cols` and `respvar_mappings` appropriately define the data columns of interest. Then, as-needed, adapt the custom prep python script in the same directory as the config files to appropriately munge those data.
 
- - `algo_response_vars` are listed out in the prediction config from the prep config's  `metric_mappings` for _supervised_ prediction (if appropriate). In _unsupervised_ situations, you'll simply specify `- "cluster_labels"` as the only `algo_response_vars` entry in the prediction config'.
+ - `algo_response_vars` are listed out in the prediction config from the prep config's  `respvar_mappings` for _supervised_ prediction (if appropriate). In _unsupervised_ situations, you'll simply specify `- "cluster_labels"` as the only `algo_response_vars` entry in the prediction config'.
 
 - **Defining Paths**. This can be one of the more challenging aspect of configuration. More details in the following config-specific subsections.
 
@@ -127,10 +127,10 @@ Used for _preparing_ the raw input data into standardized forms. Originally, thi
   * `featureSource`: The standardized nhdplusTools featureSource (e.g., `hfv22_id`). (Required). This is used to distinguish different types of watershed attribute datasets and is assigned to the `featureSource` column in the attribute data.  In legacy forms of RaFTS that use the `proc.attr.hydfab` R-package, it may be used to designate the data source from NHDPlus attribute retrieval (e.g. 'nwissite'). In normal hydrofabric-based workflows using pre-existing attribute data, it is used to represent the hydrofabric version corresponding to the attribute data (e.g. `hfv22_id`, or `hfv40_id`).
 
 
-  * `metric_cols` & `metric_mappings`: Column(s) in the raw response variables dataset (`'metric_cols'`) and the mapped column names to be used for the dataset and all further processing. In other words, `'metric_cols'` gives the user the option to rename the response variables' data columns. (Required).
+  * `respvar_cols` & `respvar_mappings`: Column(s) in the raw response variables dataset (`'respvar_cols'`) and the mapped column names to be used for the dataset and all further processing. In other words, `'respvar_cols'` gives the user the option to rename the response variables' data columns. (Required).
 
-    - Note that `metric_mappings` originally existed in order to standardize the nomenclature of what is being predicted. With a standardized nomenclature, expected min/max bounds may then be defined to constrain predictions within the theoretical limits of a 'metric' e.g. KGE must be between 0 and 1. 
-    - #TODO rename metrics to resp_vars, as the application of RaFTS has expanded from its original usage of just predicting hydrologic model metrics.
+    - Note that `respvar_mappings` originally existed in order to standardize the nomenclature of what is being predicted. With a standardized nomenclature, expected min/max bounds may then be defined to constrain predictions within the theoretical limits of a 'metric' e.g. KGE must be between 0 and 1. 
+    - Note the standardized nomenclature enforcement can be activated by adding `'val_respvar': 'True'`, which references [rafts_categories.yaml](pkg/rafts_prep/rafts_prep/data/rafts_categories.yaml) where the user may enforce specific limits/allowed names for response variables.
 
 
 * **`file_io`**:
@@ -235,7 +235,7 @@ Configures the acquisition of catchment attributes corresponding to standard-nam
 
 ### 3. Algorithm Config (e.g. `*_algo_config.yaml`)
 
-Configures the training and testing of algorithms that predict formulation metrics or hydrologic signatures.
+Configures the training and testing of algorithms that predict response variables (e.g. formulation metrics or hydrologic signatures).
 
 * `task_type`: The type of machine learning task. Explicitly enter `clustering` if you desire to run unsupervised clustering. Otherwise the default `'regression'` will be considered supervised.
 
