@@ -11,7 +11,7 @@ file_io:
   - dir_db_attrs: '{dir_base}/attributes/{ds}' # Note the {ds} f-string for VPU partitioning
   - ds_type: 'training'
   - write_type: 'parquet'
-  - path_meta: "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.{write_type}"
+  - path_meta: "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.parquet"
   - name_prep_config: 'hfatl_prep_config.yaml' # REQUIRED for linking to the formulation
 formulation_metadata:
   - datasets:

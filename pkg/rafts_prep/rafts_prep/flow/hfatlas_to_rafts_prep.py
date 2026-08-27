@@ -85,7 +85,6 @@ if __name__ == "__main__":
     datasets = attr_cfig.attrs_cfg_dict.get('datasets') # Identify datasets of interest
     # Grab variables for building out the path to metadata (which contains comid-gage id mappings)
     ds_type = [x for x in attr_cfig.attr_config.get('file_io') if 'ds_type' in x][0]['ds_type']
-    write_type = [x for x in attr_cfig.attr_config.get('file_io') if 'write_type' in x][0]['write_type']
     path_meta_fstr = [x for x in attr_cfig.attr_config.get('file_io') if 'path_meta' in x][0]['path_meta']
     # The hfatlas attribute column names of interest:
     attrs_sel = attr_cfig.attrs_cfg_dict.get("attrs_sel")

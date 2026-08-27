@@ -60,7 +60,7 @@ class TestHfAtlasRaftsWorkflow(unittest.TestCase):
                 {'dir_db_attrs': str(cls.dir_db_attrs / "{ds}")},
                 {'ds_type': 'training'},
                 {'write_type': 'parquet'},
-                {'path_meta': "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.{write_type}"}
+                {'path_meta': "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.parquet"}
             ],
             'formulation_metadata': [{'datasets': [cls.dataset]}],
             'attr_select': [
@@ -95,7 +95,7 @@ class TestHfAtlasRaftsWorkflow(unittest.TestCase):
             'name_algo_config': str(cls.path_algo_cfg),
             'ds_type': 'prediction',
             'write_type': 'parquet',
-            'path_meta': "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.{write_type}",
+            'path_meta': "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.parquet",
             'pred_file_comid_colname': 'featureID',
             'algo_response_vars': ['dummy_var'],
             'algo_type': ['rf', 'kmeans'],

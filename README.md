@@ -214,7 +214,7 @@ Configures the acquisition of catchment attributes corresponding to standard-nam
   * `name_prep_config`: The name of the prep config file. Only used when running the hfatlas-based workflow.  This should be `None` when running the legacy `proc.attr.hydfab` component of the workflow. Note that `rafts_pred_algo.py` uses logic on whether this is present to determine how to read predictor data (aka basin attributes).
 
 
-  * `path_meta`: Ignored when processing pre-existing attribute data (e.g. hfATLAS), although not ignored in the prediction config when part of the workflow. For the attribute config, this is used in the legacy RaFTS workflow's `proc.attr.hydfab` processing. Training attribute metadata filepath formatted for R's glue or py f-string, as generated using `proc.attr.hydfab::write_meta_nldi_feat()`. Strongly suggested default:  "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.{write_type}"
+  * `path_meta`: Ignored when processing pre-existing attribute data (e.g. hfATLAS), although not ignored in the prediction config when part of the workflow. For the attribute config, this is used in the legacy RaFTS workflow's `proc.attr.hydfab` processing. Training attribute metadata filepath formatted for R's glue or py f-string, as generated using `proc.attr.hydfab::write_meta_nldi_feat()`. Strongly suggested default:  "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.parquet"
 
 
 * **`formulation_metadata`**:

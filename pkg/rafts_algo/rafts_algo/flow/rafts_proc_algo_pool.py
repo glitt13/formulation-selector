@@ -115,7 +115,6 @@ if __name__ == "__main__":
     datasets = attr_cfig.attrs_cfg_dict.get('datasets') # Identify datasets of interest
     # Grab variables for building out the path to metadata (which contains comid-gage id mappings)
     ds_type = [x for x in attr_cfig.attr_config.get('file_io') if 'ds_type' in x][0]['ds_type']
-    write_type = [x for x in attr_cfig.attr_config.get('file_io') if 'write_type' in x][0]['write_type']
     path_meta_fstr = [x for x in attr_cfig.attr_config.get('file_io') if 'path_meta' in x][0]['path_meta']
 
 
@@ -172,7 +171,7 @@ if __name__ == "__main__":
         dir_out_alg_ds = Path(dir_out_alg_base/Path(ds))
         dir_out_alg_ds.mkdir(exist_ok=True)
 
-        vals = {'ds_type':ds_type,'write_type':write_type, 'dir_std_base':dir_std_base,'ds':ds}
+        vals = {'ds_type':ds_type,'write_type':'parquet', 'dir_std_base':dir_std_base,'ds':ds}
         path_meta = path_meta_fstr.format(**vals)
         dir_db_attrs = Path(str(dir_db_attrs).format(**vals))
         if Path(path_meta).exists() and False:

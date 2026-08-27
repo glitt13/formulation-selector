@@ -1084,7 +1084,7 @@ class TestReadMetadata(unittest.TestCase):
                 'file_io': [
                     {'ds_type': 'training'},
                     {'write_type': 'parquet'},
-                    {'path_meta': "{dir_std_base}/{ds}/{ds}_{ds_type}.{write_type}"}
+                    {'path_meta': "{dir_std_base}/{ds}/{ds}_{ds_type}.parquet"}
                 ]
             }
             # Only override dir_std_base key
@@ -1172,7 +1172,7 @@ class TestPredConfigParser(unittest.TestCase):
 
     def test_read_pred_config_missing_required(self):
         # Remove a required field
-        del self.pred_config["write_type"]
+        del self.pred_config["ds_type"]
         with open(self.path_pred_config, 'w') as f:
             yaml.dump(self.pred_config, f)
 
@@ -1198,7 +1198,7 @@ class TestPredConfigParser(unittest.TestCase):
 
 def test_build_pred_locs_path():
     # Given
-    template = "{dir_std_base}/{ds}/pred_{ds}_{ds_type}.{write_type}"
+    template = "{dir_std_base}/{ds}/pred_{ds}_{ds_type}.parquet"
     dir_std_base = "/test/standardized"
     ds = "camels"
     ds_type = "prediction"

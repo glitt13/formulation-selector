@@ -40,7 +40,7 @@ path_ha <- glue::glue("{dir_base}/hydroatlas_vars_sub.parquet")
 
 # Refer to temp_dir <- tempdir() in setup.R
 temp_dir <- local_temp_dir() # If running this on your own, source 'setup.R' first.
-path_meta <- paste0(temp_dir,"/{ds}/nldi_feat_{ds}_{ds_type}.{write_type}")
+path_meta <- paste0(temp_dir,"/{ds}/nldi_feat_{ds}_{ds_type}.parquet")
 dir_db_attrs <- file.path(temp_dir,'attrs') # used for temporary attr retrieval
 dir_db_attrs_pkg <- system.file("extdata","attributes_pah",package="proc.attr.hydfab")# permanent package location
 dir_user <- system.file("extdata","user_data_std", package="proc.attr.hydfab") # dir_user <- "~/git/fsds/pkg/proc.attr.hydfab/inst/extdata/user_data_std/"

@@ -5,7 +5,7 @@ name_algo_config: 'hfatl_algo_config.yaml'
 name_prep_config: 'hfatl_prep_config.yaml'
 ds_type: 'prediction'
 write_type: 'parquet'
-path_meta: "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.{write_type}"
+path_meta: "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.parquet"
 pred_file_comid_colname: 'featureID'
 algo_response_vars:
   - 'cluster_labels' # Or 'NSE', 'KGE' depending on your algo config
