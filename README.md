@@ -320,11 +320,11 @@ Configures the out-of-sample prediction step and downstream mapping.
 
 * `pred_gpkg_lyr`: The layer name corresponding to `path_gpkg_pred` to read from the prediction geopackage. Default None. The fallback reads the gpkg used in the response variable preparation (`path_gpkg_rafts_prep`).
 
-* `pred_gpkg_id_col`: The column name corresponding to `path_gpkg_pred`. Default None. The fallback reads the gpkg used in the response variable preparation (`path_gpkg_rafts_prep`)
+* `pred_gpkg_id_col`: The target location identifier column name corresponding to `path_gpkg_pred`. Crucially, when path_crosswalk_ids is specified, this also serves as the formal join key column name inside the crosswalk file that corresponds to your initial prediction identifiers. It is used to merge predictions with the crosswalk dataset in `rafts_pair_donors.py` and `rafts_regn_params_gpkg.py`. If not explicitly mapped, the fallback reads the gpkg used in the response variable preparation (`path_gpkg_rafts_prep`). Default None. 
 
-* `path_crosswalk_ids`: Optional. Path to the .parquet file used to crosswalk aggregated identifiers (e.g. huc12) to the standard identifier (e.g. divide_id). Used in `rafts_agg_nexus_hfatl.py`, `rafts_map_pred_hfatl.py`, `rafts_regn_params_gpkg.py` and `rafts_pair_donors.py`. Should also specify `crosswalk_target_col` and `path_hf_finl_gpkg`.
+* `path_crosswalk_ids`: Optional. Path to the .parquet file used to crosswalk aggregated identifiers (e.g. `'huc12'`, `'gage_id'`) to the standard identifier (e.g. `'divide_id'`). Used in `rafts_agg_nexus_hfatl.py`, `rafts_map_pred_hfatl.py`, `rafts_regn_params_gpkg.py` and `rafts_pair_donors.py`. Must also specify `crosswalk_target_col` and `path_hf_finl_gpkg` in order to execute the merge operation.
 
-* `crosswalk_target_col`: The column name in `path_crosswalk_ids` representing the gpkg target identifier of interest (e.g. `divide_id`).
+* `crosswalk_target_col`: The column name in `path_crosswalk_ids` representing the gpkg target identifier of interest  that is used inside `path_hf_finl_gpkg`. In the case of hydrofabric divides, this is usually `'divide_id'`. When the crosswalk executes, this col will become the new primary key in the resulting SQLite database and .gpkg layers (when running `rafts_regn_params_gpkg.py`).
 
 * `overwrite_sql`: Boolean. Should the sqlite tables for each parameter set be overwritten? Recommended when running `rafts_regn_params_gpkg.py`. Default `False`. 
 
