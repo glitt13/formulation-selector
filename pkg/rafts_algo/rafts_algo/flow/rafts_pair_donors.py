@@ -243,7 +243,8 @@ if __name__ == "__main__":
                         id_col_resp = df_resp.index.name
                         if not id_col_resp:
                             id_col_resp = 'gage_id' if 'gage_id' in df_resp.columns else  \
-                                logging.error(f"Could not determine the location identifier column in the prepared response variable dataset {ds}")
+                                logging.error(f"Could not determine the location identifier column in the prepared response variable dataset {ds}") and \
+                                print(f"Could not determine the location identifier column in the prepared response variable dataset {ds}")
 
                         # # Extract the parameter columns (data variables in the .nc file)
                         # param_cols = list(dat_resp.data_vars.keys())
@@ -309,6 +310,7 @@ if __name__ == "__main__":
                                 elif str(path_crosswalk_ids).endswith('.parquet'):
                                     df_crosswalk = pd.read_parquet(path_crosswalk_ids).astype(str)
                                 else:
+                                    print("ERROR: Crosswalk file must be a .csv or .parquet")
                                     logging.error("Crosswalk file must be a .csv or .parquet")
                                     continue
                                     
@@ -350,12 +352,16 @@ if __name__ == "__main__":
                                     logging.info(f"Saved crosswalk-mapped receiver parameters to {path_params_cw_out_gpkg}")
                                     
                                 else:
+                                    print(f"ERROR: Crosswalk file missing the specified pred_gpkg_id_col: {pred_gpkg_id_col}")
                                     logging.error(f"Crosswalk file missing the specified pred_gpkg_id_col: {pred_gpkg_id_col}")
                             else:
-                                logging.error(f"Crosswalk file path was provided but does not exist: {path_crosswalk_ids}")
+                                print(f"Crosswalk file path was provided but does not exist: {path_crosswalk_ids}")
+                                logging.error(f"ERROR: Crosswalk file path was provided but does not exist: {path_crosswalk_ids}")
                         else:
+                            print("WARN: NOT performing a crosswalk on aggregated identifiers.")
                             logging.warning("NOT performing a crosswalk on aggregated identifiers.")
                     except Exception as e:
+                        print(f"ERROR: Failed to assign donor parameters to receivers: {e}")
                         logging.error(f"Failed to assign donor parameters to receivers: {e}")
 
     logging.info("FINISHED Donor-Receiver Pairing & Parameter Assignment.")
