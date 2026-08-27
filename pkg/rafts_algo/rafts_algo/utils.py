@@ -354,9 +354,8 @@ class PredConfigParser:
 
         Sets:
             self.pred_cfg_dict (dict): Parsed and formatted config items, including:
-                - Required: `name_attr_config`, `name_algo_config`, `name_tfrm_config`,
-                            `path_meta`, `write_type`, `ds_type`, `pred_file_comid_colname`,
-                            `path_tfrm_script`, `conda_env`
+                - Required: `name_attr_config`, `name_algo_config`, 
+                            `path_meta`, `ds_type`, `pred_file_comid_colname`,
                 - Parsed from attribute config: `datasets`, `dir_base`, `dir_std_base`, `home_dir`
                 - Optional: `algo_response_vars`, `algo_type`, `MAPIE_alpha`
         Returns:
@@ -376,7 +375,7 @@ class PredConfigParser:
         # --- Required top-level prediction keys ---
         required_pred_keys = [
             "name_attr_config", "name_algo_config",
-            "ds_type", "write_type", "path_meta", "pred_file_comid_colname"
+            "ds_type", "path_meta", "pred_file_comid_colname"
         ]
 
         missing_keys = [k for k in required_pred_keys if k not in pred_cfg or pred_cfg[k] is None]
@@ -390,7 +389,7 @@ class PredConfigParser:
         # Extract required fields
         name_attr_config     = pred_cfg["name_attr_config"]
         name_algo_config     = pred_cfg["name_algo_config"]
-        write_type           = pred_cfg["write_type"]
+        write_type           = pred_cfg.get("write_type",'parquet')
         ds_type              = pred_cfg["ds_type"]
         path_meta            = pred_cfg["path_meta"]
         pred_file_comid_colname = pred_cfg["pred_file_comid_colname"]
@@ -924,11 +923,11 @@ def build_cfig_path(path_known_config:str | os.PathLike, path_or_name_cfig:str |
     return path_cfig
 
 def build_pred_locs_path(path_meta_template: str | os.PathLike,dir_std_base: str | os.PathLike,
-    ds: str,ds_type: str,write_type: str) -> Path:
+    ds: str,ds_type: str,write_type: str='parquet') -> Path:
     """
     Build the full path to the prediction metadata location using formatting template.
 
-    :param path_meta_template: f-string template for the path, e.g. "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.{write_type}"
+    :param path_meta_template: f-string template for the path, e.g. "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.parquet"
     :param dir_std_base: Base directory for standardized data
     :param ds: Dataset name
     :param ds_type: Dataset type, e.g., 'prediction'
@@ -1354,10 +1353,9 @@ def _read_metadata(path_attr_config:str|os.PathLike, ds:str) -> pd.DataFrame:
 
     # Grab variables for building out the path to metadata (which contains comid-gage id mappings)
     ds_type = [x for x in attr_cfig.attr_config.get('file_io') if 'ds_type' in x][0]['ds_type']
-    write_type = [x for x in attr_cfig.attr_config.get('file_io') if 'write_type' in x][0]['write_type']
     path_meta_fstr = [x for x in attr_cfig.attr_config.get('file_io') if 'path_meta' in x][0]['path_meta']
 
-    vals = {'ds_type':ds_type,'write_type':write_type, 'dir_std_base':dir_std_base,'ds':ds}
+    vals = {'ds_type':ds_type,'write_type':'parquet', 'dir_std_base':dir_std_base,'ds':ds}
     path_meta = path_meta_fstr.format(**vals)
     if not Path(path_meta).exists():
         logging.warning(f"The dataset's metadata mapping file could not be found: \n{path_meta}")

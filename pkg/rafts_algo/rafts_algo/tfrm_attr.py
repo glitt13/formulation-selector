@@ -115,7 +115,7 @@ def _get_comids_std_attrs(path_attr_config: str | os.PathLike,
     dir_base = attr_cfig.attrs_cfg_dict.get('dir_base') # Possibly used for f-string eval with path_meta
     dir_std_base = attr_cfig.attrs_cfg_dict.get('dir_std_base') # Possibly used for f-string eval with path_meta
 
-    write_type = fio_attr.get('write_type') # Likely used for f-string eval with path_meta
+    write_type = fio_attr.get('write_type','parquet') # Likely used for f-string eval with path_meta
     ds_type_attr = fio_attr.get('ds_type') # Likely used for f-string eval with path_meta
     # These are the likely ds type names. Check to see if files with these names also exist once defining path_meta below.
     likely_ds_types=list(set(likely_ds_types+[ds_type_attr]))

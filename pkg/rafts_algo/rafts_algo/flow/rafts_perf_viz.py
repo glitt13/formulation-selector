@@ -59,7 +59,7 @@ if __name__ == "__main__":
     pred_cfg._read_pred_config()
     path_attr_config = raftsutil.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_attr_config',None)) 
     ds_type = pred_cfg.pred_cfg_dict.get('ds_type')
-    write_type = pred_cfg.pred_cfg_dict.get('write_type')
+    write_type = pred_cfg.pred_cfg_dict.get('write_type','parquet')
 
     # Get features from the attr config file --------------------------
     attr_cfg = raftsutil.AttrConfigAndVars(path_attr_config)

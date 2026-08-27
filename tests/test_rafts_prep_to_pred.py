@@ -64,12 +64,8 @@ class TestFsPrepProcAttrHydfabFsAlgo(unittest.TestCase):
         dir_base = [x.get('dir_base') for x in attr_cfig.attr_config['file_io'] if 'dir_base' in x.keys()][0].format(home_dir=self.home_dir )
         self.dir_db_attrs = [x.get('dir_db_attrs') for x in attr_cfig.attr_config['file_io'] if 'dir_db_attrs' in x.keys()][0].format(dir_base=dir_base)
         self.ds_type = [x.get('ds_type') for x in attr_cfig.attr_config['file_io'] if 'ds_type' in x.keys()][0]
-        write_type =  [x.get('write_type') for x in attr_cfig.attr_config['file_io'] if 'write_type' in x.keys()][0]
-        
-        if not write_type == 'parquet':
-            raise ValueError(f"Testing expects the write_type ='parquet' in the attribute config file {self.apth_attr_cfig}")
-        
-        vals = {'ds_type':self.ds_type,'write_type':write_type,
+
+        vals = {'ds_type':self.ds_type,'write_type':'parquet',
                 'dir_std_base':self.dir_std_base,'ds':self.dataset}
         path_meta_fstr = [x.get('path_meta') for x in attr_cfig.attr_config['file_io'] if 'path_meta' in x.keys()][0]
         # Using cls.path_meta so that this can be deleted in tearDownClass

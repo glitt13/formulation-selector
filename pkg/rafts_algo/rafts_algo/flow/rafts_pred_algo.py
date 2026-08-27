@@ -149,7 +149,7 @@ if __name__ == "__main__":
     #%% PREDICTION FILE'S COMIDS (IMPLICIT ASSUMPTION: Each dataset processes the same IDS)
     path_meta_pred = pred_cfg.pred_cfg_dict.get('path_meta')
     comid_pred_col = pred_cfg.pred_cfg_dict.get('pred_file_comid_colname')
-    write_type = pred_cfg.pred_cfg_dict.get('write_type')
+    write_type = pred_cfg.pred_cfg_dict.get('write_type','parquet')
     ds_type = pred_cfg.pred_cfg_dict.get('ds_type')
     
     #%% prediction config
