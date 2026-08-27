@@ -28,7 +28,7 @@ def prep_nexus_data(path_prep_config: Path):
     
     # Extract schema mappings natively from the flattened dict
     orig_id_col = fio.get('gage_id', 'site_id')
-    metrics_str = fio.get('metric_cols', '')
+    metrics_str = fio.get('respvar_cols', '')
     metrics = metrics_str.split('|')
     gpkg_filename_pattern = fio.get('gpkg_filename_pattern')
     

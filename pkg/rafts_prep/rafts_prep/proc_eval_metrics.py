@@ -140,7 +140,7 @@ def _conv_ls_dicts_df_long():
 def _proc_check_input_config(
     config: dict, 
     std_keys:list[str]=['file_io','col_schema','formulation_metadata','references'],
-    req_col_schema:list[str]=['gage_id', 'metric_cols'],
+    req_col_schema:list[str]=['gage_id', 'respvar_cols'],
     req_form_meta:list[str]=[
         'dataset_name','formulation_base','target_var','start_date', 
         'end_date','cal_status'
@@ -154,7 +154,7 @@ def _proc_check_input_config(
     :type config: dict
     :param std_keys: Expected keys in the config file dict, defaults to ['file_io','col_schema','formulation_metadata','references']
     :type std_keys: list[str], optional
-    :param req_col_schema: The required keys inside col_schema, defaults to ['gage_id', 'metric_cols']
+    :param req_col_schema: The required keys inside col_schema, defaults to ['gage_id', 'respvar_cols']
     :type req_col_schema: list[str], optional
     :param req_form_meta: Required keys inside formulation_metadata, defaults to [ 'dataset_name','formulation_base','target_var','start_date', 'end_date','cal_status' ]
     :type req_form_meta: list[str], optional
@@ -430,7 +430,7 @@ def _proc_check_input_df(df: pd.DataFrame,
     #     2024-07-11, bugfix in case index is already named 'gage_id', GL
 
     gage_id = col_schema_df.loc[0, 'gage_id']
-    metric_cols = col_schema_df.loc[0, 'metric_cols']
+    metric_cols = col_schema_df.loc[0, 'respvar_cols']
     metrics = metric_cols.split('|')
 
     # check that all metric columns in schema file are in input dataframe
@@ -470,7 +470,7 @@ def _proc_check_input_df(df: pd.DataFrame,
 
 
     # Standardize the metrics
-    metric_mappings = col_schema_df['metric_mappings'][0].split('|')
+    metric_mappings = col_schema_df['respvar_mappings'][0].split('|')
 
     if val_metrics:
         # Run check that mappings are part of standardized column naming
@@ -524,8 +524,9 @@ def proc_col_schema(df: pd.DataFrame,
     formulation_id = std_form_id(col_schema_df)
     save_type = col_schema_df.loc[0, 'save_type']
     save_loc = col_schema_df.loc[0, 'save_loc']
-    if 'val_metrics' in col_schema_df.columns:
-        val_metrics = col_schema_df.loc[0, 'val_metrics'] == 'True'
+    if 'val_respvar' in col_schema_df.columns:
+        # Convert to string and lower() so 'True', 'true', and boolean True all evaluate safely
+        val_metrics = str(col_schema_df.loc[0, 'val_respvar']).lower() == 'true'
     else:
         val_metrics = False
     
@@ -576,7 +577,7 @@ def proc_col_schema(df: pd.DataFrame,
 
     # Convert dataframe to the xarray dataset and add metadata:
     ds = df.to_xarray()
-    ds.attrs = col_schema_df.fillna('').to_dict('index')[0]
+    ds.attrs = col_schema_df.fillna('').astype(str).to_dict('index')[0]
     
     # TODO query a database for the lat/lon corresponding to the gage-id if 
     # lat/lon not already provided

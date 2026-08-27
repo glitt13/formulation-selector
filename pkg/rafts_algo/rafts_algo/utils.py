@@ -1759,7 +1759,7 @@ def validate_dat_resp_schema(dat_resp: xr.Dataset, valid_metrics: List[str], col
             }
             
             # Use metrics from Xarray attributes if available, otherwise rely on valid_metrics from config
-            current_metrics = dat_resp.attrs.get('metric_mappings', '').split('|')
+            current_metrics = dat_resp.attrs.get('respvar_mappings', '').split('|')
             current_metrics = [m for m in current_metrics if m in dat_resp]
 
             for metr in current_metrics:

@@ -216,7 +216,7 @@ if __name__ == "__main__":
             
         if not metrics:
             # The metrics approach. These are all xarray data variables of the response(s)
-            metrics = dat_resp.attrs['metric_mappings'].split('|')
+            metrics = dat_resp.attrs['respvar_mappings'].split('|')
 
         # --- VALIDATION: Response Data (dat_resp) ---
         raftsutil.validate_dat_resp_schema(dat_resp, metrics, col_locid, arg_val)        

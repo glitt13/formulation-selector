@@ -62,7 +62,7 @@ if __name__ == "__main__":
     usgs_gage_ids = np.unique([x.split('_',1)[0] for x in files_usgs])
 
 
-    new_cols = col_schema_df['metric_cols'][0].split('|')
+    new_cols = col_schema_df['respvar_cols'][0].split('|')
     # new_cols = ['W_wt_precip_corr', 'V_wt_rainsnow_part', 'U_wt_perc', 'T_wt_pot_melt', 'S_wt_delay_ro',
     #              'R_wt_srfc_ro', 'Q_wt_snow_bal', 'P_wt_baseflow', 'P_wt_baseflow', 'N_wt_quickflow', 'M_wt_infilt']
     # Combine the xSSA results 

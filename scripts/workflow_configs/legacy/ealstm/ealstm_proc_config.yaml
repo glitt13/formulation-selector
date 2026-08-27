@@ -3,8 +3,8 @@ col_schema:   # required column mappings in the evaluation metrics dataset
   - 'gage_id': 'gageID' # The basin identifier/gage id used for each modeled location in the evaluation metrics dataset
   - 'featureID': 'USGS-{gage_id}' # python f-string / R glue() format; converting the 'gage_id' to the standardized featureID used by nhdplusTools. Must use '{gage_id}' e.g. 'USGS-{gage_id}'
   - 'featureSource': 'nwissite' # The standardized nhdplusTools featureSource. Possible featureSources might be 'nwissite', 'comid'.
-  - 'metric_cols': 'NSE|alpha_nse|beta_nse|FHV|FLV|FMS|NNSE' # Column(s) in the dataset corresponding to the evaluation metrics. If multiple exist, separate each string by '|' e.g. 'rmse|kge|nse'
-  - 'metric_mappings': 'NSE|alpha_NSE|beta_NSE|FHV|FLV|FMS|NNSE' # The mapping of metric_cols to the standardized format as specified in rafts_categories.yaml, separate each metric name by '|' e.g. 'RMSE|KGE|NSE'
+  - 'respvar_cols': 'NSE|alpha_nse|beta_nse|FHV|FLV|FMS|NNSE' # Column(s) in the dataset corresponding to the evaluation metrics. If multiple exist, separate each string by '|' e.g. 'rmse|kge|nse'
+  - 'respvar_mappings': 'NSE|alpha_NSE|beta_NSE|FHV|FLV|FMS|NNSE' # OPTIONAL unless 'val_respvar' is True, which maps respvar_cols to the standardized format as specified in rafts_categories.yaml, separate each metric name by '|' e.g. 'RMSE|KGE|NSE'. When val_metrics is False (default), enter the same thing as respvar_cols.
 file_io: # May define {home_dir} for python's '{home_dir}/string_path'.format(home_dir =str(Path.home())) functionality
   - 'home_dir': '~' # OPTIONAL, define the home_dir path. If undefined, rafts_prep will automatically assume default '~' 
   - 'path_data': '{home_dir}/git/ealstm_regional_modeling/notebooks/all_metrics.p' # Where the raw input data are stored.
