@@ -208,9 +208,6 @@ Configures the acquisition of catchment attributes corresponding to standard-nam
   * `ds_type`: A string used in the filename of the output metadata to discern whether a dataset is a training or prediction dataset. Options are `'training'` or `'prediction'`. In the common situations using custom hfATLAS attribute data, only `'training'` is used. This is used as a string inserted into `path_meta`, but note that `path_meta` is ignored when using the custom-generated attribute data (e.g. hfATLAS source). (Required in legacy workflows acquiring attribute data via `proc.attr.hydfab`).
 
 
-  * `write_type`: Filetype for writing NLDI feature metadata. Strongly recommend default `'parquet'`. (Required). 
-
-
   * `name_prep_config`: The name of the prep config file. Only used when running the hfatlas-based workflow.  This should be `None` when running the legacy `proc.attr.hydfab` component of the workflow. Note that `rafts_pred_algo.py` uses logic on whether this is present to determine how to read predictor data (aka basin attributes).
 
 
@@ -307,10 +304,6 @@ Configures the out-of-sample prediction step and downstream mapping.
 
 
 * `ds_type`: A string identifying the output dataset, highly recommended to be set to `prediction`. This is used as a string inserted into `path_meta`, but note that `path_meta` is ignored when using the custom-generated attribute data (e.g. hfATLAS source). (Required in legacy workflows acquiring attribute data via `proc.attr.hydfab`).
-
-
-* `write_type`: Filetype for the feature metadata output, defaulting to `parquet`. (Required).
-
 
 * `path_meta`: This is where the prediction attribute data are stored. Not to be confused with `path_meta` in the attribute config file, which is what is used for defining the predictor dataset location.  
 
