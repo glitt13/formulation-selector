@@ -14,6 +14,7 @@ loc_id_read: # This section only required for locations NOT to be read in under 
   - featureID_loc: 'USGS-{gage_id}' # python f-string / R glue() format; converting the 'loc_id' to the standardized featureID used by nhdplusTools/hydrofabric. Must use '{loc_id}' e.g. 'USGS-{loc_id}'.
   - featureSource_loc: 'nwissite' # The standardized nhdplusTools featureSource.
 file_io: # May define {home_dir} for python's '{home_dir}/string_path'.format(home_dir =str(Path.home())) functionality # NOTE THAT ORDER MATTERS! If an f-string, or glue-formatted dir/path is defined, make sure references defined above it (unless it's {home_dir})
+  - name_prep_config: 'xssaus_prep_config.yaml'
   - save_loc: 'local' #  #TODO implement once s3 becomes a capability. Use 'local' for saving to a local path via dir_save. Future work will create an approach for 'aws' or other cloud saving methods
   - home_dir: #OPTIONAL may optionally provide a home directory here, otherwise system default used.
   - dir_base: '{home_dir}/noaa/regionalization/data/input' # Required. The save location of standardized output
@@ -22,10 +23,6 @@ file_io: # May define {home_dir} for python's '{home_dir}/string_path'.format(ho
   - ds_type: 'training' # Required string. Recommended to select 'training' or 'prediction', but any string will work. This string will be used in the filename of the output metadata describing each data point's identifer, COMID, lat/lon, reach name of the location. This string should differ from the string used in the prediction config yaml file. Filename: `"nldi_feat_{dataset}_{ds_type}.csv"` inside `dir_std_base / dataset / `
   - path_meta:  "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.parquet"  #Required. Training attribute metadata filepath formatted for R's glue or py f-string, as generated using `proc.attr.hydfab::write_meta_nldi_feat()`. Strongly suggested default:  "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.parquet"
   - name_tform_config:  'xssaus_attrs_tform.yaml' #Optional. The name of the transformation config file (if transformations desired). If specified, read the attribute requirements for transformation and ensure they are acquired as well.
-formulation_metadata:
-  - datasets: # Required. Must match directory name inside dir_std_base. May be a list of items, or simply sublist 'all' to select everything inside dir_std_base for attribute grabbing.
-    - 'xSSA_proc_sens_wt' # Required. In this example case, it's a sublist of just one thing.
-  - formulation_base: 'Raven_blended' # Informational. Unique name of formulation. Optional.
 hydfab_config: # Required section describing hydrofabric connection details and objects of interest, particularly for hfsubsetR::get_subset()
  - s3_base: "s3://lynker-spatial/tabular" # Required. s3 path containing hydrofabric-formatted attribute datasets
  - s3_bucket: 'lynker-spatial' # Required. s3 bucket containing hydrofabric data

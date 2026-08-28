@@ -318,21 +318,31 @@ class AttrConfigAndVars:
         # parent location of response variable data:
         dir_std_base = Path(list([x for x in self.attr_config['file_io'] if 'dir_std_base' in x][0].values())[0].format(dir_base=dir_base, home_dir=home_dir))
 
-        # The datasets of interest
-        datasets = list([x for x in self.attr_config['formulation_metadata'] if 'datasets' in x][0].values())[0]
-
-        # TODO The multidatasets_identifier remains un-tested until this note goes away!
-        # multidatasets_identifier used in case multiple datasets exist inside each 'datasets' directory.
-        mltidatasets_id = [x for x in self.attr_config['formulation_metadata'] if 'multidatasets_identifier' in x]
-        if mltidatasets_id: 
-            # Extract the match string used to identify each of the .nc datasets created by rafts_prep.proc_eval_metrics.proc_col_schema()
-            mltidatasets_str = mltidatasets_id[0]['multidatasets_id']
-            for ds in datasets:
-                all_dataset_paths = _std_rafts_prep_ds_paths(dir_std_base,ds=ds,
-                                                          mtch_str = '*' + mltidatasets_str)
-                # Redefine datasets
-                datasets = [Path(x).name() for x in all_dataset_paths]
-
+        # Determine the datasets
+        file_io = self.attr_config.get('file_io', [])
+        # 1. Safely extract the prep config name from the list of dicts
+        name_prep_config = next((item['name_prep_config'] for item in file_io if 'name_prep_config' in item), None)
+        datasets = []
+        # 2. If a prep config is linked, read it to extract the dataset_name
+        if name_prep_config:
+            path_prep_config = build_cfig_path(self.path_attr_config,name_prep_config)
+            if path_prep_config.exists():
+                with open(path_prep_config, 'r') as f:
+                    prep_cfg = yaml.safe_load(f)
+                prep_form_meta = prep_cfg.get('formulation_metadata', [])
+                dataset_name = next((item['dataset_name'] for item in prep_form_meta if 'dataset_name' in item), None)
+                if dataset_name:
+                    datasets = [dataset_name] # Wrap in a list for downstream loops
+            else:
+                logging.warning(f"Prep config {path_prep_config.name} not found.")
+                
+        # 3. DURABLE FALLBACK: Legacy behavior if no prep config is found or dataset_name is missing
+        if not datasets:
+            try: 
+                datasets = list([x for x in self.attr_config.get('formulation_metadata', []) if 'datasets' in x][0].values())[0]
+            except Exception as e:
+                logging.error("Could not resolve dataset names from either the prep config or attribute config.")
+                raise ValueError("Could not resolve dataset names from either the prep config or attribute config.")
 
         # Compile output
         self.attrs_cfg_dict = {'attrs_sel' : attrs_sel,
