@@ -288,14 +288,16 @@ class TestFsPrepProcAttrHydfabFsAlgo(unittest.TestCase):
     @classmethod
     def tearDownClass(cls): # clean up files created during testing
         print(f"Tearing down test environment...")
-        if cls.save_path_nc.exists():
+        if hasattr(cls, 'save_path_nc') and cls.save_path_nc.exists():
             cls.save_path_nc.unlink()
             print(f"Deleted {cls.save_path_nc} for integration testing relating to rafts_prep->rafts_attrs_grab")
-        if cls.path_meta.exists():
+            
+        if hasattr(cls, 'path_meta') and cls.path_meta.exists():
             cls.path_meta.unlink()
             print(f"Deleted {cls.path_meta} for integration testing relating to rafts_attrs_grab.R")
-        # TODO create argparse option to remove the tests/input/attributes/comid_{comid}_attrs.parquet files (default keeps) 
-        if cls.dir_out_viz_base.exists():
+            
+        # Add getattr() or hasattr() to the directory teardowns to be fully safe!
+        if hasattr(cls, 'dir_out_viz_base') and cls.dir_out_viz_base.exists():
             shutil.rmtree(cls.dir_out_viz_base)
             print(f"Deleted {cls.dir_out_viz_base} for integration testing relating to rafts_proc_algo_viz.py")
         if cls.dir_out_anlys_base.exists():

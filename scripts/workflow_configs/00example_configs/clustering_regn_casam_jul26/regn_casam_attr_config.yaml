@@ -25,10 +25,6 @@ file_io: # May define {home_dir} for python's '{home_dir}/string_path'.format(ho
   - path_meta:  "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.parquet"  #Required, although ignored when processing hfatlas data. Training attribute metadata filepath formatted for R's glue or py f-string, as generated using `proc.attr.hydfab::write_meta_nldi_feat()`. Strongly suggested default:  "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.parquet"
   - name_tform_config: # 'xssa_attrs_tform.yaml' #Optional. The name of the transformation config file (if transformations desired). If specified, read the attribute requirements for transformation and ensure they are acquired as well.
   - name_prep_config: 'regn_casam_agg_prep_config.yaml' # Required when running the hfatlas-based workflow
-formulation_metadata:
-  - datasets: # Required. Must match directory name inside dir_std_base. May be a list of items, or simply sublist 'all' to select everything inside dir_std_base for attribute grabbing.
-    - 'an_ex_regn_jul26_casamnom_clust' # Required. In this example case, it's a sublist of just one thing.
-  - formulation_base: 'casamnom' # Informational. Unique name of formulation. Optional.
 attr_select: # Required. The names of variable sublistings are standardized with _vars, e.g. ha_vars, usgs_vars, sc_vars
   - hfatl_id_col: 'gageID_divide_id'
   - paths_hfatl: # Path to tabular HydrofabricATLAS parquet file of attributes extracted to hydrofabric divide

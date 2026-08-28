@@ -25,7 +25,7 @@ if (base::grepl('bolotin', home_dir)) {
   rafts_dir <- file.path(home_dir,"git","rafts")
 }
 # Run unit tests?
-RunTest <- F #TRUE Default FALSE prevents s3 data downloading in unit testing (FALSE=fast)
+RunTest <- T #TRUE Default FALSE prevents s3 data downloading in unit testing (FALSE=fast)
 ShowTestCovr <- FALSE # Only possible if RunTest==TRUE. Even slower though.
 # ---------------------------------------------------------------------------- #
 # Enter in all R packages here

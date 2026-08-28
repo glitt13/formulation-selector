@@ -13,10 +13,6 @@ file_io:
   - write_type: 'parquet'
   - path_meta: "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.parquet"
   - name_prep_config: 'hfatl_prep_config.yaml' # REQUIRED for linking to the formulation
-formulation_metadata:
-  - datasets:
-    - 'test_hfatl_ds'
-  - formulation_base: 'hf_test_model'
 # NEW: Hydrofabric native configurations!
 hydrofabric_io:
   - path_hf_gpkg: '{home_dir}/noaa/regionalization/data/tests/testdata_20250901/hydrofabric/hydrofabric.gpkg' # Path to local hydrofabric geometry
