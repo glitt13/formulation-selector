@@ -12,6 +12,7 @@ In addition some limited functionality to also prepare & standardize hfATLAS pre
 #     2024-08-13 update docstrings, GL
 #     2025-08-18 add logging, GL
 #     2026-07-24 implement pint unit mapping before stripping, GL
+#     2026-08-27 Replaced manual dict validation with Pydantic PrepConfig schema, Soroush Sorourian w/ the help of Gemini 3.1 Pro.
 import pandas as pd
 from pathlib import Path
 import yaml
@@ -28,6 +29,7 @@ import logging
 import __future__
 import sys
 import rafts_algo.utils as raftsutil
+from rafts_prep.schemas.rafts_prep_pandera_schemas import PrepConfig
 #pd.set_option('future.no_silent_downcasting', True)
 
 def std_dir_logs(dir_input:str | os.PathLike) -> Path:
