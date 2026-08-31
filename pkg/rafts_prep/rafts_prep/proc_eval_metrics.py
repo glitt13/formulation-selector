@@ -12,7 +12,7 @@ In addition some limited functionality to also prepare & standardize hfATLAS pre
 #     2024-08-13 update docstrings, GL
 #     2025-08-18 add logging, GL
 #     2026-07-24 implement pint unit mapping before stripping, GL
-#     2026-08-27 Replaced manual dict validation with Pydantic PrepConfig schema, Soroush Sorourian w/ the help of Gemini 3.1 Pro.
+#     2026-08-27 Replaced manual dict validation with Pydantic PrepConfig schema, SS w/ the help of Gemini 3.1 Pro.
 import pandas as pd
 from pathlib import Path
 import yaml
@@ -29,7 +29,7 @@ import logging
 import __future__
 import sys
 import rafts_algo.utils as raftsutil
-from rafts_prep.schemas.rafts_prep_pandera_schemas import PrepConfig
+from rafts_prep.schemas.rafts_prep_pydantic_schemas import PrepConfig
 #pd.set_option('future.no_silent_downcasting', True)
 
 def std_dir_logs(dir_input:str | os.PathLike) -> Path:
@@ -139,72 +139,6 @@ def _conv_ls_dicts_df_long():
     df = pd.DataFrame(data_list)
     return df
 
-def _proc_check_input_config(
-    config: dict, 
-    std_keys:list[str]=['file_io','col_schema','formulation_metadata','references'],
-    req_col_schema:list[str]=['gage_id', 'respvar_cols'],
-    req_form_meta:list[str]=[
-        'dataset_name','formulation_base','target_var','start_date', 
-        'end_date','cal_status'
-        ],
-    req_file_io:list[str]=['dir_save', 'save_type','save_loc']
-    )-> None:
-    """    Check input config file to ensure it contains the minimum expected 
-    |    categories
-
-    :param config: A dataset's configuration file for rafts_prep
-    :type config: dict
-    :param std_keys: Expected keys in the config file dict, defaults to ['file_io','col_schema','formulation_metadata','references']
-    :type std_keys: list[str], optional
-    :param req_col_schema: The required keys inside col_schema, defaults to ['gage_id', 'respvar_cols']
-    :type req_col_schema: list[str], optional
-    :param req_form_meta: Required keys inside formulation_metadata, defaults to [ 'dataset_name','formulation_base','target_var','start_date', 'end_date','cal_status' ]
-    :type req_form_meta: list[str], optional
-    :param req_file_io: Required keys inside file_io, defaults to ['dir_save', 'save_type','save_loc']
-    :type req_file_io: list[str], optional
-    :seealso: :func:`read_schm_ls_of_dict`
-    """
-    # Changelog/contributions
-    # 2024 Summer, originally created, GL
-    # 2025-08-19, add logging, make checks more explicit, GL
-    #:TODO: add further checks after testing more datasets
-    
-    # Expected standard keys:
-
-    if any(key not in std_keys for key in config.keys()):
-        logging.error(f"Provided keys in the input config file: {config.keys()} \
-                         do not match the standard keys: {std_keys}")
-        raise ValueError(f"Provided keys in the input config file: {config.keys()} \
-                         do not match the standard keys: {std_keys}")
-
-    # required keys defined inside col_schema
-    keys_col_schema = _proc_flatten_ls_of_dict_keys(config, 'col_schema')
-    if not all([x in keys_col_schema for x in req_col_schema]):
-        logging.error("The input config file expects the following"
-                        " defined under 'col_schema':"
-                        f" {', '.join(req_col_schema)}")
-        raise ValueError("The input config file expects the following"
-                        " defined under 'col_schema':"
-                        f" {', '.join(req_col_schema)}")
-
-    # required keys defined in formulation_metadata
-    keys_form_meta = _proc_flatten_ls_of_dict_keys(config, 'formulation_metadata')
-    if not all([x in keys_form_meta for x in req_form_meta]):
-        logging.error("The input config file expects the following"
-                        " defined under 'formulation_metadata':"
-                        f" {', '.join(req_form_meta)}")
-        raise ValueError("The input config file expects the following"
-                        " defined under 'formulation_metadata':"
-                        f" {', '.join(req_form_meta)}")
-
-    # required keys defined in file_io
-    keys_file_io = _proc_flatten_ls_of_dict_keys(config, 'file_io')
-    if not all([x in keys_file_io for x in req_file_io]):
-        logging.error(f"The input config file expects the following"
-                        f" defined under 'formulation_metadata': {', '.join(req_file_io)}")
-        raise ValueError(f"The input config file expects the following"
-                        f" defined under 'formulation_metadata': {', '.join(req_file_io)}")
-
 def read_schm_ls_of_dict(schema_path: str | os.PathLike) -> pd.DataFrame:
     """Read a dataset's configuration file designed as a list of dicts
 
@@ -218,32 +152,43 @@ def read_schm_ls_of_dict(schema_path: str | os.PathLike) -> pd.DataFrame:
     #   2024-07-02 Originally created, GL
     #.  2025-10-10 add home_dir handling, GL
     #.  2026-07-23 revise file_io: Only attempt to .format if the string actually contains the home_dir placeholder, Gemini3.1pro
+    #   2026-08-31 Replace manual dict validation with Pydantic
+    
     # Load the YAML configuration file
     with open(schema_path, 'r') as file:
         config = yaml.safe_load(file)
 
     # Run check on expected config formats
-    _proc_check_input_config(config)
+    # _proc_check_input_config(config)
+    
+    # Run check on expected config formats via Pydantic
+    validated_config = PrepConfig(**config)
+    
+    # Convert validated model back to dict, excluding unset optionals to mirror legacy format
+    config_dict = validated_config.model_dump(exclude_unset=True)
 
     # Check for home_dir inside file_io & assign '~' if not present
-    home_dir = next((d['home_dir'] for d in config.get('file_io') if 'home_dir' in d), '~')
+    home_dir = config_dict['file_io'].get('home_dir', '~')
     
     # Convert dict of lists into pd.DataFrame
     ls_form = list()
-    for k, vv in config.items():
-        for v in vv:
-            if k == 'file_io':
-                for key, value in v.items():
-                    # Only attempt to format if the string actually contains the home_dir placeholder
-                    if isinstance(value, str) and '{home_dir}' in value:
-                        new_path = value.format(home_dir=home_dir)
-                    else:
-                        new_path = value
-                    
-                    if home_dir in new_path:
-                        new_path = str(Path(new_path).expanduser())
-                    v[key] = new_path
-            ls_form.append(pd.DataFrame(v, index = [0]))
+    for k, v in config_dict.items():
+        if k == 'file_io':
+            for key, value in v.items():
+                # Only attempt to format if the string actually contains the home_dir placeholder
+                if isinstance(value, str) and '{home_dir}' in value:
+                    new_path = value.format(home_dir=home_dir)
+                else:
+                    new_path = value
+                
+                if home_dir in new_path:
+                    new_path = str(Path(new_path).expanduser())
+                v[key] = new_path
+        # Wrap dictionary in list to create single row dataframe
+        if isinstance(v, dict):
+            ls_form.append(pd.DataFrame([v]))
+        elif isinstance(v, list):
+             ls_form.append(pd.DataFrame(v))
     df_all = pd.concat(ls_form, axis=1)
 
     return df_all
