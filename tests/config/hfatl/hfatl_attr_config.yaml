@@ -20,7 +20,7 @@ hydrofabric_io:
   - hf_map_id_col: 'divide_id' # The ID in the GPKG that matches the Parquet data
   - hf_vpu_id_col: 'vpuid'
 attr_select:
-  - paths_ha:
+  - paths_hfatl:
     - "{home_dir}/noaa/regionalization/data/tests/testdata_20250901/hydrofabric/tabular-data/hydroatlas_vars.parquet"
   - ha_vars:  # Explicit variables to pull from the hfATLAS parquet
     - 'pet_mm_s01'
