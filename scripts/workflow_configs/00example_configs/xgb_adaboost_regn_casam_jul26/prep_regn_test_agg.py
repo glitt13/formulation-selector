@@ -34,8 +34,13 @@ if __name__ == "__main__":
         config = yaml.safe_load(file)
 
     # Logger setup - first define required paths/name in the config
-    home_dir = Path("~/").expanduser()
-    dir_save = [x for x in config['file_io'] if 'dir_save' in x.keys()][0]['dir_save'].format(home_dir = home_dir)
+    # home_dir = Path("~/").expanduser()
+    # dir_save = [x for x in config['file_io'] if 'dir_save' in x.keys()][0]['dir_save'].format(home_dir = home_dir)
+
+    home_dir_val = [x.get('home_dir') for x in config['file_io'] if 'home_dir' in x][0]
+    home_dir = Path(home_dir_val).expanduser() if home_dir_val else Path.home()
+    
+    dir_save = [x.get('dir_save') for x in config['file_io'] if 'dir_save' in x][0].format(home_dir=home_dir)
 
     # Generate path to the log file & initialize logging
     path_log = pem.std_path_log(dir_input=dir_save, path_config=path_config,
