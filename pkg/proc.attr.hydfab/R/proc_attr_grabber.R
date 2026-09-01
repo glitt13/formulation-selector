@@ -2374,7 +2374,13 @@ proc_attr_read_gage_ids_fs <- function(dir_dataset, ds_filenames=''){
   nc <- ncdf4::nc_open(path_dat_in)
 
   # Grab the gage_id identifier:
-  gage_ids <- nc$dim$gage_id$vals
+  # gage_ids <- nc$dim$gage_id$vals
+  # Grab the gage_id identifier safely (forces ncdf4 to return strings, not indices!)
+  gage_ids <- tryCatch({
+    base::as.character(ncdf4::ncvar_get(nc, "gage_id"))
+  }, error = function(e) {
+    nc$dim$gage_id$vals
+  })
 
   # Extract attributes of interest that describe what gage_id represents
   attrs <- ncdf4::ncatt_get(nc,varid=0)
