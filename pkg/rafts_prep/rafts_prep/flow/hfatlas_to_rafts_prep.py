@@ -16,28 +16,24 @@ Example:
 
 Changelog/Contributions
 2026-04-28 Originally created to map hfATLAS divides to VPU and format for RaFTS.Developed by SS with the help of AI.
+2026-09-01 Integrated Pydantic schema validation while retaining raftsutil.AttrConfigAndVars parsing.
 
 # TODO should gdf_hf['gage_id'] always be the same as divide_id??  We may want this to differ when performing basin-based assessments (e.g. HUC level, not divide level as currently used)
 """
 
 import argparse
-import ast
 import logging
 import pandas as pd
-import numpy as np
 import sys
 from pathlib import Path
-from datetime import datetime
-from collections import ChainMap
+
 from logging.handlers import MemoryHandler
-import geopandas as gpd
-from shapely.geometry import Point
-import os
 
 # Import RaFTS functions
 from rafts_prep.proc_eval_metrics import read_schm_ls_of_dict, std_path_log
 
 import rafts_algo.utils as raftsutil
+from rafts_prep.schemas.rafts_prep_pydantic_schemas import AttrConfig
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -77,8 +73,12 @@ if __name__ == "__main__":
     path_attr_config = raftsutil.build_cfig_path(path_known_config = path_prep_config, path_or_name_cfig = args.name_attr_config)
     attr_cfig = raftsutil.AttrConfigAndVars(path_attr_config)
     attr_cfig._read_attr_config()
-    home_dir =  raftsutil._define_home_dir(attr_cfig.attr_config)
+    
+    # Validate with Pydantic
+    validated_attr_cfg = AttrConfig(**attr_cfig.attr_config)
+    
     # Define directories/datasets from the attribute config file
+    home_dir = attr_cfig.attrs_cfg_dict.get('home_dir')
     dir_db_attrs = attr_cfig.attrs_cfg_dict.get('dir_db_attrs')
     dir_std_base = attr_cfig.attrs_cfg_dict.get('dir_std_base')
     dir_base = attr_cfig.attrs_cfg_dict.get('dir_base')
@@ -86,33 +86,20 @@ if __name__ == "__main__":
     # Grab variables for building out the path to metadata (which contains comid-gage id mappings)
     ds_type = [x for x in attr_cfig.attr_config.get('file_io') if 'ds_type' in x][0]['ds_type']
     path_meta_fstr = [x for x in attr_cfig.attr_config.get('file_io') if 'path_meta' in x][0]['path_meta']
-    # The hfatlas attribute column names of interest:
-    attrs_sel = attr_cfig.attrs_cfg_dict.get("attrs_sel")
-    # Determine the identifier column, or assume it's 'divide_id'
-    attr_select_list = attr_cfig.attr_config.get('attr_select', [])
-    map_id_col = next(
-        (x.get('hfatl_id_col') for x in attr_select_list if isinstance(x, dict) and 'hfatl_id_col' in x), 
-        "divide_id"
-    )
+    
+    # Use validated parameters for strict extraction
+    attrs_sel = validated_attr_cfg.attr_select.hfatl_vars
+    map_id_col = validated_attr_cfg.attr_select.hfatl_id_col
 
     # TODO add path_hfatl to attr_config parser
     
-    paths_raw = [
-        x.get('paths_hfatl') 
-        for x in attr_cfig.attr_config.get('attr_select', []) 
-        if x.get('paths_hfatl') is not None
-    ]
     paths_hfatl = []
-    if paths_raw and isinstance(paths_raw[0], list):
-        for p in paths_raw[0]:
-            # Handle both {home_dir} string formatting and standard '~/' expansion
-            formatted_path = str(p).format(home_dir=home_dir)
-            resolved_path = Path(formatted_path).expanduser()
-            
-            if resolved_path.exists():
-                paths_hfatl.append(resolved_path)
-            else:
-                logging.warning(f"hfATLAS path defined in config does not exist and will be skipped: {resolved_path}")
+    for p in validated_attr_cfg.attr_select.paths_hfatl:
+        resolved_path = Path(p.format(home_dir=home_dir)).expanduser()
+        if resolved_path.exists():
+            paths_hfatl.append(resolved_path)
+        else:
+            logging.warning(f"hfATLAS path does not exist and will be skipped: {resolved_path}")
                 
     if not paths_hfatl:
         logging.error("No valid paths provided or found for hfATLAS data (paths_hfatl).")
