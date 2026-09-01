@@ -45,9 +45,9 @@ class TestHfAtlasRaftsWorkflow(unittest.TestCase):
         cls.path_rafts_map_pred = cls.dir_repo / "pkg" / "rafts_algo" / "rafts_algo" / "flow" / "rafts_map_pred_hfatl.py"
         
         # 1. GENERATE DYNAMIC YAML CONFIGURATIONS
-        cls.path_attr_cfg = cls.dir_base / "attr_config.yaml"
-        cls.path_algo_cfg = cls.dir_base / "algo_config.yaml"
-        cls.path_pred_cfg = cls.dir_base / "pred_config.yaml"
+        cls.path_attr_cfg = cls.dir_base / "xssa_hfatl_attr_config.yaml"
+        cls.path_algo_cfg = cls.dir_base / "xssa_hfatl_algo_config.yaml"
+        cls.path_pred_cfg = cls.dir_base / "xssa_hfatl_pred_config.yaml"
         
         attr_cfg = {
             'col_schema': [
@@ -95,7 +95,7 @@ class TestHfAtlasRaftsWorkflow(unittest.TestCase):
             'name_algo_config': str(cls.path_algo_cfg),
             'ds_type': 'prediction',
             'write_type': 'parquet',
-            'path_meta': "{dir_std_base}/{ds}/nldi_feat_{ds}_{ds_type}.parquet",
+            'path_meta': str(cls.dir_base / "dummy_ha.parquet"),
             'pred_file_comid_colname': 'featureID',
             'algo_response_vars': ['dummy_var'],
             'algo_type': ['rf', 'kmeans'],
