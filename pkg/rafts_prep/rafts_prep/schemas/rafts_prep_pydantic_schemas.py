@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, AliasChoices
 from typing import List, Optional, Any, Dict
 
 def flatten_yaml_list(v: Any) -> dict:
@@ -42,22 +42,40 @@ class FileIOConfig(BaseModel):
         return flat_vals
 
 class ColSchemaConfig(BaseModel):
-    # Required parameters
     gage_id: str
-    metric_cols: str
     featureID: str
     featureSource: str
-    metric_mappings: str
-    val_metrics: str = 'False'
+    respvar_cols: str
+    val_respvar: str = 'False'
+    respvar_mappings: Optional[str] = None
 
     @model_validator(mode='before')
     @classmethod
-    def check_legacy_reqs(cls, values):
+    def check_reqs(cls, values):
         flat_vals = flatten_yaml_list(values)
-        req_col_schema = ['gage_id', 'metric_cols']
+        req_col_schema = ['gage_id', 'respvar_cols']
         if not all(x in flat_vals for x in req_col_schema):
-            raise ValueError(f"The input config file expects the following defined under 'col_schema': {', '.join(req_col_schema)}")
+            raise ValueError(
+                f"The input config file expects the following defined under 'col_schema': {', '.join(req_col_schema)}"
+            )
         return flat_vals
+
+    @model_validator(mode='after')
+    def set_or_validate_mappings(self) -> 'ColSchemaConfig':
+        # Safely evaluate the boolean intent of the string
+        is_validating = str(self.val_respvar).strip().lower() == 'true'
+
+        if is_validating and not self.respvar_mappings:
+            raise ValueError(
+                "When 'val_respvar' is True, 'respvar_mappings' must be explicitly provided "
+                "to map response variables to standardized formats."
+            )
+        
+        # Apply the default inheritance when validation is bypassed
+        if not is_validating and not self.respvar_mappings:
+            self.respvar_mappings = self.respvar_cols
+
+        return self
 
 class FormulationMetadata(BaseModel):
     # Required parameters
