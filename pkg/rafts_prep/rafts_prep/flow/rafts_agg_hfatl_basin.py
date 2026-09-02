@@ -9,6 +9,7 @@ uv run python rafts_agg_hfatl_basin.py --path_prep_config "regn_prep_config.yaml
 
 Changelog/contributions
     2026-05-22 Created with Gemini3.1Pro
+    2026-09-02 Refactored to utilize targeted Pydantic AttrSelectConfig validation, SS w/ help from Gemini3.1Pro.
 """
 # TODO add _std_rafts_prep_ds_companion_gpkg_path and ensure geometry is written to file
 import argparse
@@ -23,6 +24,7 @@ import numpy as np
 # RaFTS / Formulation Selector imports
 import rafts_prep.proc_eval_metrics as pem
 import rafts_algo.utils as raftsutil
+from rafts_prep.schemas.rafts_prep_pydantic_schemas import AttrSelectConfig
 
 # Calculate the weighted mean, handling NaNs safely
 def area_weighted_mean(x):
@@ -57,8 +59,8 @@ if __name__ == "__main__":
     # A. Prep Config
     attr_cfig = raftsutil.AttrConfigAndVars(path_attr_config)
     attr_cfig._read_attr_config()
-    home_dir =  raftsutil._define_home_dir(attr_cfig.attr_config)
-    col_schema_df = pem.read_schm_ls_of_dict(schema_path=path_prep_config)
+    home_dir = attr_cfig.attrs_cfg_dict.get('home_dir')
+    col_schema_df = pem.read_schm_ls_of_dict(schema_path=path_prep_config) # Prep Config (Validated implicitly via pem.read_schm_ls_of_dict)
     
     if 'path_hf_basins_gpkg' in col_schema_df.columns:
         path_hf_basins_gpkg = Path(col_schema_df['path_hf_basins_gpkg'].loc[0].format(home_dir=str(home_dir)))
@@ -96,15 +98,21 @@ if __name__ == "__main__":
     ds = datasets[0]
     dir_db_attrs_agg_save = raftsutil.std_dir_ds_agg(dir_db_attrs, ds)
     
-    attr_select_list = attr_cfig.attr_config.get('attr_select', [])
-    # Flatten attributes
-    attrs_all = [v for x in attr_select_list for k, v in x.items() if '_vars' in k]
-    attrs_sel = [x for x in list(np.concatenate([a for a in attrs_all if a])) if x]
+    # Isolate and validate strictly the 'attr_select' block to avoid PrepConfig schema conflicts
+    attr_select_raw = attr_cfig.attr_config.get('attr_select', [])
+    flat_attr_select = {k: v for d in attr_select_raw for k, v in d.items()} if isinstance(attr_select_raw, list) else attr_select_raw
+    validated_attr_select = AttrSelectConfig(**flat_attr_select)
     
-    # Extract paths and hfatl_id_col
-    paths_raw = [x.get('paths_hfatl') for x in attr_select_list if x.get('paths_hfatl') is not None]
-    paths_hfatl = [Path(str(p).format(home_dir=str(home_dir))).expanduser() for p in paths_raw[0]] if paths_raw else []
-    hfatl_id_col = next((x.get('hfatl_id_col') for x in attr_select_list if 'hfatl_id_col' in x), map_divide_id_col)
+    # Extract validated attributes directly via Pydantic (replacing manual list flattening)
+    attrs_sel = validated_attr_select.hfatl_vars
+    hfatl_id_col = validated_attr_select.hfatl_id_col
+    
+    # Resolve paths_hfatl
+    paths_hfatl = []
+    for p in validated_attr_select.paths_hfatl:
+        resolved_path = Path(p.format(home_dir=home_dir)).expanduser()
+        if resolved_path.exists():
+            paths_hfatl.append(resolved_path)
 
     if not paths_hfatl:
         raise ValueError("No valid hfATLAS paths found in attribute config.")
