@@ -3,6 +3,58 @@ from typing import Any, Dict, Optional, Tuple, List, Union
 from pydantic import BaseModel, field_validator, model_validator
 import numpy as np
 import re
+
+# %% ML Configuration Validation
+
+class AlgoConfig(BaseModel):
+    """
+    Validates the algorithm training configuration YAML.
+    """
+    task_type: str = 'regression'
+    algorithms: Dict[str, Any]
+    test_size: float = 0.3
+    seed: int = 32
+    name_attr_config: str
+    name_attr_csv: Optional[str] = None
+    colname_attr_csv: Optional[str] = None
+    verbose: bool = True
+    read_type: str = 'all'
+    make_plots: bool = False
+    same_test_ids: bool = True
+    metrics: Optional[List[str]] = None
+    uncertainty: Optional[Dict[str, Any]] = None
+
+class PredConfig(BaseModel):
+    """
+    Validates the out-of-sample prediction configuration YAML.
+    """
+    name_attr_config: str
+    name_algo_config: str
+    ds_type: str = 'prediction'
+    write_type: str = 'parquet'
+    path_meta: str
+    pred_file_comid_colname: str
+    
+    # Optional prediction and routing parameters
+    path_gpkg_pred: Optional[str] = None
+    pred_gpkg_lyr: Optional[str] = None
+    pred_gpkg_id_col: Optional[str] = None
+    path_crosswalk_ids: Optional[str] = None
+    crosswalk_target_col: Optional[str] = None
+    path_hf_finl_gpkg: Optional[str] = None
+    layr_hf_finl_gpkg: str = 'divides'
+    overwrite_sql: bool = False
+    algo_response_vars: Optional[List[str]] = None
+    algo_type: Optional[List[str]] = None
+    algo_select: Optional[str] = None
+    MAPIE_alpha: Optional[List[float]] = None
+    uncn_bnd_pred: bool = False
+    
+    # Topology and Flowpath Mappings (for nexus mapping scripts)
+    hf_fp_layer: str = 'flowpaths'
+    hf_fp_id_col: str = 'id'
+    fp_toid_col: str = 'toid'
+    map_divide_id_col: str = 'divide_id'
 # %% Pydantic model pipeline validation 
 
 class UncertaintyConfig(BaseModel):
