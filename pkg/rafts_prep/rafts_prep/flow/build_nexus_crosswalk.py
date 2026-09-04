@@ -16,6 +16,9 @@ uv run --project "${DIR_REPO}/pkg" python "${DIR_PREP}/build_nexus_crosswalk.py"
     echo "ERROR: Nexus crosswalk build failed."
     exit 1
 }
+
+Changelog/Contributions
+2026-09-02 Refactored to utilize Pydantic PredConfig validation, SS with the help of AI.
 """
 
 import argparse
@@ -27,6 +30,7 @@ import logging
 import yaml
 
 import rafts_algo.utils as raftsutil
+from rafts_algo.schemas.pydantic_schemas import PredConfig
 
 # Set up standard logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -34,12 +38,15 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 def generate_nexus_crosswalk(path_pred_config: Path):
     logging.info(f"Parsing prediction configuration: {path_pred_config.name}")
     
-    # 1. Parse Pred Config
+    # 1. Parse Pred Config via Pydantic
     with open(path_pred_config, 'r') as f:
-        pred_config = yaml.safe_load(f)
+        pred_yaml = yaml.safe_load(f)
+        
+    validated_pred_cfg = PredConfig(**pred_yaml)
+    pred_config = validated_pred_cfg.model_dump(exclude_unset=True)
         
     # 2. Parse Associated Attr Config to get base variables (dir_std_base, ds, home_dir)
-    name_attr_config = pred_config.get('name_attr_config')
+    name_attr_config = validated_pred_cfg.name_attr_config
     path_attr_config = raftsutil.build_cfig_path(path_pred_config, name_attr_config)
     
     if not path_attr_config or not Path(path_attr_config).exists():
@@ -49,7 +56,7 @@ def generate_nexus_crosswalk(path_pred_config: Path):
     attr_cfig = raftsutil.AttrConfigAndVars(path_attr_config)
     attr_cfig._read_attr_config()
     
-    home_dir = raftsutil._define_home_dir(attr_cfig.attr_config)
+    home_dir = attr_cfig.attrs_cfg_dict.get('home_dir', '~')
     datasets = attr_cfig.attrs_cfg_dict.get('datasets', [''])
     ds = datasets[0] if datasets else ''
     dir_std_base = attr_cfig.attrs_cfg_dict.get('dir_std_base', '')
@@ -68,7 +75,7 @@ def generate_nexus_crosswalk(path_pred_config: Path):
             resolved_pred[k] = v
             
     # 3. Extract paths from the resolved prediction config
-    path_hf_gpkg = Path(resolved_pred.get('path_hf_finl_gpkg'))
+    path_hf_gpkg = Path(resolved_pred.get('path_hf_finl_gpkg')) if resolved_pred.get('path_hf_finl_gpkg') else None
     out_parquet_path = resolved_pred.get('path_crosswalk_ids')
     
     if not path_hf_gpkg or not out_parquet_path:
@@ -77,11 +84,11 @@ def generate_nexus_crosswalk(path_pred_config: Path):
         
     out_parquet = Path(out_parquet_path)
     
-    # Extract optional column definitions with standard NextGen fallback defaults
-    fp_layer = resolved_pred.get('hf_fp_layer', 'flowpaths')
-    fp_id_col = resolved_pred.get('hf_fp_id_col', 'id')
-    fp_toid_col = resolved_pred.get('fp_toid_col', 'toid')
-    divide_id_col = resolved_pred.get('map_divide_id_col', 'divide_id')
+    # Extract validated column definitions
+    fp_layer = validated_pred_cfg.hf_fp_layer
+    fp_id_col = validated_pred_cfg.hf_fp_id_col
+    fp_toid_col = validated_pred_cfg.fp_toid_col
+    divide_id_col = validated_pred_cfg.map_divide_id_col
 
     # 4. Read the flowpaths layer
     logging.info(f"Reading '{fp_layer}' layer from {path_hf_gpkg}...")
