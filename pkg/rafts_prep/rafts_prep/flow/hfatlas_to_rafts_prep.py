@@ -12,7 +12,7 @@ to a single featureID (i.e., a 1:1 relationship).
 In cases where divides need to be aggregated to a larger scale, rafts_agg_hfatl_basin.py should be run instead.
 
 Example: 
-    >>> uv run python hfatlas_to_rafts_prep.py --path_prep_config "~/git/rafts/scripts/workflow_configs/00example_configs/hfatl_test2/hfatl_prep_config.yaml" --name_attr_config "hfatl_attr_config.yaml"
+    >>> uv run python hfatlas_to_rafts_prep.py --path_prep_config "~/git/rafts/scripts/workflow_configs/00example_configs/hfatl_test/hfatl_prep_config.yaml" --name_attr_config "hfatl_attr_config.yaml"
 
 Changelog/Contributions
 2026-04-28 Originally created to map hfATLAS divides to VPU and format for RaFTS.Developed by SS with the help of AI.
