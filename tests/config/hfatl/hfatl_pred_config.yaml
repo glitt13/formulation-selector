@@ -14,7 +14,7 @@ algo_response_vars:
 algo_type:
   - 'kmeans'
   - 'gower_agglomerative'
-algo_select: 'gower_agglomerative_4' # Specific algorithm used for the final regionalization GPKG layer
+algo_select: 'gower_agglomerative_k4' # Specific algorithm used for the final regionalization GPKG layer
 overwrite_sql: True
 path_hf_finl_gpkg: '../../data/rapid_test_9_locs_v4.gpkg' # Hydrofabric GPKG containing the divides for the 9-gage rapid test subset
 layr_hf_finl_gpkg: 'divides'
