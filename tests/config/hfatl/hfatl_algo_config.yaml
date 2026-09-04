@@ -1,10 +1,8 @@
 # hfatl_algo_config.yaml
-# Config for testing parallelized algorithm training
-task_type: 'clustering' # Or 'regression' if predicting NSE/KGE
+# Config for testing parallelized algorithm training (unsupervised clustering)
+task_type: 'clustering'
 save_all_clusters: True # Essential for capturing all cluster sizes in the output
 algorithms:
-  rf: 
-    - n_estimators: [10, 50]
   kmeans:
     - n_clusters: [3, 5]
   gower_agglomerative:
@@ -13,15 +11,6 @@ test_size: 0.3
 seed: 32
 name_attr_config: 'hfatl_attr_config.yaml'
 verbose: True
-read_type: 'filename'
+read_type: 'all' # MUST use 'all' with Dask for hfATLAS/custom-generated predictor data
 make_plots: True
 same_test_ids: True
-uncertainty:
-  confidence_levels: [90, 95]
-  forestci:
-    - fci_flag: True
-  mapie:
-    - alpha: [0.05, 0.32]
-    - method: 'plus'
-    - cv: 5
-    - agg_function: 'median'
