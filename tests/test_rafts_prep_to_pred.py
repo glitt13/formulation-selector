@@ -1,12 +1,32 @@
 import subprocess
 import unittest
 from pathlib import Path
+import pytest
 import rafts_prep.proc_eval_metrics as pem
 import rafts_algo.utils as raftsutil
 import shutil
 import pandas as pd
 import geopandas as gpd
 
+_PATH_XSSA_PREP_CONFIG = Path(__file__).parent / "config" / "xssa" / "xssa_prep_config.yaml"
+
+def _xssa_testdata_available() -> bool:
+    """Check whether the private testdata_20250901 bundle (see tests/README.md)
+    has been downloaded and extracted, before running any test that depends on it.
+    """
+    try:
+        home_dir = raftsutil._make_home_dir([])
+        col_schema_df = pem.read_schm_ls_of_dict(schema_path=_PATH_XSSA_PREP_CONFIG)
+        path_camels = Path(col_schema_df['path_camels'].iloc[0].format(home_dir=home_dir))
+        path_data = Path(col_schema_df['path_data'].iloc[0].format(home_dir=home_dir))
+        return path_camels.exists() and path_data.exists()
+    except Exception:
+        return False
+
+@pytest.mark.skipif(
+    not _xssa_testdata_available(),
+    reason="testdata_20250901 bundle not found; see tests/README.md to download and extract it"
+)
 class TestFsPrepProcAttrHydfabFsAlgo(unittest.TestCase):
     """
     Integration test for the standard 4-step RaFTS workflow, consisting of:
@@ -261,6 +281,8 @@ class TestFsPrepProcAttrHydfabFsAlgo(unittest.TestCase):
             print(f"Completed {self.path_gen_pred_locs.name}")
         except subprocess.CalledProcessError as e:
             self.fail(f"Subprocess {self.path_gen_pred_locs.name}.R failed with return code {e.returncode}.\nStdout: {e.stdout}\nStderr: {e.stderr}")    
+
+        # Check the outputs used for prediction
 
         # ------------------------------------------------------------------- #
         cmd_pred = ["python", str(self.path_rafts_pred_algo), str(self.path_pred_cfg)]
