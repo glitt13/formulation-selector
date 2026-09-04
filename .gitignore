@@ -112,3 +112,6 @@ bower_components/
 src/vendor/
 dist/
 .Rproj.user
+
+# Developer #
+CLAUDE.md
