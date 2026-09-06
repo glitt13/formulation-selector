@@ -61,7 +61,7 @@ if __name__ == "__main__":
     parser.add_argument('path_config', type=str, help='Path to the YAML configuration file')
     args = parser.parse_args()
     # The path to the configuration
-    path_config = args.path_config # "~/git/rafts/scripts/eval_ingest/ealstm/ealstm_proc_config.yaml"
+    path_config = args.path_config # "~/git/rafts/scripts/workflow_configs/legacy/ealstm/ealstm_proc_config.yaml"
 
     if not Path(path_config).exists():
         raise ValueError("The provided path to the configuration file does not exist: {path_config}")

@@ -9,7 +9,7 @@ set -euo pipefail || { echo "..."; exit 1; }
 # -----------------------------------------------------------------------------
 echo "Using system home directory as basis for all paths: $HOME"
 DIR_REPO="$HOME/git/rafts"
-DIR_CONFIG="${DIR_REPO}/scripts/eval_ingest/nexus_test"
+DIR_CONFIG="${DIR_REPO}/scripts/workflow_configs/00example_configs/nexus_test"
 DIR_PREP="${DIR_REPO}/pkg/rafts_prep/rafts_prep/flow"
 DIR_PY="${DIR_REPO}/pkg/rafts_algo/rafts_algo/flow"
 

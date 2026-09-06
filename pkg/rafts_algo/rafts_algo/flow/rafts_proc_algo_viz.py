@@ -45,7 +45,7 @@ if __name__ == "__main__":
                         help='If present, enables schema validation for all input and output data. Defaults to False.')
     args = parser.parse_args()
 
-    path_algo_config = Path(args.path_algo_config).expanduser() #Path(f'~/git/rafts/scripts/eval_ingest/xssa/xssa_algo_config.yaml').expanduser()
+    path_algo_config = Path(args.path_algo_config).expanduser() #Path(f'~/git/rafts/scripts/workflow_configs/legacy/xssa/xssa_algo_config.yaml').expanduser()
     config_dir = path_algo_config.parent
 
     # --- Conditionally load schemas

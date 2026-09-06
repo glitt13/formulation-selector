@@ -10,7 +10,7 @@ If attributes needed for aggregation do not exist for a given
 comid, the rafts_algo.tfrm_attrs. writes the missing attributes to file
 
 Refer to the example config file, e.g. 
-`Path(f'~/git/rafts/scripts/eval_ingest/xssa/xssa_attrs_tform.yaml')`
+`Path(f'~/git/rafts/scripts/workflow_configs/legacy/xssa/xssa_attrs_tform.yaml')`
 
 Usage:
 python rafts_tfrm_attrs.py "/path/to/tfrm_config.yaml"
@@ -50,7 +50,7 @@ if __name__ == "__main__":
                         help='If present, enables schema validation for all input and output data. Defaults to False.')
 
     args = parser.parse_args()
-    path_tfrm_cfig = Path(args.path_tfrm_cfig).expanduser() # path_tfrm_cfig = Path(f'~/git/rafts/scripts/eval_ingest/xssa/xssa_attrs_tform.yaml').expanduser() 
+    path_tfrm_cfig = Path(args.path_tfrm_cfig).expanduser() # path_tfrm_cfig = Path(f'~/git/rafts/scripts/workflow_configs/legacy/xssa/xssa_attrs_tform.yaml').expanduser() 
 
     config_dir = path_tfrm_cfig.parent
 

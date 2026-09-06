@@ -19,7 +19,7 @@ if __name__ == "__main__":
     parser.add_argument('path_config', type=str, help='Path to the YAML configuration file')
     args = parser.parse_args()
     # The path to the configuration
-    path_config = Path(args.path_config).expanduser() # path_config = Path('~/git/rafts/scripts/eval_ingest/xssa/xssa_prep_config.yaml').expanduser() 
+    path_config = Path(args.path_config).expanduser() # path_config = Path('~/git/rafts/scripts/workflow_configs/legacy/xssa/xssa_prep_config.yaml').expanduser() 
 
     if not Path(path_config).exists():
         raise ValueError("The provided path to the configuration file does not exist: {path_config}")

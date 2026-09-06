@@ -13,7 +13,7 @@ import rafts_algo.utils as raftsutil
 from pathlib import Path
 import dask.dataframe as dd
 
-path_attr_config = "~/git/rafts/scripts/eval_ingest/xssa/xssa_attr_config.yaml"
+path_attr_config = "~/git/rafts/scripts/workflow_configs/legacy/xssa/xssa_attr_config.yaml"
 attr_cfig = raftsutil.AttrConfigAndVars(path_attr_config) 
 attr_cfig._read_attr_config()
 

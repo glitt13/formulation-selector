@@ -7,7 +7,7 @@ library(dataRetrieval)
 
 # Set important params (Retr_Params) ----------------------------------
 home_dir <- Sys.getenv("HOME")
-path_cfig_pred <- glue::glue("{home_dir}/Lauren/FSDS/rafts/scripts/eval_ingest/xssa_us/xssaus_pred_config.yaml")
+path_cfig_pred <- glue::glue("{home_dir}/Lauren/FSDS/rafts/scripts/workflow_configs/legacy/xssa_us/xssaus_pred_config.yaml")
 subsamp_n <- 20 # how is this decided? see how this impacts processing
 subsamp_seed <- 432
 
@@ -33,7 +33,7 @@ Retr_Params <- proc.attr.hydfab::attr_cfig_parse(path_attr_config)
 
 # Get COMIDS -------------------------------------
 home_dir <- Sys.getenv("HOME")
-path_cfig_pred <- glue::glue("{home_dir}/Lauren/FSDS/rafts/scripts/eval_ingest/xssa_us/xssaus_pred_config.yaml")
+path_cfig_pred <- glue::glue("{home_dir}/Lauren/FSDS/rafts/scripts/workflow_configs/legacy/xssa_us/xssaus_pred_config.yaml")
 
 ### intersect approach -----
 file_list <- list.files(glue::glue("{home_dir}/Lauren/regionalization"), pattern = '*_hf_huc8_int.csv', full.names = TRUE)

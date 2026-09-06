@@ -48,7 +48,7 @@ if __name__ == "__main__":
     # NOTE pred_config should contain the path for path_algo_config
     args = parser.parse_args()
 
-    path_pred_config = Path(args.path_pred_config).expanduser() # Path(f'~/git/rafts/scripts/eval_ingest/xssa/xssa_pred_config.yaml').expanduser()     
+    path_pred_config = Path(args.path_pred_config).expanduser() # Path(f'~/git/rafts/scripts/workflow_configs/legacy/xssa/xssa_pred_config.yaml').expanduser()     
 
     # --- Conditionally load schemas ---
     arg_val = args.validate 

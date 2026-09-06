@@ -9,7 +9,7 @@
 #!/bin/bash
 echo "Using system home directory as basis for all paths: $HOME"
 DIR_REPO="$HOME/git/rafts/" # The system-specific path to the rafts repo
-DIR_CONFIG="${DIR_REPO}/scripts/eval_ingest/bm_test25/"
+DIR_CONFIG="${DIR_REPO}/scripts/workflow_configs/legacy/bm_test25/"
 DIR_PRED="${DIR_REPO}/scripts/prediction/rfc_locs/"
 DIR_PY="${DIR_REPO}/pkg/rafts_algo/rafts_algo/flow/"
 DIR_R="${DIR_REPO}/pkg/proc.attr.hydfab/flow/"

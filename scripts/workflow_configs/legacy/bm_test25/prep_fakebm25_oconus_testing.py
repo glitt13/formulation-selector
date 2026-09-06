@@ -21,7 +21,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     # The path to the configuration
     home_dir = Path.home()
-    path_prep_config = args.path_config.format(home_dir = str(Path.home())) #  Path(f'{home_dir}/git/rafts/scripts/eval_ingest/bm_test25/bm25test_prep_config.yml')
+    path_prep_config = args.path_config.format(home_dir = str(Path.home())) #  Path(f'{home_dir}/git/rafts/scripts/workflow_configs/legacy/bm_test25/bm25test_prep_config.yml')
 
     print("Converting schema to DataFrame")
     # Read in the config file & convert to pd.DataFrame

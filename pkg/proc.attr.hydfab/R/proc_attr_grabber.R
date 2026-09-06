@@ -2145,7 +2145,7 @@ proc_attr_gageids <- function(gage_ids,featureSource,featureID,Retr_Params,
       # TODO change this after oconus path refactor??
       if(!base::is.null(Retr_Params$paths$path_oconus_hfab_config)){
         dt_hfuid <- proc.attr.hydfab::retr_hfuids(loc_ids=loc_ids,
-                                                  path_oconus_hfab_config=Retr_Params$paths$path_oconus_hfab_config, # e.g. "~/git/rafts/scripts/eval_ingest/bm_test25/bm_oconus_config.yaml"
+                                                  path_oconus_hfab_config=Retr_Params$paths$path_oconus_hfab_config, # e.g. "~/git/rafts/scripts/workflow_configs/legacy/bm_test25/bm_oconus_config.yaml"
                                                   featureSource = featureSource)
 
         if(base::nrow(dt_hfuid) == base::length(gage_ids_for_hf)){

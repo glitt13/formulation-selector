@@ -10,7 +10,7 @@
 #' FALSE and full generation of the prediction metadata parquet file will take
 #' tens of minutes instead (because some locations will never be found)
 #' @example \dontrun{Rscript gen_pred_locs_rfcs_bm25test.R
-#' "{home_dir}/git/rafts/scripts/eval_ingest/bm_test25/bm25_pred_config.yaml"
+#' "{home_dir}/git/rafts/scripts/workflow_configs/legacy/bm_test25/bm25_pred_config.yaml"
 #' "{home_dir}/git/rafts/scripts/prediction/rfc_locs/nws_nwm_crosswalk.txt"}
 
 # Changelog/contributions
@@ -36,7 +36,7 @@ main <- function(){
   testing_dataset <- FALSE
   # Define args supplied to command line
   home_dir <- Sys.getenv("HOME")
-  path_cfig_pred <- glue::glue(as.character(args[1])) # path_cfig_pred <- glue::glue("{home_dir}/git/rafts/scripts/eval_ingest/bm_test25/bm25_pred_config.yaml")
+  path_cfig_pred <- glue::glue(as.character(args[1])) # path_cfig_pred <- glue::glue("{home_dir}/git/rafts/scripts/workflow_configs/legacy/bm_test25/bm25_pred_config.yaml")
   path_nwm_crosswalk <- glue::glue(as.character(args[2])) #path_nwm_crosswalk <- "~/git/rafts/scripts/prediction/rfc_locs/nws_nwm_crosswalk.txt"
   # Read in config file
   if(!base::file.exists(path_cfig_pred)){
@@ -60,7 +60,7 @@ main <- function(){
   if(base::length(args)!=2){
     logr::log_print("Expected to have two arguments in
                   Rscript gen_pred_locs_rfcs_bm25test.R
-                  {home_dir}/git/rafts/scripts/eval_ingest/bm_test25/bm25_pred_config.yaml
+                  {home_dir}/git/rafts/scripts/workflow_configs/legacy/bm_test25/bm25_pred_config.yaml
                   {home_dir}/git/rafts/scripts/prediction/rfc_locs/nws_nwm_crosswalk.txt",
                     level="ERROR")
   }

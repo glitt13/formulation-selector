@@ -14,7 +14,7 @@ echo "Using system home directory as basis for all paths: %USERPROFILE%"
 REM --- Set Directory Paths ---
 REM The system-specific path to the rafts repo
 set "DIR_REPO=%USERPROFILE%\git\rafts\"
-set "DIR_CONFIG=%DIR_REPO%scripts\eval_ingest\xssa_us\"
+set "DIR_CONFIG=%DIR_REPO%scripts\workflow_configs\legacy\xssa_us\"
 set "DIR_PRED=%DIR_REPO%scripts\prediction\rfc_locs\"
 set "DIR_PY=%DIR_REPO%pkg\rafts_algo\rafts_algo\flow\"
 set "DIR_R=%DIR_REPO%pkg\proc.attr.hydfab\flow\"

@@ -1,5 +1,5 @@
 # Config for training and testing algorithms that predict formulation metrics or hydrologic signatures based on catchment attributes
-# Copied from "~\rafts\scripts\eval_ingest\xssa\xssa_algo_config.yaml"
+# Copied from "~\rafts\scripts\workflow_configs\legacy\xssa\xssa_algo_config.yaml"
 # Default values used for each, when applicable
 algorithms: # REQUIRED. Refer to AlgoTrainEval.train_algos to see what options are present (e.g. rf, mlp)
   rf:  # STRONGLY RECOMMENDED. Refer to sklearn.ensemble.RandomForestRegressor for arguments to pass here. Otherwise defaults will be used

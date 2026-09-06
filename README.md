@@ -21,9 +21,9 @@ This document describes the workflow for preparing, aggregating, and training (p
 
 The RaFTS hfATLAS workflow is executed in a specific sequence to process raw input datasets, aggregate spatial attributes & format them, train machine learning algorithms, and ultimately perform out-of-sample predictions using algorithms deemed acceptable for prediction by the user. A shell script contained in the same workflow directory as the corresponding config files is recommended for running all of these steps sequentially (e.g., `hfatl_test_proc_rafts_all.sh`).
 
-Refer to scripts/eval_ingest/*/ for many examples of different workflows. Note additional configurations/workflows may not be tracked in this repo, but stored in [NOAA gdrive](https://drive.google.com/drive/folders/1ghSVlE890S3LXir1-JhexDlNf1zT6T6h?usp=drive_link)
+Refer to scripts/workflow_configs/00example_configs/*/ and scripts/workflow_configs/legacy/*/ for many examples of different workflows. Note additional configurations/workflows may not be tracked in this repo, but stored in [NOAA gdrive](https://drive.google.com/drive/folders/1ghSVlE890S3LXir1-JhexDlNf1zT6T6h?usp=drive_link)
 
-1. **Preparation**: Custom dataset munging is performed first to prepare the initial response variable dataset and write to file in a standardized NetCDF (`.nc`). Typically named `prep_*.py` inside the same directory as the corresponding config files (e.g. [scripts/eval_ingest/00example_configs/xgb_adaboost_regn_casam_jul26/prep_regn_test_agg.py](scripts/eval_ingest/00example_configs/xgb_adaboost_regn_casam_jul26/prep_regn_test_agg.py). The prep script should culminate into properly calling `rafts_prep.proc_eval_metrics.proc_col_schema()`
+1. **Preparation**: Custom dataset munging is performed first to prepare the initial response variable dataset and write to file in a standardized NetCDF (`.nc`). Typically named `prep_*.py` inside the same directory as the corresponding config files (e.g. [scripts/workflow_configs/00example_configs/xgb_adaboost_regn_casam_jul26/prep_regn_test_agg.py](scripts/workflow_configs/00example_configs/xgb_adaboost_regn_casam_jul26/prep_regn_test_agg.py). The prep script should culminate into properly calling `rafts_prep.proc_eval_metrics.proc_col_schema()`
 
 
 2. **Aggregation**: Hydrofabric-based watershed attributes are aggregated based on the gage_id representing the basins of interest. Both methods create the RaFTS-standard form of watershed attribute data, whose column names include `['featureID', 'featureSource',  'data_source', 'dl_timestamp', 'attribute', 'value']`.
@@ -46,7 +46,7 @@ These run after the initial custom prep script that generates the response varia
 
 3. **Training & Testing**: Algorithms are trained and tested in parallel on the catchment attribute data to predict formulation metrics or hydrologic signatures. There are a few different algorithm training scripts contained inside [`pkg/rafts_algo/rafts_algo/flow/`](pkg/rafts_algo/rafts_algo/flow/):
  - `rafts_proc_algo_pool.py`: The computationally-efficient parallelized algorithm training script. Recommended, especially when using the current workflow, with pre-processed attribute data. See [rafts_proc_algo_pool.py](pkg/rafts_algo/rafts_algo/flow/rafts_proc_algo_pool.py).
- - `rafts_proc_algo_viz.py`: The legacy script which is kept in case historic workflow runs are desired (e.g. `/scripts/eval_ingest/xssa_us/`). See [rafts_proc_algo_viz.py](pkg/rafts_algo/rafts_algo/flow/rafts_proc_algo_viz.py).
+ - `rafts_proc_algo_viz.py`: The legacy script which is kept in case historic workflow runs are desired (e.g. `/scripts/workflow_configs/legacy/xssa_us/`). See [rafts_proc_algo_viz.py](pkg/rafts_algo/rafts_algo/flow/rafts_proc_algo_viz.py).
 
 Algorithm choices include supervised (i.e. random forest and MLP), and unsupervised (e.g. gower's distance, kmeans). **Develop separate workflows based on algorithm type - supervised or unsupervised.** In other words, build out separate processing workflows for supervised algorithms, and another workflow for unsupervised algorithms. Do not mix supervised and unsupervised algorithms together in the same workflow.
 
@@ -73,14 +73,14 @@ Note: The attribute transformation workflow has been deprecated for the current 
 
 ### Workflow Summary
 
-That's a lot of steps! Within a config file subdirectory, you can observe examples of how individual steps are selected within corresponding shell scripts. In some cases, there are multiple datasets being prepared, trained, and predicted, each with their own subset of shell scripts and config files. An overarching shell script (e.g. [`regn_all_proc.sh`](scripts/eval_ingest/00example_configs/clustering_regn_casam_jul26/regn_all_proc.sh)) may demonstrate how to run the workflow for each dataset in one go.
+That's a lot of steps! Within a config file subdirectory, you can observe examples of how individual steps are selected within corresponding shell scripts. In some cases, there are multiple datasets being prepared, trained, and predicted, each with their own subset of shell scripts and config files. An overarching shell script (e.g. [`regn_all_proc.sh`](scripts/workflow_configs/00example_configs/clustering_regn_casam_jul26/regn_all_proc.sh)) may demonstrate how to run the workflow for each dataset in one go.
 
 
 ---
 
 ## II. Configuration Files
 
-A RaFTS workflow relies on a suite of YAML configuration files to dictate file I/O, dataset schemas, and algorithm hyperparameters. Different datasets/workflows have different sets of config files, as stored inside `scripts/eval_ingest/{workflow_subdir}/`. All config files for a given workflow must be in the same directory!
+A RaFTS workflow relies on a suite of YAML configuration files to dictate file I/O, dataset schemas, and algorithm hyperparameters. Different datasets/workflows have different sets of config files, as stored inside `scripts/workflow_configs/{00example_configs,legacy}/{workflow_subdir}/`. All config files for a given workflow must be in the same directory!
 
 ### TL;DR - Configuration Tips:
 When configuring a new workflow, the following are common considerations/gotchas. 
@@ -186,7 +186,7 @@ When wanting to aggregate hydrofabric divides to a larger scale, the following c
   * `dataset_name`: The name to be assigned to this dataset. This name will be used to create a subdirectory inside `user_data_std` and is also used in various filenames. This serves as a unique identifier, so make it different from previous workflow runs! (Required).
   **NOTE** a legacy form of allows `dataset_name` to additionally be specified in the attribute config under the subsection `formulation_metadata`.
   This was initially created to handle processing multiple datasets all at once, but `hfATLAS` workflows have made it only possible to processing one dataset per config file (e.g. a required assumption in `rafts_agg_hfatl_basin.py`). 
-  Refer to [`scripts/eval_ingest/ealstm/`](scripts/eval_ingest/ealstm/) for an example of processing multiple datasets.
+  Refer to [`scripts/workflow_configs/legacy/ealstm/`](scripts/workflow_configs/legacy/ealstm/) for an example of processing multiple datasets.
 
 
 
@@ -217,7 +217,7 @@ Configures the acquisition of catchment attributes corresponding to standard-nam
 * **`formulation_metadata`**:
   * `datasets`: The dataset names to select for further processing. (Required).
     * **NOTE** the dataset names of interest must also be specified in the prep config.
-    * This was initially created to handle processing multiple datasets all at once, but present workflows have drifted towards just processing one dataset at a time. Refer to `scripts/eval_ingest/ealstm/` for an example of processing multiple datasets.
+    * This was initially created to handle processing multiple datasets all at once, but present workflows have drifted towards just processing one dataset at a time. Refer to `scripts/workflow_configs/legacy/ealstm/` for an example of processing multiple datasets.
 
 
 * **`attr_select`**:
@@ -420,7 +420,7 @@ To run the end-to-end RaFTS pipeline using the modern `uv` Python package manage
 **1. Prepare the initial dataset:**
 
 ```bash
-uv run python pkg/rafts_prep/rafts_prep/flow/prep_hfatl_test.py "scripts/eval_ingest/hfatl_test2/hfatl_prep_config.yaml"
+uv run python pkg/rafts_prep/rafts_prep/flow/prep_hfatl_test.py "scripts/workflow_configs/00example_configs/hfatl_test/hfatl_prep_config.yaml"
 
 ```
 
@@ -429,7 +429,7 @@ uv run python pkg/rafts_prep/rafts_prep/flow/prep_hfatl_test.py "scripts/eval_in
 
 ```bash
 uv run python pkg/rafts_prep/rafts_prep/flow/hfatlas_to_rafts_prep.py \
-    --path_prep_config "scripts/eval_ingest/hfatl_test2/hfatl_prep_config.yaml" \
+    --path_prep_config "scripts/workflow_configs/00example_configs/hfatl_test/hfatl_prep_config.yaml" \
     --name_attr_config "hfatl_attr_config.yaml"
 
 ```
@@ -438,41 +438,41 @@ uv run python pkg/rafts_prep/rafts_prep/flow/hfatlas_to_rafts_prep.py \
 
 ```bash
 uv run python pkg/rafts_prep/rafts_prep/flow/rafts_agg_hfatl_basin.py \
-    --path_prep_config "scripts/eval_ingest/hfatl_test2/hfatl_prep_config.yaml" \
-    --path_attr_config "scripts/eval_ingest/hfatl_test2/hfatl_attr_config.yaml"
+    --path_prep_config "scripts/workflow_configs/00example_configs/hfatl_test/hfatl_prep_config.yaml" \
+    --path_attr_config "scripts/workflow_configs/00example_configs/hfatl_test/hfatl_attr_config.yaml"
 
 ```
 
 **3. Train & Test Algorithms:**
 
 ```bash
-uv run python pkg/rafts_algo/rafts_algo/flow/rafts_proc_algo_pool.py "scripts/eval_ingest/hfatl_test2/hfatl_algo_config_uncn.yaml" --chunk_size 4
+uv run python pkg/rafts_algo/rafts_algo/flow/rafts_proc_algo_pool.py "scripts/workflow_configs/00example_configs/hfatl_test/hfatl_algo_config_uncn.yaml" --chunk_size 4
 
 ```
 
 **4. Perform Out-of-Sample Predictions:**
 
 ```bash
-uv run python pkg/rafts_algo/rafts_algo/flow/rafts_pred_algo.py "scripts/eval_ingest/hfatl_test2/hfatl_pred_config_uncn.yaml"
+uv run python pkg/rafts_algo/rafts_algo/flow/rafts_pred_algo.py "scripts/workflow_configs/00example_configs/hfatl_test/hfatl_pred_config_uncn.yaml"
 
 ```
 
 **5. Map Predictions:**
 
 ```bash
-uv run python pkg/rafts_algo/rafts_algo/flow/rafts_map_pred_hfatl.py "scripts/eval_ingest/hfatl_test2/hfatl_pred_config_uncn.yaml"
+uv run python pkg/rafts_algo/rafts_algo/flow/rafts_map_pred_hfatl.py "scripts/workflow_configs/00example_configs/hfatl_test/hfatl_pred_config_uncn.yaml"
 
 ```
 
 **6. Pair Donors and Receivers:**
 (Only for unsupervised clustering algorithms)
 ```bash
-uv run python pkg/rafts_algo/rafts_algo/flow/rafts_pair_donors.py "scripts/eval_ingest/path_to/*_pred_config.yaml"
+uv run python pkg/rafts_algo/rafts_algo/flow/rafts_pair_donors.py "scripts/workflow_configs/path_to/*_pred_config.yaml"
 
 ```
 
 **7. Populate the hydrofabric .gpkg with selected regionalized parameters:**
 
 ```bash
-uv run python pkg/rafts_algo/rafts_algo/flow/rafts_regn_params_gpkg.py "scripts/eval_ingest/path_to/*_pred_config.yaml"
+uv run python pkg/rafts_algo/rafts_algo/flow/rafts_regn_params_gpkg.py "scripts/workflow_configs/path_to/*_pred_config.yaml"
 ```

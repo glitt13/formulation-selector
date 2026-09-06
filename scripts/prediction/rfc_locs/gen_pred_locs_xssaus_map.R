@@ -10,7 +10,7 @@
 #' @reference https://www.nature.com/articles/s41467-022-28010-7
 #' @param path_cfig_pred The path to the prediction configuration yaml file. May use glue formatting for {home_dir}
 #' @examples
-#' \dontrun{Rscript gen_pred_locs_xssaus_map.R "{home_dir}/git/rafts/scripts/eval_ingest/xssa_us/xssaus_pred_config.yaml"
+#' \dontrun{Rscript gen_pred_locs_xssaus_map.R "{home_dir}/git/rafts/scripts/workflow_configs/legacy/xssa_us/xssaus_pred_config.yaml"
 #' "{home_dir}/noaa/regionalization/data/analyses/basin_selection" "{home_dir}/git/rafts/"
 #' }
 #' # When wanting to randomly subsample from a dataset, set the total # of samples and optionally the seed number
@@ -36,7 +36,7 @@ main <- function(){
   }
   # Define args supplied to command line
   home_dir <- Sys.getenv("HOME")
-  path_cfig_pred <- glue::glue(as.character(args[1])) # path_cfig_pred <- glue::glue("{home_dir}/git/rafts/scripts/eval_ingest/xssa_us/xssaus_pred_config.yaml")
+  path_cfig_pred <- glue::glue(as.character(args[1])) # path_cfig_pred <- glue::glue("{home_dir}/git/rafts/scripts/workflow_configs/legacy/xssa_us/xssaus_pred_config.yaml")
   dir_base_huc08 <- glue::glue(as.character(args[2]))# dir_base_huc08 <- dir_repo <- glue::glue("{home_dir}/noaa/regionalization/data/analyses/basin_selection"
   dir_repo <- glue::glue(as.character(args[3])) #dir_repo <- glue::glue("{home_dir}/git/rafts/")
   # Read in config file
@@ -185,7 +185,7 @@ main <- function(){
     # TODO make sure user activates appropriate conda environment before running!
 
     path_tfrm_script <- glue::glue("{dir_repo}/pkg/rafts_algo/rafts_algo/rafts_tfrm_attrs.py")
-    path_tfrm_config <- glue::glue("{dir_repo}/scripts/eval_ingest/xssa_us/xssaus_attrs_tform.yaml")
+    path_tfrm_config <- glue::glue("{dir_repo}/scripts/workflow_configs/legacy/xssa_us/xssaus_attrs_tform.yaml")
     if(!file.exists(path_tfrm_script)){
       stop(glue::glue("Does not exist: {path_tfrm_script}"))
     }

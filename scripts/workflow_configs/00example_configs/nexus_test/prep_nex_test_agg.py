@@ -24,7 +24,7 @@ if __name__ == "__main__":
     parser.add_argument('path_config', type=str, help='Path to the YAML configuration file')
     args = parser.parse_args()
     # The path to the configuration
-    path_config = Path(args.path_config).expanduser() # path_config = Path('~/git/rafts/scripts/eval_ingest/regn_apr26_test1/regn_prep_config.yaml').expanduser() 
+    path_config = Path(args.path_config).expanduser() # path_config = Path('~/git/rafts/scripts/workflow_configs/00example_configs/nexus_test/nex_test_agg_prep_config.yaml').expanduser()
 
     if not Path(path_config).exists():
         raise ValueError("The provided path to the configuration file does not exist: {path_config}")

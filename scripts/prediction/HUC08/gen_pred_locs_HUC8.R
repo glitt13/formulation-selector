@@ -10,7 +10,7 @@ library(future.apply) #IMPORTANT Must call to avoid import error
 
 # Set important params (Retr_Params) ----------------------------------
 home_dir <- Sys.getenv("HOME")
-path_cfig_pred <- glue::glue("{home_dir}/Lauren/FSDS/rafts/scripts/eval_ingest/xssa_NWM_domain/xssanwm_pred_config.yaml")
+path_cfig_pred <- glue::glue("{home_dir}/Lauren/FSDS/rafts/scripts/workflow_configs/legacy/xssa_NWM_domain/xssanwm_pred_config.yaml")
 
 dir_repo <- glue::glue("{home_dir}/Lauren/FSDS/rafts/")
 
@@ -136,7 +136,7 @@ for(ds in datasets){
   # TODO make sure user activates appropriate conda environment before running!
 
   path_tfrm_script <- glue::glue("{dir_repo}/pkg/rafts_algo/rafts_algo/rafts_tfrm_attrs.py")
-  path_tfrm_config <- glue::glue("{dir_repo}/scripts/eval_ingest/xssa_us/xssaus_attrs_tform.yaml")
+  path_tfrm_config <- glue::glue("{dir_repo}/scripts/workflow_configs/legacy/xssa_us/xssaus_attrs_tform.yaml")
   if(!file.exists(path_tfrm_script)){
     stop(glue::glue("Does not exist: {path_tfrm_script}"))
   }
@@ -238,7 +238,7 @@ for(ds in datasets){
   # # TODO make sure user activates appropriate conda environment before running!
   #
   # path_tfrm_script <- glue::glue("{dir_repo}/pkg/rafts_algo/rafts_algo/rafts_tfrm_attrs.py")
-  # path_tfrm_config <- glue::glue("{dir_repo}/scripts/eval_ingest/xssa_us/xssaus_attrs_tform.yaml")
+  # path_tfrm_config <- glue::glue("{dir_repo}/scripts/workflow_configs/legacy/xssa_us/xssaus_attrs_tform.yaml")
   # if(!file.exists(path_tfrm_script)){
   #   stop(glue::glue("Does not exist: {path_tfrm_script}"))
   # }

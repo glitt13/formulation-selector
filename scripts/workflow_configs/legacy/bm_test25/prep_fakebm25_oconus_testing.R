@@ -34,7 +34,7 @@ library(glue)
 
 
 home_dir <- Sys.getenv("HOME")
-path_prep_yml <- "~/git/rafts/scripts/eval_ingest/bm_test25/bm25test_prep_config.yml"
+path_prep_yml <- "~/git/rafts/scripts/workflow_configs/legacy/bm_test25/bm25test_prep_config.yml"
 dat_rfc_prep <- yaml::read_yaml(file=path_prep_yml)
 dir_std_base <- file.path(glue::glue(unlist(dat_rfc_prep$file_io)[['dir_save']]),
                           "user_data_std")
@@ -48,7 +48,7 @@ if(!dir.exists(dir_data_in)){
 #path_save_fake_file <- file.path(dir_data_in,"bm25test_fake_data.csv")
 
 
-path_oconus_hfab_config <- "~/git/rafts/scripts/eval_ingest/bm_test25/bm_oconus_config.yaml"
+path_oconus_hfab_config <- "~/git/rafts/scripts/workflow_configs/legacy/bm_test25/bm_oconus_config.yaml"
 path_nwps_rpt  <- 'https://water.noaa.gov/resources/downloads/reports/nwps_all_gauges_report.csv'
 path_hads_sites <- 'https://hads.ncep.noaa.gov/USGS/ALL_USGS-HADS_SITES.txt'
 path_nwps_api <- "https://api.water.noaa.gov/nwps/v1/gauges"

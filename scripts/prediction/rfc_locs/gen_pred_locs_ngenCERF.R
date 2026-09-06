@@ -10,7 +10,7 @@
 #' FALSE and full generation of the prediction metadata parquet file will take
 #' tens of minutes instead (because some locations will never be found)
 #' @example \dontrun{Rscript gen_pred_locs_rfcs_bm25test.R
-#' "{home_dir}/git/rafts/scripts/eval_ingest/xssa_us/xssaus_pred_config.yaml"
+#' "{home_dir}/git/rafts/scripts/workflow_configs/legacy/xssa_us/xssaus_pred_config.yaml"
 #' "{home_dir}/noaa/regionalization/data/analyses/basin_selection/HeadwaterBasinGages_ngenCERF_PI3_2024-12-09Calibratable.csv"}
 
 # Changelog/contributions
@@ -37,7 +37,7 @@ main <- function(){
 
   # Define args supplied to command line
   home_dir <- Sys.getenv("HOME")
-  path_cfig_pred <- glue::glue(as.character(args[1])) # path_cfig_pred <- glue::glue("{home_dir}/git/rafts/scripts/eval_ingest/xssangencerf/xssangencerf_pred_config.yaml")
+  path_cfig_pred <- glue::glue(as.character(args[1])) # path_cfig_pred <- glue::glue("{home_dir}/git/rafts/scripts/workflow_configs/legacy/xssangencerf/xssangencerf_pred_config.yaml")
   path_file_read <- glue::glue(as.character(args[2])) #path_file_read <- "~/noaa/regionalization/data/analyses/basin_selection/HeadwaterBasinGages_ngenCERF_PI3_2024-12-09Calibratable.csv"
   # Read in config file
   if(!base::file.exists(path_cfig_pred)){

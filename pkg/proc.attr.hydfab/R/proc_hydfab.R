@@ -744,7 +744,7 @@ get_linestring_midpoint <- function(sf_lines) {
 }
 
 retr_hfuids <- function(loc_ids,
-                        path_oconus_hfab_config, # e.g. "~/git/rafts/scripts/eval_ingest/bm_test25/bm_oconus_config.yaml"
+                        path_oconus_hfab_config, # e.g. "~/git/rafts/scripts/workflow_configs/legacy/bm_test25/bm_oconus_config.yaml"
                         featureSource = c("nwissite","wqp","comid","location")[1]
   ){
   #' @title Retrieve the hydrofabric unique id

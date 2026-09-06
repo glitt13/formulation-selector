@@ -29,7 +29,7 @@ library(mapdata)
 # state_name <- get_state_or_territory(latitude, longitude)
 #
 # print(state_name)
-path_oconus_hfab_config <- "~/git/rafts/scripts/eval_ingest/bm_test25/bm_oconus_config.yaml"
+path_oconus_hfab_config <- "~/git/rafts/scripts/workflow_configs/legacy/bm_test25/bm_oconus_config.yaml"
 path_nwps_rpt  <- 'https://water.noaa.gov/resources/downloads/reports/nwps_all_gauges_report.csv'
 path_hads_sites <- 'https://hads.ncep.noaa.gov/USGS/ALL_USGS-HADS_SITES.txt'
 path_nwps_api <- "https://api.water.noaa.gov/nwps/v1/gauges"
@@ -151,7 +151,7 @@ path_attrs_conus <- file.path(dir_hfab_tab_dat,"hydroatlas_vars.parquet")
 # ---------------------------------------------------------------------------- #
 #. Trying to formalize here
 # ---------------------------------------------------------------------------- #
-path_attr_config <- "~/git/rafts/scripts/eval_ingest/xssa/xssa_attr_config.yaml"
+path_attr_config <- "~/git/rafts/scripts/workflow_configs/legacy/xssa/xssa_attr_config.yaml"
 
 Retr_Params <- proc.attr.hydfab::attr_cfig_parse(path_attr_config)
 

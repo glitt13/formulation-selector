@@ -42,7 +42,7 @@ if __name__ == "__main__":
     parser.add_argument('--chunk_size', default=4, type=int, help = "Set chunk_size to match your physical CPU cores (e.g., 4, 6, or 8)" )
     args = parser.parse_args()
 
-    path_algo_config = Path(args.path_algo_config).expanduser() #Path(f'~/git/rafts/scripts/eval_ingest/xssa/xssa_algo_config.yaml').expanduser()
+    path_algo_config = Path(args.path_algo_config).expanduser() #Path(f'~/git/rafts/scripts/workflow_configs/legacy/xssa/xssa_algo_config.yaml').expanduser()
     config_dir = path_algo_config.parent
     chunk_size = args.chunk_size
 

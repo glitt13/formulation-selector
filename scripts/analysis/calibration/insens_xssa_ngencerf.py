@@ -19,7 +19,7 @@ THRESHOLD_SENS = 0.015
 OUTPUT_FILEPATH = f"~/noaa/regionalization/data/analyses/insensitivities/ngencerf2025_thr{THRESHOLD_SENS}.csv"
 
 # Input directories and files
-DIR_DAT = "~/noaa/regionalization/data/output/algorithm_predictions/xSSA_proc_sens_wt_loc_sel_ngencerf" # Generated in 2025-May. The config files inside scripts/eval_ingest need to be reworked to recreate this dataset
+DIR_DAT = "~/noaa/regionalization/data/output/algorithm_predictions/xSSA_proc_sens_wt_loc_sel_ngencerf" # Generated in 2025-May. The config files inside scripts/workflow_configs need to be reworked to recreate this dataset
 PATH_GPKG = "~/noaa/regionalization/data/input/user_data_std/xSSA_proc_sens_wt_loc_sel_ngencerf2025/xSSA_proc_sens_wt_loc_sel_Raven_blended_loc.gpkg"
 DIR_CALIB_GAGES = "~/noaa/hydrofabric/hf22_apr26cal/selected_subsets_edited_geom/sites_new_ngsh_edited_geom"
 

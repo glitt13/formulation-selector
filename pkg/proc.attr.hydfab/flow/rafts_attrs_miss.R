@@ -27,8 +27,8 @@ if(base::length(cmd_args)!=1){
   warning("Unexpected to have more than one argument in Rscript rafts_attrs_grab.R /path/to/attribute_config.yaml.")
 }
 
-# Read in config file, e.g.  "~/git/rafts/scripts/eval_ingest/SI/SI_attr_config.yaml"
-path_attr_config <- cmd_args[1] # "~/git/rafts/scripts/eval_ingest/xssa/xssa_attr_config.yaml"
+# Read in config file
+path_attr_config <- cmd_args[1] # "~/git/rafts/scripts/workflow_configs/legacy/xssa/xssa_attr_config.yaml"
 
 #-----------------------------------------------------
 Retr_Params <- proc.attr.hydfab::attr_cfig_parse(path_attr_config)

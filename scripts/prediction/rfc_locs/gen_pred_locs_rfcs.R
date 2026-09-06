@@ -3,7 +3,7 @@
 #' @description Given the comids of RFC forecast locations, grab NHDPlus
 #' catchment attributes
 #' @example \dontrun{gen_pred_locs_rfcs.R
-#' "{home_dir}/git/rafts/scripts/eval_ingest/xssa_us/xssaus_pred_config.yaml"
+#' "{home_dir}/git/rafts/scripts/workflow_configs/legacy/xssa_us/xssaus_pred_config.yaml"
 #' "~/git/rafts/scripts/prediction/rfc_locs/nws_nwm_crosswalk.txt"}
 
 
@@ -25,7 +25,7 @@ main <- function(){
   }
   # Define args supplied to command line
   home_dir <- Sys.getenv("HOME")
-  path_cfig_pred <- glue::glue(as.character(args[1])) # path_cfig_pred <- glue::glue("{home_dir}/git/rafts/scripts/eval_ingest/xssa_us/xssaus_pred_config.yaml")
+  path_cfig_pred <- glue::glue(as.character(args[1])) # path_cfig_pred <- glue::glue("{home_dir}/git/rafts/scripts/workflow_configs/legacy/xssa_us/xssaus_pred_config.yaml")
   path_nwm_crosswalk <- glue::glue(as.character(args[2]))
   # Read in config file
   if(!base::file.exists(path_cfig_pred)){

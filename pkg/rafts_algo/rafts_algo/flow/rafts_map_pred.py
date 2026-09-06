@@ -26,7 +26,7 @@ if __name__ == "__main__":
     # NOTE pred_config should contain the path for path_algo_config
     args = parser.parse_args()
 
-    path_pred_config = Path(args.path_pred_config).expanduser() #Path(f'~/git/rafts/scripts/eval_ingest/xssangencerf/xssangencerf_pred_config.yaml') 
+    path_pred_config = Path(args.path_pred_config).expanduser() #Path(f'~/git/rafts/scripts/workflow_configs/legacy/xssangencerf/xssangencerf_pred_config.yaml') 
     # --- Commence logging before creating the log file
     memory_handler = MemoryHandler(capacity=30)
     # Get the root logger and add the memory handler to it
