@@ -32,9 +32,13 @@ if __name__ == "__main__":
 
     # Logger setup - first define required paths/name in the config
     home_dir = Path("~/").expanduser()
-    dir_save = [x for x in config['file_io'] if 'dir_save' in x.keys()][0]['dir_save'].format(home_dir = home_dir)
+    dir_save_raw = [x for x in config['file_io'] if 'dir_save' in x.keys()][0]['dir_save'].format(home_dir = home_dir)
+    dir_save_path = Path(dir_save_raw).expanduser()
+    if not dir_save_path.is_absolute():
+        dir_save_path = (path_config.parent / dir_save_path).resolve()
+    dir_save = str(dir_save_path)
 
-    # Gnerate path to the log file & initialize logging
+    # Generate path to the log file & initialize logging
     path_log = pem.std_path_log(dir_input=dir_save, path_config=path_config,
                             script='prep_xssa_metrics')
     logging.basicConfig(level=logging.INFO, filename=path_log, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -44,10 +48,22 @@ if __name__ == "__main__":
     # Read in the config file & convert to pd.DataFrame
     col_schema_df = pem.read_schm_ls_of_dict(schema_path = path_config)
 
-    # Extract path and format the home_dir in case it was defined in file path
-    path_camels = col_schema_df['path_camels'].loc[0].format(home_dir = str(Path.home()))
-    path_data = col_schema_df['path_data'].loc[0].format(home_dir = str(Path.home()))
-    dir_save = col_schema_df['dir_save'].loc[0].format(home_dir = str(Path.home()))
+    # Extract path and format the home_dir in case it was defined in file path, resolving relative paths
+    path_camels_raw = col_schema_df['path_camels'].loc[0].format(home_dir = str(Path.home()))
+    path_camels = Path(path_camels_raw).expanduser()
+    if not path_camels.is_absolute():
+        path_camels = (path_config.parent / path_camels).resolve()
+
+    path_data_raw = col_schema_df['path_data'].loc[0].format(home_dir = str(Path.home()))
+    path_data = Path(path_data_raw).expanduser()
+    if not path_data.is_absolute():
+        path_data = (path_config.parent / path_data).resolve()
+
+    dir_save_raw = col_schema_df['dir_save'].loc[0].format(home_dir = str(Path.home()))
+    dir_save_path = Path(dir_save_raw).expanduser()
+    if not dir_save_path.is_absolute():
+        dir_save_path = (path_config.parent / dir_save_path).resolve()
+    dir_save = str(dir_save_path)
     
     # BEGIN CUSTOMIZED DATASET MUNGING
     # ---- Read in Julie Mai's 2022 Nat Comm xSSA results

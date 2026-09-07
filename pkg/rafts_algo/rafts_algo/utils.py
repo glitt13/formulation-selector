@@ -417,6 +417,11 @@ class PredConfigParser:
         dir_std_base = attr_cfg.attrs_cfg_dict.get('dir_std_base')
         datasets     = attr_cfg.attrs_cfg_dict.get('datasets')
 
+        if dir_base and not Path(dir_base).is_absolute():
+            dir_base = str((Path(path_attr_config).parent / dir_base).resolve())
+        if dir_std_base and not Path(dir_std_base).is_absolute():
+            dir_std_base = str((Path(path_attr_config).parent / dir_std_base).resolve())
+
         # Check if dir_base exists
         if not Path(dir_base).exists():
             logging.error(f"Resolved dir_base path does not exist: {dir_base}")

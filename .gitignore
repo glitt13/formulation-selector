@@ -98,6 +98,10 @@ nosetests.xml
 coverage.xml
 *.joblib
 
+# integration tests #
+#####################
+tests/data/testdata_20250901
+
 #  R  #
 #######
 *.Rproj

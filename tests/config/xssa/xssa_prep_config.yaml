@@ -8,9 +8,9 @@ col_schema:   # required column mappings in the evaluation metrics dataset
 file_io: # May define {home_dir} for python's '{home_dir}/string_path'.format(home_dir =str(Path.home())) functionality
   # NOTE: FOR RaFTS INTEGRATION TESTING, the required input data, testdata_20250901 must be extracted from the zip file here: https://drive.google.com/file/d/1z0joW1TMXu9EwejiUNL_Tge5illGSIvg/view?usp=sharing
   - 'home_dir': '~' # OPTIONAL, define the home_dir path. If undefined, rafts_prep will automatically assume default '~'  
-  - 'path_camels': '{home_dir}/noaa/regionalization/data/tests/testdata_20250901/camels/camels_hydro.txt' # Path to the CAMELS basins dataset. CAMELS data should not always be a requirement for dataset processing, but serves to help analyze common catchments.
-  - 'path_data': '{home_dir}/noaa/regionalization/data/tests/testdata_20250901/julemai-xSSA/data_in/basin_metadata/basin_validation_results.txt' # Where the raw input data are stored.
-  - 'dir_save': '{home_dir}/noaa/regionalization/data/tests/input' # Required. The save location of standardized output
+  - 'path_camels': '../../data/testdata_20250901/camels/camels_hydro.txt' # Path to the CAMELS basins dataset. CAMELS data should not always be a requirement for dataset processing, but serves to help analyze common catchments.
+  - 'path_data': '../../data/testdata_20250901/julemai-xSSA/data_in/basin_metadata/basin_validation_results.txt' # Where the raw input data are stored.
+  - 'dir_save': '../../data/input' # Required. The save location of standardized output
   - 'save_type': 'netcdf' #  Required. Save as hierarchical files 'netcdf'. Default 'netcdf'. The zarr format option is non-functional as of 2025.
   - 'save_loc': 'local' #  Required.  Use 'local' for saving to a local path via dir_save. Future work will create an approach for 'aws' or other cloud saving methods
 formulation_metadata:  
@@ -28,7 +28,7 @@ formulation_metadata:
   - 'end_date_cal': '2010-12-31' # The YYYY-MM-DD end date corresponding to the calibration period
   - 'cal_notes': 'Calibration on basins larger than 300 km2 and more than 5 years observed streamflow data'
 references: # All optional but **very** helpful metadata
-  - 'input_filepath': '{home_dir}/noaa/regionalization/data/tests/testdata_20250901/julemai-xSSA/data_in/basin_metadata/basin_validation_results.txt'
+  - 'input_filepath': '../../data/testdata_20250901/julemai-xSSA/data_in/basin_metadata/basin_validation_results.txt'
   - 'source_url': 'https://zenodo.org/records/5730428'
   - 'dataset_doi': '10.5281/zenodo.5730428'
   - 'literature_doi': 'https://doi.org/10.1038/s41467-022-28010-7'

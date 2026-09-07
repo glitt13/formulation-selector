@@ -18,7 +18,11 @@ def _xssa_testdata_available() -> bool:
         home_dir = raftsutil._make_home_dir([])
         col_schema_df = pem.read_schm_ls_of_dict(schema_path=_PATH_XSSA_PREP_CONFIG)
         path_camels = Path(col_schema_df['path_camels'].iloc[0].format(home_dir=home_dir))
+        if not path_camels.is_absolute():
+            path_camels = (_PATH_XSSA_PREP_CONFIG.parent / path_camels).resolve()
         path_data = Path(col_schema_df['path_data'].iloc[0].format(home_dir=home_dir))
+        if not path_data.is_absolute():
+            path_data = (_PATH_XSSA_PREP_CONFIG.parent / path_data).resolve()
         return path_camels.exists() and path_data.exists()
     except Exception:
         return False
@@ -65,7 +69,10 @@ class TestFsPrepProcAttrHydfabFsAlgo(unittest.TestCase):
         self.home_dir = raftsutil._make_home_dir([])
         self.col_schema_df = pem.read_schm_ls_of_dict(schema_path=self.path_cfg_prep)
 
-        self.dir_save = Path(self.col_schema_df['dir_save'].iloc[0].format(home_dir=self.home_dir))
+        dir_save_raw = self.col_schema_df['dir_save'].iloc[0].format(home_dir=self.home_dir)
+        self.dir_save = Path(dir_save_raw)
+        if not self.dir_save.is_absolute():
+            self.dir_save = (self.path_cfg_prep.parent / self.dir_save).resolve()
         self.dataset = self.col_schema_df['dataset_name'].iloc[0]
         self.formulation_id = pem.std_form_id(self.col_schema_df)
         self.dir_std_base = pem.dir_std_dataset(self.dir_save, self.dataset).parent
@@ -81,7 +88,11 @@ class TestFsPrepProcAttrHydfabFsAlgo(unittest.TestCase):
         self.path_rafts_attrs_grab = self.dir_tests.parent / "pkg" / "proc.attr.hydfab" / "flow" / "rafts_attrs_grab.R"
         attr_cfig = raftsutil.AttrConfigAndVars(self.path_attr_cfig)
         attr_cfig._read_attr_config()
-        dir_base = [x.get('dir_base') for x in attr_cfig.attr_config['file_io'] if 'dir_base' in x.keys()][0].format(home_dir=self.home_dir )
+        dir_base_raw = [x.get('dir_base') for x in attr_cfig.attr_config['file_io'] if 'dir_base' in x.keys()][0].format(home_dir=self.home_dir )
+        dir_base = Path(dir_base_raw)
+        if not dir_base.is_absolute():
+            dir_base = (self.path_attr_cfig.parent / dir_base).resolve()
+        dir_base = str(dir_base)
         self.dir_db_attrs = [x.get('dir_db_attrs') for x in attr_cfig.attr_config['file_io'] if 'dir_db_attrs' in x.keys()][0].format(dir_base=dir_base)
         self.ds_type = [x.get('ds_type') for x in attr_cfig.attr_config['file_io'] if 'ds_type' in x.keys()][0]
 
@@ -98,6 +109,10 @@ class TestFsPrepProcAttrHydfabFsAlgo(unittest.TestCase):
         self.path_rafts_proc_algo_viz = self.dir_tests.parent / "pkg" / "rafts_algo" / "rafts_algo" / "flow" / "rafts_proc_algo_viz.py"
         self.algo_cfig = raftsutil.AlgoConfigParser(self.path_algo_cfg)
         self.algo_cfig._read_algo_config()
+
+        # Ensure dir_save and dir_base exist
+        self.dir_save.mkdir(parents=True, exist_ok=True)
+        Path(dir_base).mkdir(parents=True, exist_ok=True)
 
         # Extract variables from dictionary created by AlgoConfigParser
         self.algo_config = self.algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["algo_config"]
@@ -124,7 +139,11 @@ class TestFsPrepProcAttrHydfabFsAlgo(unittest.TestCase):
         # ------------------------------------------------------------------- #
         # --- Pre-run checks and cleanup ---
         path_camels = Path(self.col_schema_df['path_camels'].iloc[0].format(home_dir=self.home_dir))
+        if not path_camels.is_absolute():
+            path_camels = (self.path_cfg_prep.parent / path_camels).resolve()
         path_data = Path(self.col_schema_df['path_data'].iloc[0].format(home_dir=self.home_dir))
+        if not path_data.is_absolute():
+            path_data = (self.path_cfg_prep.parent / path_data).resolve()
         if not path_camels.exists():
             self.fail(f"Required input {path_camels} not specified.")
         if not path_data.exists():
@@ -133,7 +152,7 @@ class TestFsPrepProcAttrHydfabFsAlgo(unittest.TestCase):
         # --- Run the subprocess ---
         cmd_prep = ["python", str(self.path_rafts_prep), str(self.path_cfg_prep)]
         try:
-            rslt_prep = subprocess.run(cmd_prep, check=True, capture_output=True, text=True)
+            rslt_prep = subprocess.run(cmd_prep, cwd=self.path_cfg_prep.parent, check=True, capture_output=True, text=True)
             print(f"Completed rafts_prep's {self.path_rafts_prep.name}.py")
         except subprocess.CalledProcessError as e:
             self.fail(f"Subprocess {self.path_rafts_prep} failed with return code {e.returncode}.\nStdout: {e.stdout}\nStderr: {e.stderr}")
@@ -144,7 +163,11 @@ class TestFsPrepProcAttrHydfabFsAlgo(unittest.TestCase):
         """
         # --- Pre-run checks and cleanup ---
         path_camels = Path(self.col_schema_df['path_camels'].iloc[0].format(home_dir=self.home_dir))
+        if not path_camels.is_absolute():
+            path_camels = (self.path_cfg_prep.parent / path_camels).resolve()
         path_data = Path(self.col_schema_df['path_data'].iloc[0].format(home_dir=self.home_dir))
+        if not path_data.is_absolute():
+            path_data = (self.path_cfg_prep.parent / path_data).resolve()
         if not path_camels.exists():
             self.fail(f"Required input {path_camels} not specified.")
         if not path_data.exists():
@@ -156,7 +179,7 @@ class TestFsPrepProcAttrHydfabFsAlgo(unittest.TestCase):
         # --- Run the subprocess ---
         cmd = ["python", str(self.path_rafts_prep), str(self.path_cfg_prep)]
         try:
-            rslt = subprocess.run(cmd, check=True, capture_output=True, text=True)
+            rslt = subprocess.run(cmd, cwd=self.path_cfg_prep.parent, check=True, capture_output=True, text=True)
             print(f"Subprocess stdout: {rslt.stdout}")
         except subprocess.CalledProcessError as e:
             self.fail(f"Subprocess failed with return code {e.returncode}.\nStdout: {e.stdout}\nStderr: {e.stderr}")
@@ -189,7 +212,7 @@ class TestFsPrepProcAttrHydfabFsAlgo(unittest.TestCase):
         cmd_attrs_grab = ["Rscript", str(self.path_rafts_attrs_grab), str(self.path_attr_cfig)]
         print(f"Running {cmd_attrs_grab}")
         try: 
-            rslt_grab = subprocess.run(cmd_attrs_grab,check=True,capture_output=True,text=True)
+            rslt_grab = subprocess.run(cmd_attrs_grab, cwd=self.path_cfg_prep.parent, check=True, capture_output=True, text=True)
             print(f"{self.path_rafts_attrs_grab} stdout: {rslt_grab.stdout}")
         except subprocess.CalledProcessError as e:
             self.fail(f"Subprocess {self.path_rafts_attrs_grab} failed with return code {e.returncode}.\nStdout: {e.stdout}\nStderr: {e.stderr}")
@@ -234,7 +257,7 @@ class TestFsPrepProcAttrHydfabFsAlgo(unittest.TestCase):
         print(f"Running {cmd_algo_train}")
 
         try:
-            subprocess.run(cmd_algo_train, check=True,capture_output=True, text=True)
+            subprocess.run(cmd_algo_train, cwd=self.path_cfg_prep.parent, check=True, capture_output=True, text=True)
             print(f"Completed {cmd_algo_train}")
         except subprocess.CalledProcessError as e:
             self.fail(f"Subprocess {self.path_rafts_proc_algo_viz} failed with return code {e.returncode}.\nStdout: {e.stdout}\nStderr: {e.stderr}")
@@ -277,7 +300,7 @@ class TestFsPrepProcAttrHydfabFsAlgo(unittest.TestCase):
         cmd_gen_pred = ["Rscript", str(self.path_gen_pred_locs), f"{str(self.path_pred_cfg)}"]
         print(cmd_gen_pred)
         try:
-            subprocess.run(cmd_gen_pred, check=True, capture_output=True, text=True)
+            subprocess.run(cmd_gen_pred, cwd=self.path_cfg_prep.parent, check=True, capture_output=True, text=True)
             print(f"Completed {self.path_gen_pred_locs.name}")
         except subprocess.CalledProcessError as e:
             self.fail(f"Subprocess {self.path_gen_pred_locs.name}.R failed with return code {e.returncode}.\nStdout: {e.stdout}\nStderr: {e.stderr}")    
@@ -287,7 +310,7 @@ class TestFsPrepProcAttrHydfabFsAlgo(unittest.TestCase):
         # ------------------------------------------------------------------- #
         cmd_pred = ["python", str(self.path_rafts_pred_algo), str(self.path_pred_cfg)]
         try: 
-            subprocess.run(cmd_pred, check=True, capture_output=True, text=True)
+            subprocess.run(cmd_pred, cwd=self.path_cfg_prep.parent, check=True, capture_output=True, text=True)
             print(f"Completed {cmd_pred}")
         except subprocess.CalledProcessError as e:
             self.fail(f"Subprocess {self.path_rafts_pred_algo} failed with return code {e.returncode}.\nStdout: {e.stdout}\nStderr: {e.stderr}")
@@ -322,26 +345,27 @@ class TestFsPrepProcAttrHydfabFsAlgo(unittest.TestCase):
         if hasattr(cls, 'dir_out_viz_base') and cls.dir_out_viz_base.exists():
             shutil.rmtree(cls.dir_out_viz_base)
             print(f"Deleted {cls.dir_out_viz_base} for integration testing relating to rafts_proc_algo_viz.py")
-        if cls.dir_out_anlys_base.exists():
+        if hasattr(cls, 'dir_out_anlys_base') and cls.dir_out_anlys_base.exists():
             shutil.rmtree(cls.dir_out_anlys_base)
             print(f"Deleted {cls.dir_out_anlys_base} for integration testing relating to rafts_proc_algo_viz.py")
-        if cls.dir_out_alg_base.exists():
+        if hasattr(cls, 'dir_out_alg_base') and cls.dir_out_alg_base.exists():
             shutil.rmtree(cls.dir_out_alg_base)
             print(f"Deleted {cls.dir_out_alg_base} for integration testing relating to rafts_proc_algo_viz.py")
-        if cls.dir_dataset.exists():
+        if hasattr(cls, 'dir_dataset') and cls.dir_dataset.exists():
             shutil.rmtree(cls.dir_dataset)
             print(f"Deleted contents inside {cls.dir_dataset} for integration testing relating to rafts_prep, proc.attr.hydfab, & rafts_algo")
-        if cls.dir_out_preds_base.exists():
+        if hasattr(cls, 'dir_out_preds_base') and cls.dir_out_preds_base.exists():
             shutil.rmtree(cls.dir_out_preds_base)
             print(f"Deleted {cls.dir_out_preds_base} for integration testing relating to rafts_pred_algo.py")    
-        if Path(cls.dir_db_attrs).exists():
+        if hasattr(cls, 'dir_db_attrs') and Path(cls.dir_db_attrs).exists():
             shutil.rmtree(cls.dir_db_attrs)
             print(f"Deleted {cls.dir_db_attrs} for integration testing relating to proc.attr.hydfab attribute grabbing")    
-        dir_gpkg = cls.path_all_locs.parent
-        if dir_gpkg.exists():
-            shutil.rmtree(dir_gpkg)
-            print(f"Deleted {dir_gpkg} for integration testing relating to proc.attr.hydfab attribute grabbing")
-        if cls.dir_std_base.exists():
+        if hasattr(cls, 'path_all_locs'):
+            dir_gpkg = cls.path_all_locs.parent
+            if dir_gpkg.exists():
+                shutil.rmtree(dir_gpkg)
+                print(f"Deleted {dir_gpkg} for integration testing relating to proc.attr.hydfab attribute grabbing")
+        if hasattr(cls, 'dir_std_base') and cls.dir_std_base.exists():
             shutil.rmtree(cls.dir_std_base)
             print(f"Cleaned up directory: {cls.dir_std_base}")
         

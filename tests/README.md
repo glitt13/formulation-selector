@@ -20,7 +20,7 @@ Two different data-provisioning approaches are in use, depending on the test:
 Those with access to the NOAA Google Drive may download the integration test input data (`testdata_20250901.zip`) from the following link:
 [https://drive.google.com/drive/folders/1JDtJKSfbmtBBp1nkBdNMwzS_EvFYkvpC?usp=drive_link](https://drive.google.com/drive/folders/1JDtJKSfbmtBBp1nkBdNMwzS_EvFYkvpC?usp=drive_link)
 
-Extract the contents into the `tests/data/` directory so that the relative paths inside the test configuration files (e.g., `../../data/...`) resolve correctly. If you extract the data elsewhere, you must manually update the `file_io` section within the `tests/config/xssa/` YAML files.
+Extract the contents into the `tests/data/testdata_20250901/` directory so that the relative paths inside the test configuration files (e.g., `../../data/...`) resolve correctly. If you extract the data elsewhere, you must manually update the `file_io` section within the `tests/config/xssa/` YAML files.
 
 ### 2. Run the Tests via `uv`
 RaFTS manages its Python environment and dependencies via `uv` centered in the `pkg/` directory. All testing commands should be executed from within `pkg/` to ensure the correct virtual environment is utilized.
