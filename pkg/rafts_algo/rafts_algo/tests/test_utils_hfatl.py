@@ -496,6 +496,92 @@ class TestReadHfatlasWrapDask(unittest.TestCase):
         self.assertTrue("TOT_AET" in result.columns)
         self.assertEqual(len(result), 0)
 
+    def test_read_hfatlas_wrap_dask_no_valid_parquet_files(self):
+        empty_dir = self.test_path / "empty_subdir"
+        empty_dir.mkdir()
+        with self.assertLogs(level='ERROR') as cm:
+            result = raftsutil.read_hfatlas_wrap_dask(paths_hfatl=empty_dir, attrs_sel=["TOT_AET"])
+        self.assertTrue(any("No valid parquet files found" in log for log in cm.output))
+        self.assertTrue(result.empty)
+
+    def test_read_hfatlas_wrap_dask_attrs_sel_none_with_query_clean(self):
+        # attrs_sel=None -> [] internally, then query_clean=True dynamically
+        # discovers every non-id column in the file as the selection.
+        result_df = raftsutil.read_hfatlas_wrap_dask(
+            paths_hfatl=[self.path_hfatl_pq], attrs_sel=None,
+            map_id_col="divide_id", query_clean=True
+        )
+        self.assertIn("TOT_AET", result_df.columns)
+        self.assertIn("ELEV", result_df.columns)
+        self.assertIn("vpuid", result_df.columns)
+
+    def test_read_hfatlas_wrap_dask_map_id_col_not_found(self):
+        with self.assertLogs(level='WARNING') as cm:
+            result_df = raftsutil.read_hfatlas_wrap_dask(
+                paths_hfatl=[self.path_hfatl_pq], attrs_sel=["TOT_AET"], map_id_col="not_a_real_col"
+            )
+        self.assertTrue(any("not found as a column or index" in log for log in cm.output))
+        self.assertTrue(result_df.empty)
+
+    def test_read_hfatlas_wrap_dask_map_id_col_as_real_index(self):
+        # A file where map_id_col was written as the DataFrame's actual index
+        # (not a plain column) -- exercises the is_index branch, which none
+        # of the other files in this class (all plain-column id) reach.
+        df_indexed = self.df_hfatlas.set_index("divide_id")
+        path_indexed = self.test_path / "indexed_hfatlas.parquet"
+        df_indexed.to_parquet(path_indexed)
+
+        result_df = raftsutil.read_hfatlas_wrap_dask(
+            paths_hfatl=[path_indexed], attrs_sel=["TOT_AET"], map_id_col="divide_id"
+        )
+        self.assertIn("divide_id", result_df.columns)
+        self.assertEqual(set(result_df["divide_id"]), {"div1", "div2", "div3"})
+
+    def test_read_hfatlas_wrap_dask_numeric_id_coerced_to_string(self):
+        # NOTE: read_hfatlas_wrap_dask coerces map_id_col to string *inside*
+        # the per-file lazy-loading loop (`ddf[map_id_col] = ddf[map_id_col]
+        # .astype(str)`, before the merge/compute phase). That means the
+        # later "Coercing to string" warning -- gated on the *final*, already-
+        # computed column still not being object/string dtype -- can never
+        # actually fire through this normal code path; the per-file coercion
+        # has already guaranteed it. This test only verifies the (real,
+        # reachable) end result: a numeric-looking id column still comes back
+        # as a string dtype.
+        df_numeric_id = pd.DataFrame({
+            "divide_id": [1, 2, 3],  # numeric, not string
+            "('TOT_AET', 'mm')": [10.5, 20.1, 30.0],
+        })
+        path_numeric = self.test_path / "numeric_id.parquet"
+        df_numeric_id.to_parquet(path_numeric)
+
+        result_df = raftsutil.read_hfatlas_wrap_dask(
+            paths_hfatl=[path_numeric], attrs_sel=["TOT_AET"], map_id_col="divide_id"
+        )
+        self.assertTrue(pd.api.types.is_object_dtype(result_df["divide_id"])
+                         or pd.api.types.is_string_dtype(result_df["divide_id"]))
+
+    def test_read_hfatlas_wrap_dask_merges_multiple_files(self):
+        # A second file, disjoint divide_ids and a disjoint attribute, plus
+        # one overlapping attribute name (should be dropped from the second
+        # file rather than raising a merge conflict).
+        df_second = pd.DataFrame({
+            "divide_id": ["div4", "div5"],
+            "('TOT_AET', 'mm')": [99.0, 98.0],  # overlaps with file 1 -- should be dropped
+            "('SLOPE', 'pct')": [5.0, 6.0],
+        })
+        path_second = self.test_path / "second_hfatlas.parquet"
+        df_second.to_parquet(path_second)
+
+        result_df = raftsutil.read_hfatlas_wrap_dask(
+            paths_hfatl=[self.path_hfatl_pq, path_second],
+            attrs_sel=["TOT_AET", "SLOPE"], map_id_col="divide_id"
+        )
+        self.assertEqual(set(result_df["divide_id"]), {"div1", "div2", "div3", "div4", "div5"})
+        self.assertIn("SLOPE", result_df.columns)
+        # div1-3 have no SLOPE value (only in file 2) -> NaN after the outer join.
+        self.assertTrue(result_df.loc[result_df["divide_id"] == "div1", "SLOPE"].isna().all())
+
+
 class TestDatabaseAndCrosswalks(unittest.TestCase):
     def setUp(self):
         self.temp_dir = tempfile.TemporaryDirectory()
