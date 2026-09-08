@@ -154,7 +154,100 @@ class TestAttrConfigAndVars(unittest.TestCase):
         self.assertEqual(attr_obj.attrs_cfg_dict, expected_attrs_cfg_dict)
         print("✅ test_read_attr_config test passed.")
 
-class TestFsReadAttrComid(unittest.TestCase):   
+class TestAttrConfigAndVarsBranches(unittest.TestCase):
+    """
+    Covers AttrConfigAndVars._read_attr_config branches TestAttrConfigAndVars
+    doesn't reach: a nonexistent config path, an attr_select with no '_vars'
+    keys (falls back to 'all'), an unparseable dir_db_attrs template, the
+    name_prep_config success path, and the legacy-fallback failure path.
+    Uses real temp files rather than @patch('builtins.open', mock_open(...))
+    like the existing test does, per the project's mocking-avoidance
+    preference.
+
+    One related branch is documented rather than tested: the
+    `else: logging.warning(f"Prep config {path_prep_config.name} not
+    found.")` alongside `if path_prep_config.exists():` can't be reached
+    through build_cfig_path()'s actual contract -- like the analogous check
+    in AlgoConfigParser, build_cfig_path() either raises FileNotFoundError
+    when name_prep_config can't be found anywhere, or returns a Path it has
+    already confirmed exists.
+    """
+
+    def _write_attr_cfg(self, tmpdir, extra=None):
+        tmpdir = Path(tmpdir)
+        cfg = {
+            'attr_select': [{'attr_vars': ['attr1', 'attr2']}],
+            'file_io': [
+                {'dir_base': str(tmpdir / 'base_dir')},
+                {'dir_db_attrs': '{dir_base}/db_attrs'},
+                {'dir_std_base': '{dir_base}/std_base'},
+            ],
+            'formulation_metadata': [{'datasets': ['dataset1']}],
+        }
+        if extra:
+            for key, value in extra.items():
+                cfg[key] = value
+        path_cfg = tmpdir / "attr_config.yaml"
+        with open(path_cfg, "w") as f:
+            yaml.safe_dump(cfg, f)
+        return path_cfg
+
+    def test_attr_config_path_does_not_exist(self):
+        with self.assertRaises(ValueError):
+            raftsutil.AttrConfigAndVars(Path("/nonexistent/attr_config.yaml"))._read_attr_config()
+
+    def test_attrs_sel_defaults_to_all_when_no_vars_keys_present(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path_cfg = self._write_attr_cfg(tmpdir, extra={'attr_select': [{'other_key': ['x']}]})
+            with self.assertLogs(level='WARNING') as cm:
+                attr_obj = raftsutil.AttrConfigAndVars(path_cfg)
+                attr_obj._read_attr_config()
+            self.assertEqual(attr_obj.attrs_cfg_dict['attrs_sel'], 'all')
+            self.assertTrue(any("Assuming all attributes desired" in log for log in cm.output))
+
+    def test_dir_db_attrs_unresolvable_template_raises(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path_cfg = self._write_attr_cfg(
+                tmpdir, extra={'file_io': [
+                    {'dir_base': str(Path(tmpdir) / 'base_dir')},
+                    {'dir_db_attrs': '{undefined_placeholder}/db_attrs'},
+                    {'dir_std_base': '{dir_base}/std_base'},
+                ]}
+            )
+            with self.assertRaises(ValueError):
+                raftsutil.AttrConfigAndVars(path_cfg)._read_attr_config()
+
+    def test_name_prep_config_success_path(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            prep_cfg_path = Path(tmpdir) / "prep_config.yaml"
+            with open(prep_cfg_path, "w") as f:
+                yaml.safe_dump({'formulation_metadata': [{'dataset_name': 'from_prep_config'}]}, f)
+
+            path_cfg = self._write_attr_cfg(tmpdir, extra={
+                'file_io': [
+                    {'dir_base': str(Path(tmpdir) / 'base_dir')},
+                    {'dir_db_attrs': '{dir_base}/db_attrs'},
+                    {'dir_std_base': '{dir_base}/std_base'},
+                    {'name_prep_config': 'prep_config.yaml'},
+                ]
+            })
+            attr_obj = raftsutil.AttrConfigAndVars(path_cfg)
+            attr_obj._read_attr_config()
+            self.assertEqual(attr_obj.attrs_cfg_dict['datasets'], ['from_prep_config'])
+
+    def test_legacy_fallback_raises_when_datasets_unresolvable(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # No name_prep_config, and formulation_metadata has no 'datasets' entry
+            # -> the legacy fallback's list comprehension indexes into an empty
+            # list, raising IndexError, caught and re-raised as ValueError.
+            path_cfg = self._write_attr_cfg(tmpdir, extra={
+                'formulation_metadata': [{'formulation_base': 'no_datasets_here'}]
+            })
+            with self.assertRaises(ValueError):
+                raftsutil.AttrConfigAndVars(path_cfg)._read_attr_config()
+
+
+class TestFsReadAttrComid(unittest.TestCase):
     @patch('rafts_algo.utils.dd.read_parquet')
     def test_rafts_read_attr_comid(self, mock_dd_read_parquet):
         print("    Testing rafts_read_attr_comid")
@@ -319,6 +412,153 @@ class TestAlgoConfigParser(unittest.TestCase):
 
     def test_Print(self):
         print("✅ TestAlgoConfigParser test passed.")
+
+
+class TestAlgoConfigParserValidationBranches(unittest.TestCase):
+    """
+    Covers AlgoConfigParser._read_algo_config's per-field type/range validation
+    branches, none of which were previously exercised (existing tests only
+    cover the happy path, a missing 'algorithms' key, one wrong-datatype case
+    for 'seed', and a malformed 'uncertainty' block).
+
+    Two branches documented rather than tested here are genuinely unreachable
+    given the surrounding code, not just untested:
+      - The `if not algo_cfg_dict['path_attr_config'].exists(): raise
+        ValueError(...)` check (right after build_cfig_path() is called):
+        build_cfig_path() itself either raises FileNotFoundError when the
+        configured name_attr_config can't be found anywhere, or returns a
+        Path it has already confirmed exists -- it never returns a
+        non-existent Path. So this check's condition can never evaluate True
+        through build_cfig_path's actual contract.
+      - The `else: confidence_levels = [95]` branch paired with
+        `if not algo_unc_dict == {}:`: algo_unc_dict is always constructed as
+        {'uncertainty_cfg': ...}, so it can never equal {} -- the intended
+        check (falling back to a default when no uncertainty config was
+        given) was written against the wrong variable and its else branch
+        can never run.
+    """
+
+    def setUp(self):
+        self.test_data_dir = dir_test_data
+        with open(self.test_data_dir / "test_algo_config_01_nouncertainty.yaml", "r") as f:
+            self.base_cfg = yaml.safe_load(f)
+
+    def _write_cfg(self, tmpdir, overrides=None, pop_keys=None):
+        cfg = dict(self.base_cfg)
+        if pop_keys:
+            for k in pop_keys:
+                cfg.pop(k, None)
+        if overrides:
+            cfg.update(overrides)
+        tmpdir = Path(tmpdir)
+        shutil.copy(self.test_data_dir / "attr_config.yaml", tmpdir / "attr_config.yaml")
+        path_cfg = tmpdir / "algo_config.yaml"
+        with open(path_cfg, "w") as f:
+            yaml.safe_dump(cfg, f)
+        return path_cfg
+
+    def test_algo_config_path_does_not_exist(self):
+        with self.assertRaises(ValueError):
+            raftsutil.AlgoConfigParser(Path("/nonexistent/algo_config.yaml"))._read_algo_config()
+
+    def test_missing_seed_and_test_size_falls_back_to_algotraineval_defaults(self):
+        # Neither 'seed' nor 'test_size' is truthy -> the try block introspects
+        # AlgoTrainEval.__init__'s defaults via inspect.signature.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path_cfg = self._write_cfg(tmpdir, pop_keys=["seed", "test_size"])
+            config = raftsutil.AlgoConfigParser(path_cfg)
+            config._read_algo_config()
+            algo_cfg_dict = config.algo_cfg_unc_dict["algo_cfg_dict"]
+            self.assertIsInstance(algo_cfg_dict["seed"], int)
+            self.assertIsInstance(algo_cfg_dict["test_size"], float)
+
+    def test_test_size_wrong_type_raises(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path_cfg = self._write_cfg(tmpdir, overrides={"test_size": "not_a_float"})
+            with self.assertRaises(TypeError):
+                raftsutil.AlgoConfigParser(path_cfg)._read_algo_config()
+
+    def test_test_size_out_of_range_raises(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path_cfg = self._write_cfg(tmpdir, overrides={"test_size": 1.5})
+            with self.assertRaises(ValueError):
+                raftsutil.AlgoConfigParser(path_cfg)._read_algo_config()
+
+    def test_read_type_wrong_type_raises(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path_cfg = self._write_cfg(tmpdir, overrides={"read_type": 5})
+            with self.assertRaises(TypeError):
+                raftsutil.AlgoConfigParser(path_cfg)._read_algo_config()
+
+    def test_read_type_invalid_value_raises(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path_cfg = self._write_cfg(tmpdir, overrides={"read_type": "bogus"})
+            with self.assertRaises(ValueError):
+                raftsutil.AlgoConfigParser(path_cfg)._read_algo_config()
+
+    def test_make_plots_wrong_type_raises(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path_cfg = self._write_cfg(tmpdir, overrides={"make_plots": "yes"})
+            with self.assertRaises(TypeError):
+                raftsutil.AlgoConfigParser(path_cfg)._read_algo_config()
+
+    def test_same_test_ids_wrong_type_raises(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path_cfg = self._write_cfg(tmpdir, overrides={"same_test_ids": "yes"})
+            with self.assertRaises(TypeError):
+                raftsutil.AlgoConfigParser(path_cfg)._read_algo_config()
+
+    def test_verbose_wrong_type_raises(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path_cfg = self._write_cfg(tmpdir, overrides={"verbose": "yes"})
+            with self.assertRaises(TypeError):
+                raftsutil.AlgoConfigParser(path_cfg)._read_algo_config()
+
+    def test_confidence_levels_wrong_type_raises(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            overrides = {"uncertainty": {"confidence_levels": 95}}  # not a list
+            path_cfg = self._write_cfg(tmpdir, overrides=overrides)
+            with self.assertRaises(TypeError):
+                raftsutil.AlgoConfigParser(path_cfg)._read_algo_config()
+
+    def test_confidence_levels_out_of_range_entry_raises(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            overrides = {"uncertainty": {"confidence_levels": [95, 150]}}
+            path_cfg = self._write_cfg(tmpdir, overrides=overrides)
+            with self.assertRaises(ValueError):
+                raftsutil.AlgoConfigParser(path_cfg)._read_algo_config()
+
+    def test_mapie_alpha_invalid_raises(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            overrides = {"uncertainty": {"mapie": [{"alpha": [1.5]}]}}  # not between 0 and 1
+            path_cfg = self._write_cfg(tmpdir, overrides=overrides)
+            with self.assertRaises(ValueError):
+                raftsutil.AlgoConfigParser(path_cfg)._read_algo_config()
+
+    def test_mapie_method_invalid_raises(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            overrides = {"uncertainty": {"mapie": [{"alpha": [0.1], "method": "bogus"}]}}
+            path_cfg = self._write_cfg(tmpdir, overrides=overrides)
+            with self.assertRaises(ValueError):
+                raftsutil.AlgoConfigParser(path_cfg)._read_algo_config()
+
+    def test_mapie_cv_not_int_raises(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            overrides = {"uncertainty": {"mapie": [
+                {"alpha": [0.1], "method": "plus", "cv": "ten"}
+            ]}}
+            path_cfg = self._write_cfg(tmpdir, overrides=overrides)
+            with self.assertRaises(TypeError):
+                raftsutil.AlgoConfigParser(path_cfg)._read_algo_config()
+
+    def test_mapie_agg_function_invalid_raises(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            overrides = {"uncertainty": {"mapie": [
+                {"alpha": [0.1], "method": "plus", "cv": 10, "agg_function": "bogus"}
+            ]}}
+            path_cfg = self._write_cfg(tmpdir, overrides=overrides)
+            with self.assertRaises(ValueError):
+                raftsutil.AlgoConfigParser(path_cfg)._read_algo_config()
 
 class TestCheckAttributesExist(unittest.TestCase):
     print('Testing _check_attributes_exist')
@@ -1249,6 +1489,40 @@ class TestPredConfigParser(unittest.TestCase):
         with self.assertRaises(FileNotFoundError) as context:
             parser._read_pred_config()
         self.assertIn("Resolved dir_base path does not exist", str(context.exception))
+
+    def test_missing_dir_std_base_only(self):
+        # dir_base exists, but dir_std_base (nested under it) does not --
+        # isolates the separate dir_std_base check from test_missing_dir_base_or_std
+        # above, which removes both at once via shutil.rmtree(self.dir_base).
+        self.dir_std_base.rmdir()
+
+        parser = raftsutil.PredConfigParser(str(self.path_pred_config))
+        with self.assertRaises(FileNotFoundError) as context:
+            parser._read_pred_config()
+        self.assertIn("Resolved dir_base path does not exist", str(context.exception))
+        self.assertIn(str(self.dir_std_base), str(context.exception))
+
+    def test_relative_dir_base_and_std_base_resolved_against_attr_config(self):
+        # dir_base/dir_std_base given as relative paths (as some configs do)
+        # should resolve relative to the attribute config file's own
+        # directory, not the process cwd.
+        attr_config = {
+            'file_io': [
+                {'home_dir': str(self.test_path)},
+                {'dir_base': 'base'},        # relative, not str(self.dir_base)
+                {'dir_std_base': 'base/std'},  # relative
+                {'dir_db_attrs': str(self.dir_db_attrs)},
+            ],
+            'formulation_metadata': [{'datasets': ['test_dataset']}],
+            'attr_select': [{'static_vars': ['slope', 'elevation']}],
+        }
+        with open(self.path_attr_config, 'w') as f:
+            yaml.dump(attr_config, f)
+
+        parser = raftsutil.PredConfigParser(str(self.path_pred_config))
+        parser._read_pred_config()
+        self.assertEqual(Path(parser.pred_cfg_dict['dir_base']), self.dir_base.resolve())
+        self.assertEqual(Path(parser.pred_cfg_dict['dir_std_base']), self.dir_std_base.resolve())
 
 def test_build_pred_locs_path():
     # Given
