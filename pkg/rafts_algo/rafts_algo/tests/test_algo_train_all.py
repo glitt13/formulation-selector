@@ -563,6 +563,32 @@ class TestReadPredComid(unittest.TestCase):
         with self.assertRaises(ValueError):
             raftsutil._read_pred_comid(path_pred_locs, comid_pred_col)
 
+    def test_read_pred_comid_raises_file_not_found_for_real_missing_path(self):
+        """The .exists() check itself (previously always mocked True above) --
+        a genuinely missing path should raise FileNotFoundError, not ValueError."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path_pred_locs = Path(tmpdir) / "does_not_exist.csv"
+            with self.assertRaises(FileNotFoundError):
+                raftsutil._read_pred_comid(path_pred_locs, 'comid')
+
+    def test_read_pred_comid_parquet_file(self):
+        """.parquet branch, previously untested in either direction."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path_pred_locs = Path(tmpdir) / "predictions.parquet"
+            pd.DataFrame({'comid': [1, 2, 2, 3]}).to_parquet(path_pred_locs)
+
+            result = raftsutil._read_pred_comid(path_pred_locs, 'comid')
+            self.assertEqual(result, ['1', '2', '3'])  # drop_duplicates preserves order
+
+    def test_read_pred_comid_directory_of_parquet(self):
+        """Directory-of-parquet branch, previously untested in either direction."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dir_pred_locs = Path(tmpdir)
+            pd.DataFrame({'comid': [10, 20]}).to_parquet(dir_pred_locs / "part.parquet")
+
+            result = raftsutil._read_pred_comid(dir_pred_locs, 'comid')
+            self.assertEqual(sorted(result), ['10', '20'])
+
 
 # %% UNIT TEST FOR AlgoTrainEval class
 class TestAlgoTrainEval(unittest.TestCase):
@@ -1285,22 +1311,35 @@ class TestWarningAndClippingFunctions(unittest.TestCase):
             self.assertIn("['ID_02', 'ID_03', 'ID_04']", cm.output[0])
         print("✅ test_warn_intervals_correction_inactive passed.")
 
-    @patch('logging.getLogger')
-    def test_no_warning_when_in_bounds(self, mock_get_logger):
-        """Test that no warning is logged when all values are within bounds."""
-        # Configure the patch to return a mock logger we can inspect
-        mock_logger = MagicMock()
-        mock_get_logger.return_value = mock_logger
+    def test_no_warning_when_in_bounds(self):
+        """Test that no warning is logged when all values are within bounds.
 
-        # Run the function that would normally create and use a logger
-        raftsutil._warn_if_out_of_bounds(
-            np.array([0.1, 0.5, 0.9]), self.feature_ids, 0.0, 1.0, self.resp_var,
-            correction_is_active=True, prediction_type="values"
-        )
-
-        # Assert that the .warning() method on our mock logger was never called
-        mock_logger.warning.assert_not_called()
+        NOTE: this previously patched logging.getLogger and asserted the mock
+        logger's .warning() was never called -- but _warn_if_out_of_bounds calls
+        the module-level logging.warning(...), which uses the `logging` module's
+        own root Logger instance directly rather than going through
+        logging.getLogger(). Patching logging.getLogger never intercepted that
+        call, so the assertion was checking a mock that was never wired into the
+        code path at all: it would have passed even if the function warned on
+        every input. assertNoLogs actually listens on the real logger.
+        """
+        with self.assertNoLogs(level='WARNING'):
+            raftsutil._warn_if_out_of_bounds(
+                np.array([0.1, 0.5, 0.9]), self.feature_ids, 0.0, 1.0, self.resp_var,
+                correction_is_active=True, prediction_type="values"
+            )
         print("✅ test_no_warning_when_in_bounds passed.")
+
+    def test_warn_accepts_string_none_bounds(self):
+        """min_lim/max_lim of the literal string 'none' (as YAML configs may pass
+        through unparsed) should be treated the same as Python None, i.e. skip
+        the bounds check entirely rather than comparing against the string."""
+        with self.assertNoLogs(level='WARNING'):
+            raftsutil._warn_if_out_of_bounds(
+                self.y_pred, self.feature_ids, 'None', 'none', self.resp_var,
+                correction_is_active=True, prediction_type="values"
+            )
+        print("✅ test_warn_accepts_string_none_bounds passed.")
 
     # --- Tests for clip_predictions (1D) ---
 
@@ -1342,6 +1381,12 @@ class TestWarningAndClippingFunctions(unittest.TestCase):
         result = raftsutil.clip_pis(self.y_pis, 0.0, None)
         np.testing.assert_array_equal(result, expected)
         print("✅ test_clip_pis_min_only passed.")
+
+    def test_clip_pis_no_bounds(self):
+        """Test that 3D PIs are returned unchanged if no bounds are provided."""
+        result = raftsutil.clip_pis(self.y_pis, None, None)
+        np.testing.assert_array_equal(result, self.y_pis)
+        print("✅ test_clip_pis_no_bounds passed.")
 
 class TestCombineRespGdfComidWrap(unittest.TestCase):
     def test_combine_resp_gdf_comid_wrap(self):
@@ -1521,6 +1566,90 @@ class TestValidationUtilities(unittest.TestCase):
                     valid_metrics=["NSE"], 
                     arg_val=True
                 )
+
+class TestValidationHappyPaths(unittest.TestCase):
+    """
+    Several validate_* wrappers in utils.py had their arg_val=True *success*
+    branch (the pandera .validate() call and its "✅ ... validated successfully"
+    log line) entirely uncovered -- existing tests only exercised arg_val=False
+    (a no-op skip) or arg_val=True with intentionally-bad data (the sys.exit
+    path). A couple of those existing "good" fixtures (TestValidationUtilities's
+    good_df / good_gdf) also don't actually conform to the schemas they're
+    named after -- they only ever got run through arg_val=False, so the gap
+    was never noticed. This class builds fixtures that genuinely satisfy each
+    schema and drives arg_val=True end-to-end without hitting sys.exit.
+    """
+
+    def test_validate_input_attributes_happy_path(self):
+        good_long_df = pd.DataFrame({
+            'featureID': ['gage_1', 'gage_2'],
+            'featureSource': ['hf_id', 'hf_id'],
+            'data_source': ['usgs', 'usgs'],
+            'attribute': ['slope', 'slope'],
+            'value': [0.1, 0.2],
+        })
+        raftsutil.validate_input_attributes(good_long_df, arg_val=True)  # No SystemExit
+
+    def test_validate_gdf_comid_schema_happy_path(self):
+        good_gdf = gpd.GeoDataFrame({
+            'comid': ['123'],
+            'gage_id': ['USGS-01'],
+            'featureID': ['USGS-01'],
+            'featureSource': ['nwissite'],
+            'X': [-100.0],
+            'Y': [40.0],
+            'tot_na': [0],
+            'geometry': [Point(-100.0, 40.0)],
+        })
+        raftsutil.validate_gdf_comid_schema(good_gdf, arg_val=True)  # No SystemExit
+
+    def test_validate_dat_resp_schema_happy_path(self):
+        dat_resp = xr.Dataset(
+            data_vars={
+                'featureID': ('gage_id', ['f1', 'f2']),
+                'featureSource': ('gage_id', ['nwissite', 'nwissite']),
+                'NSE': ('gage_id', [0.5, 0.7]),
+            },
+            coords={'gage_id': ['g1', 'g2']},
+            attrs={'respvar_mappings': 'NSE'},
+        )
+        raftsutil.validate_dat_resp_schema(
+            dat_resp, valid_metrics=['NSE'], col_locid='featureID', arg_val=True
+        )  # No SystemExit
+
+    def test_validate_dat_resp_schema_exits_on_missing_column(self):
+        # Missing 'featureSource' entirely -> KeyError inside the try block,
+        # caught by the wrapper's broad `except Exception`.
+        dat_resp = xr.Dataset(
+            data_vars={'featureID': ('gage_id', ['f1', 'f2'])},
+            coords={'gage_id': ['g1', 'g2']},
+            attrs={'respvar_mappings': ''},
+        )
+        with self.assertRaises(SystemExit):
+            raftsutil.validate_dat_resp_schema(
+                dat_resp, valid_metrics=[], col_locid='featureID', arg_val=True
+            )
+
+    def test_read_validated_attribute_selection_happy_path(self):
+        # attr_cfig only needs to duck-type .attrs_cfg_dict for the
+        # name_attr_csv=None branch of _id_attrs_sel_wrap.
+        attr_cfig = SimpleNamespace(attrs_cfg_dict={'attrs_sel': ['slope', 'elevation']})
+        result = raftsutil.read_validated_attribute_selection(
+            attr_cfig=attr_cfig, path_cfig='unused.yaml',
+            name_attr_csv=None, colname_attr_csv=None, arg_val=True
+        )
+        self.assertEqual(sorted(result), ['elevation', 'slope'])
+
+    def test_read_validated_attribute_selection_exits_on_empty_selection(self):
+        # An empty attrs_sel produces pd.DataFrame([]), which has no column
+        # named 0 -- schema_attrs_sel requires it, so validation fails.
+        attr_cfig = SimpleNamespace(attrs_cfg_dict={'attrs_sel': []})
+        with self.assertRaises(SystemExit):
+            raftsutil.read_validated_attribute_selection(
+                attr_cfig=attr_cfig, path_cfig='unused.yaml',
+                name_attr_csv=None, colname_attr_csv=None, arg_val=True
+            )
+
 
 class TestTrainTestSplitWrap(unittest.TestCase):
     def test_split_train_test_comid_wrap(self):

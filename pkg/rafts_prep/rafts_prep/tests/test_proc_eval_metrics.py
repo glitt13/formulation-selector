@@ -24,7 +24,8 @@ import xarray as xr
 from rafts_prep.proc_eval_metrics import read_schm_ls_of_dict, proc_col_schema,\
       _proc_flatten_ls_of_dict_keys, \
       _proc_check_input_df, _proc_check_std_rafts_ids, check_fix_nwissite_gageids, \
-      _read_std_config, _conv_ls_dicts_df_long
+      _read_std_config, _conv_ls_dicts_df_long, std_dir_logs, std_path_log, \
+      create_custom_nexus_id, std_form_id, path_std_dataset
 import numpy as np
 from unittest.mock import patch, mock_open
 import tempfile
@@ -279,6 +280,15 @@ class TestProcCheckInputDf(unittest.TestCase):
             
         self.assertTrue(any("Expect only one gage_id for each row" in log for log in cm.output))
 
+    def test_val_metrics_false_skips_metric_validation(self):
+        """val_metrics=False previously had no coverage -- it should log a
+        skip warning and still rename metric columns rather than validating
+        them against the standardized rafts_categories.yaml names."""
+        with self.assertLogs(level='WARNING') as cm:
+            result = _proc_check_input_df(self.raw_test_df, self.exp_config_df, val_metrics=False)
+        self.assertTrue(any("Skipping validation of metric mappings" in log for log in cm.output))
+        self.assertIsInstance(result, pd.DataFrame)
+
     def test_expect_warn_missing_col(self):
         bad_test_df = self.raw_test_df.drop('nse', axis=1)
         
@@ -391,6 +401,127 @@ class TestCheckFixNwissiteGageIds(unittest.TestCase):
         df = pd.DataFrame({'basin_id': []}, dtype=str)
         result_df = check_fix_nwissite_gageids(df, gage_id_col='basin_id')
         self.assertTrue(result_df.empty)
+
+    # NOTE: check_fix_nwissite_gageids has an `elif len(ls_still_bad) > 0:` branch
+    # (proc_eval_metrics.py, right after the `if len(ls_bad_ids) > 0:` block) that
+    # is not covered by any test here, and can't be reached by one: ls_still_bad
+    # is only ever populated from ls_prezero, which is itself only ever built from
+    # ls_bad_ids (`ls_prezero = ['0'+str(x) for x in ls_bad_ids]`). So
+    # ls_still_bad can be non-empty only when ls_bad_ids is also non-empty --
+    # which means the `if len(ls_bad_ids) > 0:` branch above it is always taken
+    # instead. The `elif` is unreachable dead code, not a coverage gap to close.
+
+
+class TestStdDirAndPathLog(unittest.TestCase):
+    """
+    std_dir_logs and std_path_log (used throughout the flow scripts, and by the
+    hfATLAS integration test to locate each script's log file) had zero unit
+    test coverage prior to this class.
+    """
+
+    def test_std_dir_logs_creates_logs_subdir_next_to_parent(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dir_input = Path(tmpdir) / "run_data" / "input"
+            log_dir = std_dir_logs(dir_input)
+
+            self.assertEqual(log_dir, Path(tmpdir) / "run_data" / "logs")
+            self.assertTrue(log_dir.is_dir(), "std_dir_logs should create the directory, not just name it")
+
+    def test_std_dir_logs_expands_home_dir_placeholder(self):
+        with self.assertWarns(UserWarning):
+            log_dir = std_dir_logs("{home_dir}/some/run_data/input")
+
+        self.assertEqual(log_dir, Path.home() / "some" / "run_data" / "logs")
+        log_dir.rmdir()  # avoid leaving a directory under the real home dir
+
+    def test_std_path_log_nests_under_config_parent_stem(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dir_input = Path(tmpdir) / "run_data" / "input"
+            path_config = Path(tmpdir) / "config" / "hfatl" / "hfatl_algo_config.yaml"
+
+            path_log = std_path_log(dir_input, path_config, script='rafts_proc_algo_pool')
+
+            expected = Path(tmpdir) / "run_data" / "logs" / "hfatl" / "hfatl_algo_config_rafts_proc_algo_pool.log"
+            self.assertEqual(path_log, expected)
+            self.assertTrue(path_log.parent.is_dir())
+
+    def test_std_path_log_omits_underscore_when_script_blank(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dir_input = Path(tmpdir) / "run_data" / "input"
+            path_config = Path(tmpdir) / "config" / "my_ds" / "my_config.yaml"
+
+            path_log = std_path_log(dir_input, path_config)  # script='' (default)
+
+            self.assertEqual(path_log.name, "my_config.log")
+
+    def test_std_path_log_expands_home_dir_placeholder(self):
+        # std_path_log has its own `if 'home_dir' in str(dir_input)` branch
+        # (separate from std_dir_logs's) that resolves the placeholder before
+        # delegating to std_dir_logs.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path_config = Path(tmpdir) / "config" / "my_ds" / "my_config.yaml"
+            path_log = std_path_log("{home_dir}/some/run_data/input", path_config)
+
+            expected = Path.home() / "some" / "run_data" / "logs" / "my_ds" / "my_config.log"
+            self.assertEqual(path_log, expected)
+            path_log.parent.rmdir()  # avoid leaving directories under the real home dir
+            path_log.parent.parent.rmdir()
+
+
+class TestStdFormIdAndPathStdDataset(unittest.TestCase):
+    """std_form_id and path_std_dataset had no unit test coverage prior to this class."""
+
+    def test_std_form_id_returns_existing_id_when_provided(self):
+        col_schema_df = pd.DataFrame({'formulation_id': ['my_formulation'], 'formulation_base': ['base']})
+        self.assertEqual(std_form_id(col_schema_df), 'my_formulation')
+
+    def test_std_form_id_generates_id_when_missing(self):
+        # formulation_id=None triggers auto-generation from formulation_base,
+        # formulation_ver, and dataset_name -- previously untested.
+        col_schema_df = pd.DataFrame({
+            'formulation_id': [None],
+            'formulation_base': ['baseName'],
+            'formulation_ver': ['v1'],
+            'dataset_name': ['my_dataset'],
+        })
+        result = std_form_id(col_schema_df)
+        # '_'.join(filter(None, [formulation_base, '_v', formulation_ver, '_', dataset_name]))
+        self.assertEqual(result, 'baseName__v_v1___my_dataset')
+
+    def test_path_std_dataset_default_nc_format(self):
+        path = path_std_dataset('/base', 'my_dataset', 'form1')
+        self.assertTrue(str(path).endswith('my_dataset_form1.nc'))
+
+    def test_path_std_dataset_zarr_format(self):
+        # fmt='zarr' branch was previously untested.
+        path = path_std_dataset('/base', 'my_dataset', 'form1', fmt='zarr')
+        self.assertTrue(str(path).endswith('my_dataset_form1_zarr.zarr'))
+
+
+class TestCreateCustomNexusId(unittest.TestCase):
+    """create_custom_nexus_id had zero unit test coverage prior to this class."""
+
+    def test_both_scalars(self):
+        self.assertEqual(create_custom_nexus_id("g1", "n1"), "g1__n1")
+
+    def test_gage_array_nexus_scalar(self):
+        result = create_custom_nexus_id(pd.Series(["g1", "g2"]), "n1")
+        pd.testing.assert_series_equal(result, pd.Series(["g1__n1", "g2__n1"]))
+
+    def test_gage_scalar_nexus_array(self):
+        result = create_custom_nexus_id("g1", pd.Series(["n1", "n2"]))
+        pd.testing.assert_series_equal(result, pd.Series(["g1__n1", "g1__n2"]))
+
+    def test_both_arrays(self):
+        result = create_custom_nexus_id(pd.Series(["g1", "g2"]), pd.Series(["n1", "n2"]))
+        pd.testing.assert_series_equal(result, pd.Series(["g1__n1", "g2__n2"]))
+
+    def test_both_arrays_as_plain_lists(self):
+        # hasattr(..., "__iter__") makes plain lists take the array branch too,
+        # not just pd.Series/np.ndarray.
+        result = create_custom_nexus_id(["g1", "g2"], ["n1", "n2"])
+        pd.testing.assert_series_equal(result, pd.Series(["g1__n1", "g2__n2"]))
+
 
 if __name__ == '__main__':
     unittest.main()
