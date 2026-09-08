@@ -16,6 +16,40 @@ example
 if __name__ == '__main__':
     unittest.main(argv=['first-arg-is-ignored'], exit=False)
 
+Note on mocking (project convention is to avoid it -- see README.claude/CLAUDE.md
+"Unit tests should avoid mocking"):
+This file uses @patch/MagicMock in a couple dozen places, which is at odds with
+that guidance on its face. In practice they fall into two different buckets, and
+only one of them is a real problem:
+  - Legitimate: isolating a genuinely external or destructive side effect that
+    would otherwise slow down or pollute the test -- e.g. @patch('joblib.dump')
+    to avoid an actual disk write, @patch('pathlib.Path.mkdir')/.exists() to
+    check a helper's directory-creation logic without touching the filesystem,
+    or @patch('pynhd.NLDI.navigate_byid') to avoid a real network call. These
+    don't replace the logic under test; they replace an I/O boundary around it.
+  - Logic-hiding: patching away the actual computation a test claims to verify,
+    leaving only a call-count assertion. TestAlgoTrainEval.test_train_eval
+    (search for "@patch.object(raftsalgo.AlgoTrainEval, 'train_algos')") is the
+    clearest example: split_data, select_algs_grid_search, train_algos,
+    calculate_bagging_ci, and calculate_mapie are all patched out, so the test
+    only confirms train_eval() calls those methods in the right order/count --
+    it exercises no actual splitting, training, or uncertainty math. That's
+    fine as a supplementary orchestration check (which is what it is here,
+    alongside TestAlgoTrainEvalBasic's unmocked test_train_eval a few classes
+    below), but would be a gap if it were the only coverage of train_eval().
+A past instance of the same failure mode: TestAlgoTrainEvalBasic.test_train_eval
+used to patch sklearn.ensemble.RandomForestRegressor and
+sklearn.neural_network.MLPRegressor directly, which never took effect because
+rafts_algo_train.py imports those names into its own module namespace
+(`from sklearn.ensemble import RandomForestRegressor`) rather than looking them
+up via sklearn.ensemble.* at call time -- patching the origin module doesn't
+touch a name already copied elsewhere. The mocks were silently never invoked;
+the assertions that would have caught it were commented out instead of fixed.
+That test now runs the real RandomForestRegressor/MLPRegressor fit, which is
+both accurate to what actually executes and preferable per the no-mocking
+guidance anyway. When adding a new @patch here, prefer letting real logic run
+wherever it's fast and side-effect-free, and reserve mocking for genuine I/O
+or network boundaries.
 '''
 import os
 import matplotlib
@@ -930,8 +964,15 @@ class TestAlgoTrainEvalBasic(unittest.TestCase):
             'mlp': [{'hidden_layer_sizes': (50,)}]
         }
 
-        with tempfile.TemporaryDirectory() as tmpdir:
-            temp_dir = Path(tmpdir)
+        # mkdtemp (not TemporaryDirectory's `with`) so the directory survives past
+        # setUp() for the duration of each test method; a `with` block here exits
+        # (and deletes the directory) before self.dir_out_alg_ds is ever used,
+        # which previously left every test in this class pointed at a directory
+        # that no longer existed on disk -- tests only passed because
+        # utils.std_algo_path() happens to recreate it via mkdir(parents=True)
+        # as an incidental side effect before writing.
+        temp_dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, temp_dir, ignore_errors=True)
 
         self.dir_out_alg_ds = temp_dir
         self.dataset_id = 'test_ds'
@@ -962,24 +1003,21 @@ class TestAlgoTrainEvalBasic(unittest.TestCase):
                                   confidence_levels = self.confidence_levels,
                                   )
 
-    @patch('joblib.dump')  # Mock saving the model to disk
-    @patch('sklearn.model_selection.train_test_split', return_value=(pd.DataFrame(), pd.DataFrame(), pd.Series(), pd.Series()))
-    @patch('sklearn.ensemble.RandomForestRegressor')
-    @patch('sklearn.neural_network.MLPRegressor')
-    def test_train_eval(self, MockMLP, MockRF, mock_train_test_split, mock_joblib_dump):
-        # Mocking train algorithms
-        mock_rf_model = MagicMock()
-        mock_mlp_model = MagicMock()
-
-        # Assign these mock models to the mock class
-        MockRF.return_value = mock_rf_model
-        MockMLP.return_value = mock_mlp_model
-
-        # Mock the predictions
-        mock_rf_model.predict.return_value = [10, 20, 30]
-        mock_mlp_model.predict.return_value = [15, 25, 35]
-
-        # Run the method
+    @patch('joblib.dump')  # Avoid writing the trained model to disk; joblib is
+                           # imported as a module in rafts_algo_train.py (`import
+                           # joblib`), so patching it here does take effect --
+                           # unlike the sklearn mocks previously attempted below.
+    def test_train_eval(self, mock_joblib_dump):
+        # NOTE: sklearn.ensemble.RandomForestRegressor / sklearn.neural_network.MLPRegressor
+        # / sklearn.model_selection.train_test_split were previously (and ineffectively)
+        # patched here. rafts_algo_train.py imports each of those names directly
+        # (`from sklearn.ensemble import RandomForestRegressor`, etc.), so patching the
+        # origin module never touches the name rafts_algo_train.py actually calls --
+        # the mocks were never invoked, which is why the assertions checking their call
+        # counts were commented out rather than passing. This test now runs the real
+        # RandomForestRegressor/MLPRegressor training on the tiny dummy dataset, which
+        # is both accurate to what actually executes and consistent with this file's
+        # general preference for exercising real logic over mocking it away.
         self.algo.train_eval()
 
         # Check predictions and evaluations were made
@@ -1027,11 +1065,19 @@ class TestAlgoTrainEvalBasic(unittest.TestCase):
 # %%
 
 class TestReadMetadata(unittest.TestCase):
-    @patch('pandas.read_parquet')
-    def test_read_metadata_file_not_found(self, mock_read_parquet):
-        """Test that FileNotFoundError is raised when metadata file is missing."""
+    def test_read_metadata_returns_none_when_file_missing(self):
+        """_read_metadata logs a warning and returns None (rather than raising)
+        when the resolved metadata path doesn't exist.
+
+        Update 2026-04-24: changed to return None to accommodate param
+        regionalization ignoring attr_config.yaml -- this test previously
+        asserted the same result but was still named/documented for the old
+        FileNotFoundError-raising behavior, and carried an unused
+        @patch('pandas.read_parquet') left over from before that change
+        (the missing-file branch returns before pd.read_parquet is ever
+        called, so the patch had nothing to intercept).
+        """
         path_attr_config = Path(dir_test_data, "attr_config.yaml")
-        # Update 2026-04-24: changed to return None to accommodate param regionalization ignoring attr_config.yaml
         result = raftsutil._read_metadata(path_attr_config, ds='dataset_name')
         self.assertIsNone(result)
 

@@ -249,26 +249,6 @@ def test_read_tfrm_bad():
     with unittest.TestCase().assertRaises(ValueError):
         parser_bad._read_tfrm_config()
 
-def run_tests():
-    try:
-        run_tests_std_attrs()
-    except:
-        print("Some problems in std_attrs testing")
-    try:
-        test_gentformdf()
-    except:
-        print("Some problems in gen_tform_df testing")
-    """Run _id_need_tfrm_attrs test cases."""
-    test_valid_case_with_custom_vars_and_funcs()
-    test_case_with_custom_vars_only()
-    test_case_with_custom_funcs_only()
-    test_no_custom_vars_or_funcs()
-    test_multiple_featureIDs()
-    test_read_tfrm_config_parses_yaml_correctly()
-    test_read_tfrm_bad()
-    print("All test_tfrm_attr.py tests passed if it made it this far")
-
 if __name__ == "__main__":
     unittest.main(argv=[''],exit=False)
-    run_tests()
 
