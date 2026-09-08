@@ -243,6 +243,72 @@ class TestProcColSchemaHier(unittest.TestCase):
     def test_hier_nc_exists(self):
         self.assertTrue(list(Path(dir_save, 'user_data_std/juliemai-xSSA/').glob('*.nc'))[0].is_file())
 
+
+class TestProcColSchemaAdditionalBranches(unittest.TestCase):
+    """
+    Covers proc_col_schema branches left untested by TestProcColSchema (csv,
+    save_loc='local') and TestProcColSchemaHier (netcdf, save_loc='local'):
+    a missing 'val_respvar' column, save_loc='aws', and save_type='parquet'.
+    Each test uses its own temp dir_save (rather than the shared module-level
+    dir_save/dataset_name) so it can't collide with the setUpClass runs above.
+    """
+
+    def test_missing_val_respvar_column_defaults_to_false(self):
+        global raw_test_df, exp_config_df
+        cfg = exp_config_df.copy().drop(columns=['val_respvar'])
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ds = proc_col_schema(raw_test_df.copy(), cfg, tmpdir)
+            self.assertIsInstance(ds, xr.Dataset)
+
+    def test_save_loc_aws_logs_todo_message(self):
+        # save_loc='aws' skips *all* local directory creation entirely --
+        # _save_dir_struct (the only thing that calls .mkdir()) is only
+        # invoked under save_loc == 'local'. So even the netcdf branch, which
+        # doesn't otherwise depend on _save_dir_struct's return value, still
+        # needs its target directory to already exist. This confirms the
+        # 'aws' branch is genuinely just today's placeholder (its own log
+        # message says "TODO ensure connect credentials here") rather than a
+        # working alternate path -- pre-create the directory to isolate
+        # testing that placeholder log message from that separate gap.
+        global raw_test_df, exp_config_df
+        cfg = exp_config_df.copy()
+        cfg['save_type'] = 'netcdf'
+        cfg['val_respvar'] = 'True'
+        cfg['save_loc'] = 'aws'
+        with tempfile.TemporaryDirectory() as tmpdir:
+            Path(tmpdir, 'user_data_std', 'juliemai-xSSA').mkdir(parents=True)
+            with self.assertLogs(level='INFO') as cm:
+                proc_col_schema(raw_test_df.copy(), cfg, tmpdir)
+            self.assertTrue(any("TODO ensure connect credentials" in log for log in cm.output))
+
+    def test_save_type_parquet_writes_parquet_files(self):
+        global raw_test_df, exp_config_df
+        cfg = exp_config_df.copy()
+        cfg['save_type'] = 'parquet'
+        with tempfile.TemporaryDirectory() as tmpdir:
+            proc_col_schema(raw_test_df.copy(), cfg, tmpdir)
+            eval_metr_parquet = list(Path(tmpdir, 'user_data_std/juliemai-xSSA').rglob('*.parquet'))
+            self.assertTrue(
+                any('_metadata' not in p.name for p in eval_metr_parquet),
+                "Expected the eval metrics .parquet file to be written"
+            )
+            self.assertTrue(
+                any('_metadata' in p.name for p in eval_metr_parquet),
+                "Expected the metadata .parquet file to be written"
+            )
+
+    # NOTE: proc_col_schema also has an `if len(_other_save_dirs) == 0: raise
+    # ValueError(...)` branch (right after the save_type in ('csv', 'parquet')
+    # check). It looks reachable but isn't: _other_save_dirs is only ever
+    # assigned when save_loc == 'local' (via _save_dir_struct), and
+    # _save_dir_struct populates it as non-empty under exactly the same
+    # save_type in ('csv', 'parquet') condition that gates this check. The only
+    # way to reach the check with save_type in ('csv', 'parquet') and
+    # _other_save_dirs unpopulated is save_loc == 'aws', which raises an
+    # UnboundLocalError before ever reaching this line (not the intended
+    # ValueError) since _other_save_dirs was never assigned at all in that
+    # branch. Not a coverage gap to close with a test.
+
 class TestProcCheckInputDf(unittest.TestCase):
     def setUp(self):
         logging.info("----- Setting up TestProcCheckInputDf")
