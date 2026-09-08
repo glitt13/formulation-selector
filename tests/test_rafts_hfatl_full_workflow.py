@@ -1,10 +1,12 @@
 import shutil
+import sqlite3
 import subprocess
 import pytest
 import pandas as pd
 import geopandas as gpd
 import pyogrio
 import xarray as xr
+import yaml
 from pathlib import Path
 
 # Set paths relative to the repository root (assuming pytest is run from the root)
@@ -45,6 +47,26 @@ DIR_PREDS = DIR_RUN / "output" / "algorithm_predictions" / DATASET
 DIR_REGN = DIR_RUN / "output" / "regionalization" / DATASET
 DIR_VIZ = DIR_RUN / "output" / "data_visualizations" / DATASET
 PATH_REGN_GPKG = DIR_RUN / "output" / "regionalization" / "hfatl" / "rapid_test_9_locs_v4_regn.gpkg"
+
+# Read the training attribute names from the same config the pipeline itself
+# reads, rather than hardcoding a second, driftable copy of the list.
+with open(ATTR_CONFIG) as _f:
+    _attr_cfg = yaml.safe_load(_f)
+TRAIN_ATTRS = next(
+    x['hfatl_vars'] for x in _attr_cfg['attr_select'] if 'hfatl_vars' in x
+)
+assert len(TRAIN_ATTRS) == N_TRAIN_ATTRS
+
+# The training-side featureSource, per hfatl_prep_config.yaml's col_schema.
+# rafts_pred_algo.py inherits this same value for prediction output too (it
+# reads featureSource from the prep config linked via name_prep_config, not
+# from anything prediction-specific) -- so prediction rows here also carry
+# 'hfv4_divides_basin', even though the actual prediction data underneath
+# (jul26_cal_hf4_predictors_9locations_final.parquet) is raw, unaggregated
+# divide-level hfATLAS data, not basin-aggregated. Asserted below as
+# documented *current* behavior, not a claim that it's the semantically
+# correct tag -- flagging this mismatch is the point of the assertion.
+EXPECTED_FEATURESOURCE = "hfv4_divides_basin"
 
 
 @pytest.fixture(scope="class", autouse=True)
@@ -137,7 +159,14 @@ class TestRegionalizationPipeline:
         assert df["attribute"].nunique() == N_TRAIN_ATTRS, (
             f"Expected {N_TRAIN_ATTRS} aggregated attributes, got {df['attribute'].nunique()}"
         )
-        assert not df["value"].isna().all(), "All aggregated attribute values are NaN"
+        # `.isna().all()` (any single non-NaN value anywhere passes) would let a
+        # mostly-broken aggregation slip through; this fixture is clean, so
+        # expect no NaNs at all.
+        n_na = df["value"].isna().sum()
+        assert n_na == 0, f"Expected no NaN aggregated attribute values, got {n_na}"
+        assert set(df["featureSource"].unique()) == {EXPECTED_FEATURESOURCE}, (
+            f"Expected featureSource == {EXPECTED_FEATURESOURCE!r}, got {df['featureSource'].unique()}"
+        )
 
         gpkg_files = list(DIR_STD_BASE.glob("*_loc.gpkg"))
         assert gpkg_files, f"No companion _loc.gpkg written to {DIR_STD_BASE}"
@@ -164,6 +193,24 @@ class TestRegionalizationPipeline:
         assert df_eval.shape[0] == len(ALGOS), (
             f"Expected {len(ALGOS)} rows in algo eval summary, got {df_eval.shape[0]}"
         )
+        # build_schema_rslt_eval_df's clustering-specific columns.
+        expected_cols = {"algorithm", "type", "metric", "dataset", "file_pipe", "algo",
+                          "silhouette_score", "davies_bouldin_score"}
+        assert expected_cols.issubset(df_eval.columns), (
+            f"Missing expected eval columns: {expected_cols - set(df_eval.columns)}"
+        )
+        assert set(df_eval["algorithm"]) == set(ALGOS.keys()), (
+            f"Expected eval rows for exactly {set(ALGOS.keys())}, got {set(df_eval['algorithm'])}"
+        )
+        # Both scores are mathematically undefined outside these ranges -- a
+        # garbage value (e.g. from a broken labeling) would otherwise pass as
+        # "just some float."
+        assert df_eval["silhouette_score"].between(-1, 1).all(), (
+            f"silhouette_score out of the valid [-1, 1] range: {df_eval['silhouette_score'].tolist()}"
+        )
+        assert (df_eval["davies_bouldin_score"] >= 0).all(), (
+            f"davies_bouldin_score must be non-negative: {df_eval['davies_bouldin_score'].tolist()}"
+        )
 
     def test_step_4_perform_prediction(self):
         """4. Perform cluster predictions directly on the 280 rapid-test divides."""
@@ -183,27 +230,87 @@ class TestRegionalizationPipeline:
             assert df["prediction"].nunique() <= k, (
                 f"{algo}: expected at most {k} distinct cluster labels, got {df['prediction'].nunique()}"
             )
+            # build_schema_df_pred's remaining required columns/values.
+            assert set(df["featureSource"].unique()) == {EXPECTED_FEATURESOURCE}, (
+                f"{algo}: expected featureSource == {EXPECTED_FEATURESOURCE!r}, got {df['featureSource'].unique()}. "
+                f"(Inherited from hfatl_prep_config.yaml's col_schema via name_prep_config -- rafts_pred_algo.py "
+                f"does not currently distinguish training-time vs. prediction-time featureSource.)"
+            )
+            assert set(df["resp_var"].unique()) == {"cluster_labels"}, f"{algo}: unexpected resp_var value(s)"
+            assert set(df["dataset"].unique()) == {DATASET}, f"{algo}: unexpected dataset value(s)"
+            assert set(df["algo"].unique()) == {algo}, f"{algo}: 'algo' column doesn't match its own filename"
+            name_algo_vals = df["name_algo"].unique()
+            assert len(name_algo_vals) == 1 and name_algo_vals[0].endswith(".joblib") and algo in name_algo_vals[0], (
+                f"{algo}: unexpected 'name_algo' value(s): {name_algo_vals}"
+            )
 
     def test_step_5_pair_donor_receivers(self):
         """5. Pair the donor-receivers for the rapid-test prediction locations."""
         script = DIR_PY / "rafts_pair_donors.py"
         run_uv_command(script, str(PRED_CONFIG))
 
+        # The valid donor pool: featureIDs actually present in the trained-on,
+        # basin-aggregated attribute table (read fresh here rather than
+        # trusting a hardcoded ID format).
+        df_train_attrs = pd.read_parquet(DIR_ATTRS / "attr_all.parquet")
+        valid_donor_ids = set(df_train_attrs["featureID"].astype(str))
+
         for algo in ALGOS:
+            path_pred = DIR_PREDS / f"pred_{algo}_cluster_labels__{DATASET}.parquet"
             path_donors = DIR_REGN / f"donor_pairs_{algo}_cluster_labels__{DATASET}.csv"
             path_receivers = DIR_REGN / f"receiver_params_{algo}_cluster_labels__{DATASET}.csv"
             assert path_donors.exists(), f"Donor pairs not found: {path_donors}"
             assert path_receivers.exists(), f"Receiver params not found: {path_receivers}"
 
-            df_donors = pd.read_csv(path_donors)
+            # dtype=str for donor_id: it's the training gage ID, which for USGS
+            # sites is all-digit with a meaningful leading zero (e.g.
+            # '03050000') -- pd.read_csv would otherwise infer int64 and
+            # silently drop it, which very nearly produced a false failure
+            # here (the value on disk is correct; only an untyped read of it
+            # wasn't).
+            df_donors = pd.read_csv(path_donors, dtype={"donor_id": str})
             assert df_donors.shape[0] == N_PRED_DIVIDES, (
                 f"{algo}: expected {N_PRED_DIVIDES} donor pairs, got {df_donors.shape[0]}"
             )
             assert not df_donors["donor_id"].isna().any(), f"{algo}: unpaired (NaN donor_id) receivers found"
+            assert (df_donors["distance_to_donor"] >= 0).all(), f"{algo}: negative distance_to_donor found"
+            assert set(df_donors["donor_id"].astype(str)).issubset(valid_donor_ids), (
+                f"{algo}: donor_pairs references donor_id(s) outside the trained-on gage set: "
+                f"{set(df_donors['donor_id'].astype(str)) - valid_donor_ids}"
+            )
 
-            df_receivers = pd.read_csv(path_receivers)
+            df_receivers = pd.read_csv(path_receivers, dtype={"donor_id": str})
             assert df_receivers.shape[0] == N_PRED_DIVIDES, (
                 f"{algo}: expected {N_PRED_DIVIDES} receiver rows, got {df_receivers.shape[0]}"
+            )
+            # receiver_params carries the donor's actual attribute values, not
+            # just the pairing -- previously only shape[0] was checked here.
+            missing_attrs = [a for a in TRAIN_ATTRS if a not in df_receivers.columns]
+            assert not missing_attrs, f"{algo}: receiver_params missing attribute columns: {missing_attrs}"
+            all_na_attrs = [a for a in TRAIN_ATTRS if df_receivers[a].isna().all()]
+            assert not all_na_attrs, f"{algo}: receiver_params attribute columns entirely NaN: {all_na_attrs}"
+
+            # Cross-file consistency: the same 280 featureIDs should flow
+            # unchanged from step 4's predictions through donor_pairs and
+            # receiver_params -- each file has so far only been checked for
+            # row *count* in isolation, which wouldn't catch a set mismatch
+            # of the same size (e.g. duplicated IDs offsetting dropped ones).
+            pred_ids = set(pd.read_parquet(path_pred)["featureID"].astype(str))
+            donor_receiver_ids = set(df_donors["receiver_id"].astype(str))
+            receiver_ids = set(df_receivers["featureID"].astype(str))
+            assert pred_ids == donor_receiver_ids == receiver_ids, (
+                f"{algo}: featureID sets differ across pipeline steps -- "
+                f"pred-only: {pred_ids - donor_receiver_ids - receiver_ids}, "
+                f"donor_pairs-only: {donor_receiver_ids - pred_ids}, "
+                f"receiver_params-only: {receiver_ids - pred_ids}"
+            )
+            # Same donor_id for the same receiver in both files.
+            donor_map_a = df_donors.set_index("receiver_id")["donor_id"].astype(str)
+            donor_map_b = df_receivers.set_index("featureID")["donor_id"].astype(str)
+            mismatched = donor_map_a[donor_map_a != donor_map_b.reindex(donor_map_a.index)]
+            assert mismatched.empty, (
+                f"{algo}: donor_pairs and receiver_params disagree on donor_id for receivers: "
+                f"{mismatched.index.tolist()}"
             )
 
     def test_step_6_map_predictions(self):
@@ -233,9 +340,38 @@ class TestRegionalizationPipeline:
             f"silently writes nothing new."
         )
 
+        # hfatl_pred_config.yaml's algo_select is the single literal string
+        # 'gower_agglomerative_k4' (not a wildcard), so rafts_regn_params_gpkg.py
+        # is expected to filter out the other three trained algos entirely --
+        # confirm that filtering actually excludes them, rather than assuming
+        # it and only ever inspecting the one layer that does get written.
+        other_algos = [a for a in ALGOS if a != "gower_agglomerative_k4"]
+        unexpected_layers = [lyr for lyr in layers for a in other_algos if a in lyr]
+        assert not unexpected_layers, (
+            f"algo_select='gower_agglomerative_k4' should have excluded {other_algos}, "
+            f"but found layer(s) for them: {unexpected_layers}"
+        )
+
         gdf_params = gpd.read_file(PATH_REGN_GPKG, layer=param_layers[0])
         assert gdf_params.shape[0] == N_PRED_DIVIDES, (
             f"Expected {N_PRED_DIVIDES} rows in regionalized-parameters layer, got {gdf_params.shape[0]}"
         )
         assert "donor_id" in gdf_params.columns, "Regionalized-parameters layer missing 'donor_id' column"
         assert not gdf_params["donor_id"].isna().any(), "Regionalized-parameters layer has unpaired receivers"
+
+        # The layer should carry the donor's actual attribute values through
+        # to the final GPKG, not just the pairing -- previously unchecked here.
+        missing_attrs = [a for a in TRAIN_ATTRS if a not in gdf_params.columns]
+        assert not missing_attrs, f"Regionalized-parameters layer missing attribute columns: {missing_attrs}"
+
+        # update_database() registers each written table in gpkg_contents via
+        # register_gpkg_attributes_table() -- confirm that registration
+        # actually happened rather than only checking the layer is readable
+        # via geopandas (which doesn't depend on gpkg_contents at all).
+        with sqlite3.connect(PATH_REGN_GPKG) as conn:
+            registered = pd.read_sql(
+                "SELECT table_name FROM gpkg_contents WHERE table_name = ?", conn, params=(param_layers[0],)
+            )
+        assert not registered.empty, (
+            f"Layer {param_layers[0]!r} was written but never registered in gpkg_contents"
+        )
