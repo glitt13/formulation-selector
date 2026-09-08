@@ -1599,6 +1599,21 @@ class TestPredConfigParser(unittest.TestCase):
         self.assertEqual(parser.pred_cfg_dict['path_pred_config'], str(self.path_pred_config))
         self.assertEqual(parser.pred_cfg_dict['dir_base'], self.dir_base)
         self.assertEqual(parser.pred_cfg_dict['dir_std_base'], self.dir_std_base)
+        # Not set in self.pred_config -- should default to None, not KeyError,
+        # so rafts_pred_algo.py's `.get('featureSource')` fallback chain works.
+        self.assertIsNone(parser.pred_cfg_dict['featureSource'])
+
+    def test_read_pred_config_captures_featuresource(self):
+        # Prediction-time featureSource is independent of (and may legitimately
+        # differ from) the training-time value -- e.g. trained on gage-basin-
+        # aggregated attributes, predicting at HUC10/HUC14/divide scale.
+        self.pred_config['featureSource'] = 'hfv4_divides_raw'
+        with open(self.path_pred_config, 'w') as f:
+            yaml.dump(self.pred_config, f)
+
+        parser = raftsutil.PredConfigParser(str(self.path_pred_config))
+        parser._read_pred_config()
+        self.assertEqual(parser.pred_cfg_dict['featureSource'], 'hfv4_divides_raw')
 
     def test_pydantic_pred_config_success(self):
         cfg = PredConfig(**self.pred_config)

@@ -229,8 +229,15 @@ if __name__ == "__main__":
             if 'featureID' not in df_attr_wide.columns:
                 df_attr_wide.rename(columns={comid_pred_col:'featureID'},inplace=True)
             if 'featureSource' not in df_attr_wide.columns:
-                df_attr_wide['featureSource'] = fio.get('featureSource', 'hf_id')
-            
+                # Prefer the prediction config's own featureSource -- training
+                # and prediction may legitimately happen at different spatial
+                # scales (e.g. trained on gage-basin-aggregated attributes,
+                # predicting at HUC10/HUC14/divide scale), so the training-time
+                # value from the linked prep config (`fio`) is only a fallback
+                # for configs that haven't set a prediction-specific one.
+                pred_featureSource = pred_cfg.pred_cfg_dict.get('featureSource')
+                df_attr_wide['featureSource'] = pred_featureSource or fio.get('featureSource', 'hf_id')
+
             map_feat_srce_feat_id = df_attr_wide[['featureID','featureSource']].drop_duplicates()
             df_attr_wide.set_index('featureID',inplace = True)    
                 
