@@ -313,6 +313,131 @@ class TestFsReadAttrComid(unittest.TestCase):
         self.assertTrue(any("nonexistent" in m for m in cm.output))
         print("✅ rafts_read_attr_comid single-row test passed.")
 
+    def _mock_ddf(self, feature_ids=('1520007', '1520007'), attributes=('pet_mm_s01', 'cly_pc_sav'), values=(58, 21)):
+        mock_pdf = pd.DataFrame({
+            'data_source': ['hydroatlas__v1'] * len(feature_ids),
+            'dl_timestamp': ['2024-07-26 08:59:36'] * len(feature_ids),
+            'attribute': list(attributes),
+            'value': list(values),
+            'featureID': list(feature_ids),
+            'featureSource': ['COMID'] * len(feature_ids),
+        })
+        return dd.from_pandas(mock_pdf, npartitions=1)
+
+    @patch('rafts_algo.utils.dd.read_parquet')
+    def test_comids_resp_none_reads_all_locations(self, mock_dd_read_parquet):
+        mock_dd_read_parquet.return_value = self._mock_ddf()
+        result_df = raftsutil.rafts_read_attr_comid(
+            dir_db_attrs='mock_dir', comids_resp=None, attrs_sel=['pet_mm_s01', 'cly_pc_sav']
+        )
+        self.assertEqual(result_df.shape[0], 2)
+        mock_dd_read_parquet.assert_called_once()
+
+    @patch('rafts_algo.utils.dd.read_parquet')
+    def test_invalid_read_type_raises(self, mock_dd_read_parquet):
+        mock_dd_read_parquet.return_value = self._mock_ddf()
+        with self.assertRaises(ValueError):
+            raftsutil.rafts_read_attr_comid(
+                dir_db_attrs='mock_dir', comids_resp=['1520007'],
+                attrs_sel=['pet_mm_s01'], read_type='bogus'
+            )
+
+    @patch('rafts_algo.utils.dd.read_parquet')
+    def test_read_type_filename_with_matching_file(self, mock_dd_read_parquet):
+        # read_type='filename' scans the real directory for files whose name
+        # contains '_{comid}_' before ever calling dd.read_parquet -- needs a
+        # real file on disk even though its content is still mocked.
+        mock_dd_read_parquet.return_value = self._mock_ddf()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Non-empty content: rafts_read_attr_comid deletes 0-byte .parquet
+            # files before the filename-matching logic ever runs.
+            (Path(tmpdir) / "comid_1520007_attrs.parquet").write_bytes(b"placeholder")
+            result_df = raftsutil.rafts_read_attr_comid(
+                dir_db_attrs=tmpdir, comids_resp=['1520007'],
+                attrs_sel=['pet_mm_s01'], read_type='filename'
+            )
+        self.assertEqual(result_df.shape[0], 1)
+        # Called with the list of matching Path objects, not the directory itself.
+        called_arg = mock_dd_read_parquet.call_args.args[0]
+        self.assertIsInstance(called_arg, list)
+
+    @patch('rafts_algo.utils.dd.read_parquet')
+    def test_read_type_filename_no_match_falls_back_to_all(self, mock_dd_read_parquet):
+        mock_dd_read_parquet.return_value = self._mock_ddf()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            (Path(tmpdir) / "unrelated_file.parquet").touch()
+            with self.assertLogs(level="WARNING") as cm:
+                raftsutil.rafts_read_attr_comid(
+                    dir_db_attrs=tmpdir, comids_resp=['1520007'],
+                    attrs_sel=['pet_mm_s01'], read_type='filename'
+                )
+        self.assertTrue(any("Falling back to reading 'all' partitions" in m for m in cm.output))
+
+    @patch('rafts_algo.utils.dd.read_parquet')
+    def test_removes_empty_and_na_parquet_files(self, mock_dd_read_parquet):
+        mock_dd_read_parquet.return_value = self._mock_ddf()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path_empty = Path(tmpdir) / "comid_1520007_empty.parquet"
+            path_empty.touch()  # 0 bytes
+            path_na = Path(tmpdir) / "comid_1520007_NA_attrs.parquet"
+            path_na.write_bytes(b"not actually empty")
+
+            raftsutil.rafts_read_attr_comid(
+                dir_db_attrs=tmpdir, comids_resp=['1520007'], attrs_sel=['pet_mm_s01']
+            )
+            self.assertFalse(path_empty.exists(), "0-byte parquet file should have been removed")
+            self.assertFalse(path_na.exists(), "'_NA_' parquet file should have been removed")
+
+    @patch('rafts_algo.utils.dd.read_parquet')
+    def test_reindex_true(self, mock_dd_read_parquet):
+        mock_dd_read_parquet.return_value = self._mock_ddf()
+        result_df = raftsutil.rafts_read_attr_comid(
+            dir_db_attrs='mock_dir', comids_resp=['1520007'],
+            attrs_sel=['pet_mm_s01'], reindex=True
+        )
+        self.assertIsInstance(result_df, pd.DataFrame)
+
+    @patch('rafts_algo.utils.dd.read_parquet')
+    def test_s3_truthy_sets_storage_options(self, mock_dd_read_parquet):
+        # _s3 is a future-feature placeholder; passing a truthy value exercises
+        # the storage_options assignment branch (not yet otherwise wired up).
+        mock_dd_read_parquet.return_value = self._mock_ddf()
+        result_df = raftsutil.rafts_read_attr_comid(
+            dir_db_attrs='mock_dir', comids_resp=['1520007'],
+            attrs_sel=['pet_mm_s01'], _s3=True,
+        )
+        self.assertIsInstance(result_df, pd.DataFrame)
+
+    @patch('rafts_algo.utils.dd.read_parquet')
+    def test_comids_resp_none_drops_incomplete_locations(self, mock_dd_read_parquet):
+        # Two locations: '1520007' has both requested attributes, '9999999'
+        # only has one -- the intersection logic should drop the latter and
+        # log how many locations were dropped.
+        mock_dd_read_parquet.return_value = self._mock_ddf(
+            feature_ids=('1520007', '1520007', '9999999'),
+            attributes=('pet_mm_s01', 'cly_pc_sav', 'pet_mm_s01'),
+            values=(58, 21, 40),
+        )
+        with self.assertLogs(level="INFO") as cm:
+            result_df = raftsutil.rafts_read_attr_comid(
+                dir_db_attrs='mock_dir', comids_resp=None,
+                attrs_sel=['pet_mm_s01', 'cly_pc_sav'],
+            )
+        self.assertTrue(any("Dropped 1 locations" in m for m in cm.output))
+        self.assertNotIn('9999999', result_df['featureID'].values)
+        self.assertIn('1520007', result_df['featureID'].values)
+
+    @patch('rafts_algo.utils.dd.read_parquet')
+    def test_warns_on_unexpected_na_values(self, mock_dd_read_parquet):
+        mock_dd_read_parquet.return_value = self._mock_ddf(values=(58, np.nan))
+        with self.assertLogs(level="WARNING") as cm:
+            raftsutil.rafts_read_attr_comid(
+                dir_db_attrs='mock_dir', comids_resp=['1520007'],
+                attrs_sel=['pet_mm_s01', 'cly_pc_sav'],
+            )
+        self.assertTrue(any("unexpected NA values" in m for m in cm.output))
+
+
 class TestHomeDirUtilities(unittest.TestCase):
     def test_make_home_dir(self):
         # 1. Test None/Empty triggers Path.home()
@@ -562,6 +687,18 @@ class TestAlgoConfigParserValidationBranches(unittest.TestCase):
 
 class TestCheckAttributesExist(unittest.TestCase):
     print('Testing _check_attributes_exist')
+    # NOTE: _check_attributes_exist has two more defensive branches that look
+    # reachable but, like the dead branches already documented in utils.py's
+    # AlgoConfigParser/AttrConfigAndVars tests, aren't:
+    #   - `else: bad_comids = counts.index.tolist() if vec_missing else []`
+    #     (the isinstance(vec_missing, pd.Series) check's else branch): counts
+    #     is always a pandas Series (a groupby().count() result), so
+    #     `counts != len(attrs_sel)` is always a Series too, even when counts
+    #     has a single row -- vec_missing can never be a bare bool.
+    #   - `if isinstance(attrs_sel, list):`: attrs_sel is unconditionally
+    #     coerced to a pd.Series a few lines earlier in this same function
+    #     (both branches of the preceding if/else reassign it), so it can
+    #     never still be a plain list by the time this check runs.
     def test_check_attributes_exist(self):
         mock_pdf = pd.DataFrame({
             'data_source': 'hydroatlas__v1',
