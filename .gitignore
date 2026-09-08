@@ -101,6 +101,7 @@ coverage.xml
 # integration tests #
 #####################
 tests/data/testdata_20250901
+tests/data/input
 
 #  R  #
 #######
