@@ -538,15 +538,6 @@ class TestReadHfatlasWrapDask(unittest.TestCase):
         self.assertEqual(set(result_df["divide_id"]), {"div1", "div2", "div3"})
 
     def test_read_hfatlas_wrap_dask_numeric_id_coerced_to_string(self):
-        # NOTE: read_hfatlas_wrap_dask coerces map_id_col to string *inside*
-        # the per-file lazy-loading loop (`ddf[map_id_col] = ddf[map_id_col]
-        # .astype(str)`, before the merge/compute phase). That means the
-        # later "Coercing to string" warning -- gated on the *final*, already-
-        # computed column still not being object/string dtype -- can never
-        # actually fire through this normal code path; the per-file coercion
-        # has already guaranteed it. This test only verifies the (real,
-        # reachable) end result: a numeric-looking id column still comes back
-        # as a string dtype.
         df_numeric_id = pd.DataFrame({
             "divide_id": [1, 2, 3],  # numeric, not string
             "('TOT_AET', 'mm')": [10.5, 20.1, 30.0],
@@ -561,9 +552,6 @@ class TestReadHfatlasWrapDask(unittest.TestCase):
                          or pd.api.types.is_string_dtype(result_df["divide_id"]))
 
     def test_read_hfatlas_wrap_dask_merges_multiple_files(self):
-        # A second file, disjoint divide_ids and a disjoint attribute, plus
-        # one overlapping attribute name (should be dropped from the second
-        # file rather than raising a merge conflict).
         df_second = pd.DataFrame({
             "divide_id": ["div4", "div5"],
             "('TOT_AET', 'mm')": [99.0, 98.0],  # overlaps with file 1 -- should be dropped
