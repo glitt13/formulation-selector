@@ -672,12 +672,12 @@ class AlgoTrainEval:
             
             # 5. If not saving all, write the absolute best model to the dictionary
             if not self.save_all_clusters:
+                if hasattr(best_model, 'n_clusters'):
+                    opt_k = best_model.n_clusters
+                else:
+                    opt_k = best_model.estimator.n_clusters
                 if self.verbose:
-                    if hasattr(best_model, 'n_clusters'):
-                        opt_k = best_model.n_clusters
-                    else:
-                        opt_k = best_model.estimator.n_clusters
-                    logging.info(f"      Optimal {alg_name} clusters chosen: {best_model.n_clusters} (Silhouette: {best_score:.3f})")
+                    logging.info(f"      Optimal {alg_name} clusters chosen: {opt_k} (Silhouette: {best_score:.3f})")
                 winning_name = f"{alg_name}_k{opt_k}"
                 self.algs_dict[winning_name] = {
                     'algo': best_model,
@@ -899,7 +899,7 @@ class AlgoTrainEval:
                 
             # Check if forestci is enabled in self.uncertainty
             forestci_enabled = any(
-                d.get('fci_flag', False) for d in self.uncertainty.get('forestfci', [])
+                d.get('fci_flag', False) for d in self.uncertainty.get('forestci', [])
             )
             # Compute forestci uncertainty with the best RF model
             if forestci_enabled:

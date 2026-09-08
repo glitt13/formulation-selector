@@ -1328,6 +1328,16 @@ class TestAlgoTrainEvalBasic(unittest.TestCase):
         # Verify the .png file was generated and saved to the temp directory
         expected_png = self.dir_out_alg_ds / self.dataset_id / f"learning_curve_{self.dataset_id}_{self.metric}_rf.png"
         self.assertTrue(expected_png.exists(), "Learning curve PNG was not saved!")
+
+    def test_learning_curve_plotting_with_training_uncertainty_band(self):
+        """training_uncn=True adds a shaded training-uncertainty band -- previously untested."""
+        self.algo.train_eval()
+        pipe_rf = self.algo.algs_dict['rf']['pipeline']
+        df_X, y_all = self.algo.all_X_all_y()
+        plot_obj = raftsalgo.AlgoEvalPlotLC(df_X, y_all)
+        plot_obj.gen_learning_curve(model=pipe_rf, cv=2, n_jobs=1)
+        fig = plot_obj.plot_learning_curve(training_uncn=True)
+        self.assertIsNotNone(fig)
 # %%
 
 class TestReadMetadata(unittest.TestCase):
@@ -1661,6 +1671,295 @@ class TestWarningAndClippingFunctions(unittest.TestCase):
         result = raftsutil.clip_pis(self.y_pis, None, None)
         np.testing.assert_array_equal(result, self.y_pis)
         print("✅ test_clip_pis_no_bounds passed.")
+
+class TestAlgoTrainEvalVerboseRegressionSingleRun(unittest.TestCase):
+    """
+    Covers AlgoTrainEval branches that need verbose=True and/or a non-grid-search
+    (single hyperparameter value) config, none of which TestAlgoTrainEvalBasic's
+    verbose=False / grid-search-for-rf setup reaches: the verbose logging
+    branches in split_data, train_algos (single-run rf/mlp), predict_algos,
+    evaluate_algos, and save_algos; the uncn_bnd_algo prediction/interval
+    clipping branches; and -- now that the 'forestfci' typo bug is fixed --
+    the forestci uncertainty computation itself, via the non-grid-search
+    'best_rf_algo = self.algs_dict['rf']['algo']' path.
+    """
+
+    def setUp(self):
+        self.df = pd.DataFrame({
+            'comid': [f'id_{i}' for i in range(15)],
+            'attr1': [1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5],
+            'attr2': [5, 4, 3, 2, 1, 5, 4, 3, 2, 1, 5, 4, 3, 2, 1],
+            'target': [10, 15, 20, 25, 30, 10, 15, 20, 25, 30, 10, 15, 20, 25, 30],
+        })
+        # Single values only (not lists with >1 option) -> train_algos, not
+        # train_algos_grid_search.
+        self.algo_config = {
+            'rf': [{'n_estimators': 10}],
+            'mlp': [{'hidden_layer_sizes': (5,)}],
+        }
+        self.uncertainty_cfg = {
+            'forestci': [{'fci_flag': True}],
+            'bagging': [{'n_algos': 5}],
+            'mapie': [{'alpha': [0.2], 'method': 'plus', 'cv': 5, 'agg_function': 'median'}],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self.dir_out_alg_ds = Path(tmpdir)
+        # Tight bounds relative to target's [10, 30] range so uncn_bnd_algo
+        # correction actually clips something for both values and intervals.
+        self.algo = raftsalgo.AlgoTrainEval(
+            df=self.df, attrs=['attr1', 'attr2'], algo_config=self.algo_config,
+            uncertainty=self.uncertainty_cfg, dir_out_alg_ds=self.dir_out_alg_ds,
+            dataset_id='verbose_test_ds', metr='target', test_size=0.3, rs=42,
+            test_id_col='comid', confidence_levels=[90], verbose=True,
+            uncn_bnd_algo=True, min_lim=15.0, max_lim=25.0,
+        )
+
+    def test_train_eval_runs_verbosely_with_bounds_and_forestci(self):
+        with self.assertLogs(level='INFO') as cm:
+            self.algo.train_eval()
+        log_text = "\n".join(cm.output)
+
+        # Verbose logging branches (split_data, train_algos, predict_algos,
+        # evaluate_algos, save_algos all gate their info logs on self.verbose).
+        self.assertIn("Performing train/test split", log_text)
+        self.assertIn("Performing Random Forest Training", log_text)
+        self.assertIn("Performing Multilayer Perceptron Training", log_text)
+        self.assertIn("Generating predictions", log_text)
+        self.assertIn("Evaluating predictions", log_text)
+
+        # forestci is now actually wired up (was dead due to the 'forestfci'
+        # typo) -- confirm it really ran and populated real values.
+        self.assertIn('forestci', self.algo.algs_dict['rf']['Uncertainty'])
+        self.assertIn('ci_90', self.algo.algs_dict['rf']['Uncertainty']['forestci'])
+
+        # bagging still works via the non-grid-search 'algo' path.
+        self.assertIn('bagging_mean_pred', self.algo.algs_dict['rf']['Uncertainty'])
+
+    def test_uncn_bnd_algo_correction_applied(self):
+        self.algo.train_eval()
+        for algo_str in ('rf', 'mlp'):
+            y_pred = self.algo.preds_dict[algo_str]['y_pred']
+            self.assertTrue(np.all(y_pred >= 15.0) and np.all(y_pred <= 25.0))
+            # MAPIE intervals should also have been clipped to the same bounds.
+            for pis_df in self.algo.preds_dict[algo_str]['y_pis']:
+                self.assertTrue((pis_df.values >= 15.0).all() and (pis_df.values <= 25.0).all())
+
+
+class TestAlgoTrainEvalVerboseRegressionGridSearch(unittest.TestCase):
+    """Covers train_algos_grid_search's verbose logging branches for rf/mlp,
+    not reached by TestAlgoTrainEvalBasic (verbose=False)."""
+
+    def setUp(self):
+        self.df = pd.DataFrame({
+            'comid': [f'id_{i}' for i in range(15)],
+            'attr1': [1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5],
+            'attr2': [5, 4, 3, 2, 1, 5, 4, 3, 2, 1, 5, 4, 3, 2, 1],
+            'target': [10, 15, 20, 25, 30, 10, 15, 20, 25, 30, 10, 15, 20, 25, 30],
+        })
+        self.algo_config = {
+            'rf': [{'n_estimators': [10, 20]}],
+            'mlp': [{'hidden_layer_sizes': [(5,), (5, 5)]}],
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self.dir_out_alg_ds = Path(tmpdir)
+        self.algo = raftsalgo.AlgoTrainEval(
+            df=self.df, attrs=['attr1', 'attr2'], algo_config=self.algo_config,
+            uncertainty={}, dir_out_alg_ds=self.dir_out_alg_ds,
+            dataset_id='verbose_gs_ds', metr='target', test_size=0.3, rs=42,
+            test_id_col='comid', verbose=True,
+        )
+
+    def test_grid_search_logs_verbosely_for_both_algos(self):
+        with self.assertLogs(level='INFO') as cm:
+            self.algo.train_eval()
+        log_text = "\n".join(cm.output)
+        self.assertIn("Performing Random Forest Training with Grid Search", log_text)
+        self.assertIn("Performing Multilayer Perceptron Training with Grid Search", log_text)
+        self.assertIn('gridsearchcv', self.algo.algs_dict['rf'])
+        # Note: unlike 'rf', the mlp grid-search branch doesn't store a
+        # 'gridsearchcv' key -- its 'pipeline' entry *is* the GridSearchCV object.
+        self.assertIsInstance(self.algo.algs_dict['mlp']['pipeline'], GridSearchCV)
+
+
+class TestAlgoTrainEvalKmeansSingleRun(unittest.TestCase):
+    """Covers train_algos' kmeans single-value (non-grid-search) branch,
+    which TestAlgoTrainEvalClustering doesn't reach (its kmeans config uses
+    two n_clusters options, routing it through train_algos_grid_search
+    instead). Also exercises split_data's clustering branch and
+    all_X_all_y's y=None branch, both only reachable for task_type='clustering'."""
+
+    def setUp(self):
+        self.df = pd.DataFrame({
+            'comid': [f'id_{i}' for i in range(20)],
+            'attr1': np.tile([1.0, 2.0, 3.0, 4.0], 5),
+            'attr2': np.tile([4.0, 3.0, 2.0, 1.0], 5),
+        })
+        self.algo_config = {'kmeans': [{'n_clusters': [3]}]}  # single value -> train_algos
+        with tempfile.TemporaryDirectory() as tmpdir:
+            self.dir_out_alg_ds = Path(tmpdir)
+        self.algo = raftsalgo.AlgoTrainEval(
+            df=self.df, attrs=['attr1', 'attr2'], algo_config=self.algo_config,
+            uncertainty={}, dir_out_alg_ds=self.dir_out_alg_ds,
+            dataset_id='kmeans_single_ds', metr='cluster_labels', task_type='clustering',
+            test_size=0.3, rs=42, test_id_col='comid', verbose=True,
+        )
+
+    def test_kmeans_single_run_trains_directly(self):
+        with self.assertLogs(level='INFO') as cm:
+            self.algo.train_eval()
+        log_text = "\n".join(cm.output)
+        self.assertIn("Performing clustering split", log_text)
+        self.assertIn("Performing KMeans Clustering", log_text)
+        self.assertIn('kmeans_k3', self.algo.algs_dict)
+        self.assertNotIn('gridsearchcv', self.algo.algs_dict['kmeans_k3'])
+
+        # all_X_all_y's y=None branch, only reachable for clustering.
+        X_all, y_all = self.algo.all_X_all_y()
+        self.assertIsNone(y_all)
+        self.assertEqual(len(X_all), len(self.df))
+
+
+class TestAlgoTrainEvalClusteringGridSearchDefaults(unittest.TestCase):
+    """
+    Regression test for a real bug found while increasing coverage here:
+    train_algos_grid_search's clustering branch computed `opt_k` only inside
+    `if self.verbose:`, then referenced it unconditionally right after --
+    with the constructor's actual defaults (verbose=False,
+    save_all_clusters=False), this raised UnboundLocalError for any
+    clustering grid search. It also logged best_model.n_clusters directly
+    instead of the opt_k it had just computed, which would additionally
+    raise AttributeError for gower_agglomerative specifically (its
+    UniversalDistanceClusterer wrapper has no .n_clusters of its own).
+    Both are fixed by computing opt_k unconditionally and using it in the
+    log message too.
+    """
+
+    def setUp(self):
+        self.df = pd.DataFrame({
+            'comid': [f'id_{i}' for i in range(24)],
+            'attr1': np.tile([1.0, 2.0, 3.0, 4.0, 5.0, 6.0], 4),
+            'attr2': np.tile([6.0, 5.0, 4.0, 3.0, 2.0, 1.0], 4),
+        })
+        self.algo_config = {
+            'kmeans': [{'n_clusters': [2, 3]}],
+            'gower_agglomerative': [{'n_clusters': [2, 3]}],
+        }
+
+    def _make_algo(self, **kwargs):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dir_out_alg_ds = Path(tmpdir)
+        kwargs.setdefault('save_all_clusters', False)
+        return raftsalgo.AlgoTrainEval(
+            df=self.df, attrs=['attr1', 'attr2'], algo_config=dict(self.algo_config),
+            uncertainty={}, dir_out_alg_ds=dir_out_alg_ds,
+            dataset_id='cluster_defaults_ds', metr='cluster_labels', task_type='clustering',
+            test_size=0.3, rs=42, test_id_col='comid', **kwargs
+        )
+
+    def test_default_verbose_and_save_all_clusters_does_not_raise(self):
+        # verbose=False, save_all_clusters=False (both defaults) -- this used
+        # to raise UnboundLocalError before the fix.
+        algo = self._make_algo()
+        algo.train_eval()
+        kmeans_keys = [k for k in algo.algs_dict if k.startswith('kmeans_k')]
+        gower_keys = [k for k in algo.algs_dict if k.startswith('gower_agglomerative_k')]
+        self.assertEqual(len(kmeans_keys), 1, "Only the single best kmeans model should be kept")
+        self.assertEqual(len(gower_keys), 1, "Only the single best gower_agglomerative model should be kept")
+
+    def test_verbose_gower_agglomerative_does_not_raise(self):
+        # verbose=True -- this used to raise AttributeError for
+        # gower_agglomerative specifically (best_model.n_clusters on a
+        # UniversalDistanceClusterer, which has no such attribute).
+        algo = self._make_algo(verbose=True)
+        with self.assertLogs(level='INFO') as cm:
+            algo.train_eval()
+        log_text = "\n".join(cm.output)
+        self.assertIn("Optimal gower_agglomerative clusters chosen", log_text)
+        self.assertIn("Optimal kmeans clusters chosen", log_text)
+
+    def test_verbose_save_all_clusters_logs_each_saved_iteration(self):
+        # save_all_clusters=True takes the "save every iteration" branch
+        # instead, which has its own separate verbose log line.
+        algo = self._make_algo(verbose=True, save_all_clusters=True)
+        with self.assertLogs(level='INFO') as cm:
+            algo.train_eval()
+        log_text = "\n".join(cm.output)
+        self.assertIn("Saved kmeans_k2", log_text)
+        self.assertIn("Saved kmeans_k3", log_text)
+        self.assertIn("Saved gower_agglomerative_k2", log_text)
+        self.assertIn("Saved gower_agglomerative_k3", log_text)
+
+
+class TestAlgoTrainEvalSingleClusterPredicted(unittest.TestCase):
+    """Covers evaluate_algos' branch for when only one cluster label is
+    predicted on the test set (silhouette_score/davies_bouldin_score are
+    undefined for a single cluster) -- forced here by requesting n_clusters=1."""
+
+    def test_single_cluster_predicted_logs_warning_and_uses_nan(self):
+        df = pd.DataFrame({
+            'comid': [f'id_{i}' for i in range(12)],
+            'attr1': np.linspace(0, 1, 12),
+            'attr2': np.linspace(1, 0, 12),
+        })
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dir_out_alg_ds = Path(tmpdir)
+        algo = raftsalgo.AlgoTrainEval(
+            df=df, attrs=['attr1', 'attr2'], algo_config={'kmeans': [{'n_clusters': [1]}]},
+            uncertainty={}, dir_out_alg_ds=dir_out_alg_ds, dataset_id='single_cluster_ds',
+            metr='cluster_labels', task_type='clustering', test_size=0.3, rs=42,
+            test_id_col='comid',
+        )
+        with self.assertLogs(level='WARNING') as cm:
+            algo.train_eval()
+        self.assertTrue(any("Only 1 cluster predicted" in log for log in cm.output))
+        eval_entry = algo.eval_dict['kmeans_k1']
+        self.assertTrue(np.isnan(eval_entry['silhouette_score']))
+        self.assertTrue(np.isnan(eval_entry['davies_bouldin_score']))
+
+
+class TestAlgoTrainEvalUncertaintyHelperEdgeCases(unittest.TestCase):
+    """Covers calculate_bagging_ci's and calculate_mapie's error/edge branches
+    directly, using a real fitted rf model (via split_data + train_algos)
+    rather than mocking, per the project's mocking-avoidance preference."""
+
+    def setUp(self):
+        self.df = pd.DataFrame({
+            'comid': [f'id_{i}' for i in range(15)],
+            'attr1': [1, 2, 3, 4, 5, 1, 2, 3, 4, 5, 1, 2, 3, 4, 5],
+            'attr2': [5, 4, 3, 2, 1, 5, 4, 3, 2, 1, 5, 4, 3, 2, 1],
+            'target': [10, 15, 20, 25, 30, 10, 15, 20, 25, 30, 10, 15, 20, 25, 30],
+        })
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dir_out_alg_ds = Path(tmpdir)
+        self.algo = raftsalgo.AlgoTrainEval(
+            df=self.df, attrs=['attr1', 'attr2'], algo_config={'rf': [{'n_estimators': 10}]},
+            uncertainty={'bagging': [{'n_algos': 3}], 'mapie': [{'method': 'bogus', 'cv': 3, 'agg_function': 'median'}]},
+            dir_out_alg_ds=dir_out_alg_ds, dataset_id='uncn_helpers_ds', metr='target',
+            test_size=0.3, rs=42, test_id_col='comid',
+        )
+        self.algo.split_data()
+        self.algo.select_algs_grid_search()
+        self.algo.train_algos()
+
+    def test_calculate_bagging_ci_raises_keyerror_for_unknown_algo(self):
+        with self.assertRaises(KeyError):
+            self.algo.calculate_bagging_ci('not_a_real_algo', self.algo.algs_dict['rf']['algo'])
+
+    def test_calculate_bagging_ci_initializes_missing_uncertainty_key(self):
+        # Real code paths (train_algos, calculate_forestci_uncertainty's caller
+        # in train_eval) always pre-populate algs_dict[algo]['Uncertainty'] = {},
+        # so this defensive branch is otherwise never exercised -- simulate an
+        # algs_dict entry that lacks the key entirely, as if some other caller
+        # built it without that default.
+        del self.algo.algs_dict['rf']['Uncertainty']
+        self.algo.calculate_bagging_ci('rf', self.algo.algs_dict['rf']['algo'])
+        self.assertIn('Uncertainty', self.algo.algs_dict['rf'])
+        self.assertIn('bagging_mean_pred', self.algo.algs_dict['rf']['Uncertainty'])
+
+    def test_calculate_mapie_invalid_method_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            self.algo.calculate_mapie()
+
 
 class TestCombineRespGdfComidWrap(unittest.TestCase):
     def test_combine_resp_gdf_comid_wrap(self):
@@ -2209,6 +2508,29 @@ class TestAssignDonorsToReceivers(unittest.TestCase):
         self.assertTrue("No donors found for Cluster 2.0" in logs)
         self.assertTrue("NOT assigned a donor" in logs)
 
+    def test_assign_donors_to_receivers_no_pairings_possible(self):
+        """When every receiver's cluster has no matching donor (or a NaN
+        cluster), pairing_results never accumulates any rows -- previously
+        untested branch where df_final_pairings falls back to an empty
+        DataFrame rather than a pd.concat() result."""
+        df_receivers_unpairable = pd.DataFrame({
+            self.id_col: ['recv_1', 'recv_2'],
+            self.cluster_col: [99, np.nan],  # cluster 99 has no donors; NaN is skipped
+            'attr1': [0.1, 1.0],
+            'attr2': [0.1, 1.0],
+        })
+        with self.assertLogs(level='WARNING'):
+            result = raftsalgo.assign_donors_to_receivers(
+                df_donors=self.df_donors,
+                df_receivers=df_receivers_unpairable,
+                attrs=self.attrs,
+                metric='euclidean',
+                cluster_col=self.cluster_col,
+                id_col=self.id_col,
+            )
+        self.assertIsInstance(result, pd.DataFrame)
+        self.assertTrue(result.empty)
+
     def test_assign_donors_to_receivers_gower(self):
         """Test alternative Gower metric execution."""
         # Use a cleaned receiver set to avoid triggering the unassigned warnings in this specific test
@@ -2388,6 +2710,29 @@ class TestAlgoTrainEvalBoosting(unittest.TestCase):
         self.assertIn('Uncertainty', ate.algs_dict['xgb'])
         self.assertIn('bagging_confidence_intervals', ate.algs_dict['xgb']['Uncertainty'])
         self.assertIn('bagging_confidence_intervals', ate.algs_dict['adaboost']['Uncertainty'])
+
+    def test_hgbr_gbr_grid_search(self):
+        """hgbr/gbr grid search, previously untested (only their single-run
+        branches in train_algos, and adaboost/xgb's grid-search branches,
+        had coverage)."""
+        algo_config = {
+            'hgbr': [{'max_iter': [5, 10]}],
+            'gbr': [{'n_estimators': [2, 4]}],
+        }
+        ate = raftsalgo.AlgoTrainEval(
+            df=self.df, attrs=self.attrs, algo_config=algo_config,
+            uncertainty={}, dir_out_alg_ds=self.dir_out_alg_ds,
+            dataset_id='test_grid_hgbr_gbr', metr='metric', test_size=0.2,
+            test_id_col='comid', verbose=True,
+        )
+        with self.assertLogs(level='INFO') as cm:
+            ate.train_eval()
+        log_text = "\n".join(cm.output)
+        self.assertIn("Performing HistGradientBoostingRegressor Training with Grid Search", log_text)
+        self.assertIn("Performing GradientBoostingRegressor Training with Grid Search", log_text)
+        self.assertIn('gridsearchcv', ate.algs_dict['hgbr'])
+        self.assertIn('gridsearchcv', ate.algs_dict['gbr'])
+
 
 class TestAlgoTrainEvalDataAndIO(unittest.TestCase):
     """No-mock tests for data splitting edge cases and physical file I/O operations."""
