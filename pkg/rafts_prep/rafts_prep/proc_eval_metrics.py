@@ -478,11 +478,16 @@ def proc_col_schema(df: pd.DataFrame,
     mapper_df = raftsutil.create_hfatlas_unit_mapper(raw_columns=df.columns)
 
     # TODO add cloud or local saving
+    # Initialized here (not just inside the 'local' branch) so that
+    # save_loc == 'aws' with save_type in ('csv', 'parquet') below hits the
+    # intended "not implemented" ValueError instead of an UnboundLocalError --
+    # 'aws' has no directory-structure setup of its own yet (see TODOs below).
+    _other_save_dirs = {}
     if save_loc == 'local':
          # Optionally creates dir structure  if save_type == 'csv' or 'parquet'
         _save_dir_base, _other_save_dirs = _save_dir_struct(
-                                                        dir_save, 
-                                                        dataset_name, 
+                                                        dir_save,
+                                                        dataset_name,
                                                         save_type
                                                         )
     elif save_loc == 'aws':
