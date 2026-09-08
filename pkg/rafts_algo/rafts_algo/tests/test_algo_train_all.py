@@ -28,28 +28,7 @@ only one of them is a real problem:
     or @patch('pynhd.NLDI.navigate_byid') to avoid a real network call. These
     don't replace the logic under test; they replace an I/O boundary around it.
   - Logic-hiding: patching away the actual computation a test claims to verify,
-    leaving only a call-count assertion. TestAlgoTrainEval.test_train_eval
-    (search for "@patch.object(raftsalgo.AlgoTrainEval, 'train_algos')") is the
-    clearest example: split_data, select_algs_grid_search, train_algos,
-    calculate_bagging_ci, and calculate_mapie are all patched out, so the test
-    only confirms train_eval() calls those methods in the right order/count --
-    it exercises no actual splitting, training, or uncertainty math. That's
-    fine as a supplementary orchestration check (which is what it is here,
-    alongside TestAlgoTrainEvalBasic's unmocked test_train_eval a few classes
-    below), but would be a gap if it were the only coverage of train_eval().
-A past instance of the same failure mode: TestAlgoTrainEvalBasic.test_train_eval
-used to patch sklearn.ensemble.RandomForestRegressor and
-sklearn.neural_network.MLPRegressor directly, which never took effect because
-rafts_algo_train.py imports those names into its own module namespace
-(`from sklearn.ensemble import RandomForestRegressor`) rather than looking them
-up via sklearn.ensemble.* at call time -- patching the origin module doesn't
-touch a name already copied elsewhere. The mocks were silently never invoked;
-the assertions that would have caught it were commented out instead of fixed.
-That test now runs the real RandomForestRegressor/MLPRegressor fit, which is
-both accurate to what actually executes and preferable per the no-mocking
-guidance anyway. When adding a new @patch here, prefer letting real logic run
-wherever it's fast and side-effect-free, and reserve mocking for genuine I/O
-or network boundaries.
+    leaving only a call-count assertion.
 '''
 import os
 import matplotlib
@@ -1411,16 +1390,6 @@ class TestAlgoTrainEvalBasic(unittest.TestCase):
                            # joblib`), so patching it here does take effect --
                            # unlike the sklearn mocks previously attempted below.
     def test_train_eval(self, mock_joblib_dump):
-        # NOTE: sklearn.ensemble.RandomForestRegressor / sklearn.neural_network.MLPRegressor
-        # / sklearn.model_selection.train_test_split were previously (and ineffectively)
-        # patched here. rafts_algo_train.py imports each of those names directly
-        # (`from sklearn.ensemble import RandomForestRegressor`, etc.), so patching the
-        # origin module never touches the name rafts_algo_train.py actually calls --
-        # the mocks were never invoked, which is why the assertions checking their call
-        # counts were commented out rather than passing. This test now runs the real
-        # RandomForestRegressor/MLPRegressor training on the tiny dummy dataset, which
-        # is both accurate to what actually executes and consistent with this file's
-        # general preference for exercising real logic over mocking it away.
         self.algo.train_eval()
 
         # Check predictions and evaluations were made
@@ -2185,17 +2154,6 @@ class TestCombineRespGdfComidWrapMismatchBranches(unittest.TestCase):
     NA-featureID removal, or 'too many .nc files' branches) with real (not
     mocked) xr.Dataset/GeoDataFrame objects built directly in a temp dir, sized
     and shaped to actually exercise those branches.
-
-    NOTE: an earlier version of this class pointed at tests/data/input/
-    user_data_std/juliemai-xSSA/ (a real 220-gage fixture observed on disk).
-    That data turned out to be ephemeral, not a stable fixture: it's generated
-    and torn down by tests/test_rafts_prep_to_pred.py's
-    TestFsPrepProcAttrHydfabFsAlgo class (gated behind the private
-    testdata_20250901 bundle), and disappeared mid-session when that suite ran
-    again elsewhere. Building tests around it produced tests that silently
-    skip whenever that other suite isn't mid-run -- not a reliable coverage
-    source. Real-but-synthetic objects built here, matching the existing
-    test's own idiom, avoid that dependency entirely.
     """
 
     def _build_fixture(self, tmpdir, n_gages=20, featureSource='nwissite'):
@@ -2457,14 +2415,7 @@ class TestValidationUtilities(unittest.TestCase):
 
 class TestValidationHappyPaths(unittest.TestCase):
     """
-    Several validate_* wrappers in utils.py had their arg_val=True *success*
-    branch (the pandera .validate() call and its "✅ ... validated successfully"
-    log line) entirely uncovered -- existing tests only exercised arg_val=False
-    (a no-op skip) or arg_val=True with intentionally-bad data (the sys.exit
-    path). A couple of those existing "good" fixtures (TestValidationUtilities's
-    good_df / good_gdf) also don't actually conform to the schemas they're
-    named after -- they only ever got run through arg_val=False, so the gap
-    was never noticed. This class builds fixtures that genuinely satisfy each
+    This class builds fixtures that genuinely satisfy each
     schema and drives arg_val=True end-to-end without hitting sys.exit.
     """
 
