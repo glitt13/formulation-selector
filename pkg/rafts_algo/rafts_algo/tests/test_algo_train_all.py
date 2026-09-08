@@ -2753,6 +2753,41 @@ class TestMapieInferenceUtilities(unittest.TestCase):
         print("✅ test_infer_mapie_errors passed.")
 
 
+class TestHfatlAggPathHelpers(unittest.TestCase):
+    """std_dir_ds_agg, std_path_agg_ds, generate_vpu_attr_filepath, and
+    std_impute_log_path had zero unit test coverage prior to this class."""
+
+    def test_std_dir_ds_agg_creates_and_returns_agg_directory(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dir_db_attrs = str(Path(tmpdir) / "attrs" / "{ds}")
+            result = raftsutil.std_dir_ds_agg(dir_db_attrs, ds="my_ds")
+            self.assertEqual(result, Path(tmpdir) / "attrs" / "my_ds_agg_hfatl")
+            self.assertTrue(result.is_dir())
+
+    def test_std_path_agg_ds(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = raftsutil.std_path_agg_ds(Path(tmpdir), ds="my_ds")
+            self.assertEqual(result, Path(tmpdir) / "my_ds_agg_hfatlas.parquet")
+
+    def test_generate_vpu_attr_filepath_dataset_name_not_in_dir(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = raftsutil.generate_vpu_attr_filepath(Path(tmpdir), dataset_name="my_ds", vpuid="01")
+            self.assertEqual(result, Path(tmpdir) / "my_ds" / "01" / "attr_01.parquet")
+            self.assertTrue(result.parent.is_dir())
+
+    def test_generate_vpu_attr_filepath_dataset_name_already_in_dir(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            dir_db_attrs = Path(tmpdir) / "my_ds"
+            result = raftsutil.generate_vpu_attr_filepath(dir_db_attrs, dataset_name="my_ds", vpuid="02")
+            self.assertEqual(result, dir_db_attrs / "02" / "attr_02.parquet")
+
+    def test_std_impute_log_path(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = raftsutil.std_impute_log_path(Path(tmpdir), ds="my_ds", algo="kmeans_k3", resp_var="cluster_labels")
+            self.assertEqual(result, Path(tmpdir) / "my_ds" / "imputed_locations_kmeans_k3_cluster_labels__my_ds.csv")
+            self.assertTrue(result.parent.is_dir())
+
+
 class TestAssignDonorsToReceivers(unittest.TestCase):
     def setUp(self):
         """Set up realistic, unmocked DataFrames for donor/receiver pairing."""
@@ -3154,6 +3189,34 @@ def sample_dataframe():
     })
 
 # =====================================================================
+# Tests for resolve_fstrings (zero coverage prior to this)
+# =====================================================================
+
+def test_resolve_fstrings_non_string_returned_unchanged():
+    assert raftsutil.resolve_fstrings(42, {'a': '1'}) == 42
+
+def test_resolve_fstrings_no_braces_returned_unchanged():
+    assert raftsutil.resolve_fstrings("plain string", {'a': '1'}) == "plain string"
+
+def test_resolve_fstrings_resolves_within_max_depth():
+    result = raftsutil.resolve_fstrings("{a}/{b}", {'a': 'x', 'b': 'y'})
+    assert result == "x/y"
+
+def test_resolve_fstrings_missing_key_left_unresolved():
+    # SafeDict leaves an unknown key as the literal unresolved placeholder.
+    result = raftsutil.resolve_fstrings("{a}/{missing}", {'a': 'x'})
+    assert result == "x/{missing}"
+
+def test_resolve_fstrings_returns_partial_result_when_depth_exhausted():
+    # A resolution chain longer than max_depth never reaches a fixed point
+    # (new_val keeps changing each iteration) -- the loop exhausts and
+    # returns whatever the last iteration produced, rather than the fully
+    # resolved string.
+    context = {'a': '{b}', 'b': '{c}', 'c': '{d}', 'd': 'final'}
+    result = raftsutil.resolve_fstrings("{a}", context, max_depth=3)
+    assert result == "{d}"  # not fully resolved to "final" -- one iteration short
+
+# =====================================================================
 # Tests for register_gpkg_attributes_table
 # =====================================================================
 
@@ -3186,6 +3249,14 @@ def test_register_gpkg_attributes_table_success():
     assert result[0] == table_name
     assert result[1] == 'attributes'
     conn.close()
+
+def test_register_gpkg_attributes_table_sqlite_error_logs_warning(caplog):
+    """A closed connection raises sqlite3.ProgrammingError (a sqlite3.Error
+    subclass) on .cursor() -- previously untested exception branch."""
+    conn = sqlite3.connect(':memory:')
+    conn.close()
+    raftsutil.register_gpkg_attributes_table(conn, "test_formulation")
+    assert "Could not register table 'test_formulation' in gpkg_contents" in caplog.text
 
 def test_register_gpkg_attributes_table_missing_contents():
     """Test that the function safely exits without errors if gpkg_contents is missing."""
@@ -3342,6 +3413,57 @@ def test_update_database_append_missing_id_col(tmp_path, sample_dataframe, caplo
     
     # Ensure the DatabaseError was gracefully caught and logged by our updated except block
     assert f"Identifier column '{id_col}' missing in the existing table '{table_name}'" in caplog.text
+
+def test_update_database_no_new_records_to_append(tmp_path, sample_dataframe, caplog):
+    """When every id in df_data already exists in the table, df_new ends up
+    empty and the function should log that rather than attempting an append."""
+    import logging as _logging
+    db_path = tmp_path / "test_output.sqlite"
+    table_name = "formulation_kmeans"
+    id_col = "divide_id"
+
+    raftsutil.update_database(db_path, sample_dataframe, table_name, id_col, overwrite=False)
+
+    with caplog.at_level(_logging.INFO):
+        # Re-submit the exact same rows -- nothing new to append.
+        raftsutil.update_database(db_path, sample_dataframe.copy(), table_name, id_col, overwrite=False)
+    assert f"No new records to append. Table '{table_name}' is up to date." in caplog.text
+
+def test_update_database_outer_sqlite_error_exits(tmp_path, sample_dataframe):
+    """A genuine SQLite-level error at the outer scope (not the inner,
+    already-tested missing-id_col DatabaseError) should log and sys.exit(1)."""
+    # A directory, not a file, is not a valid sqlite3.connect() target.
+    bad_db_path = tmp_path / "not_a_valid_sqlite_file"
+    bad_db_path.mkdir()
+    with pytest.raises(SystemExit):
+        raftsutil.update_database(bad_db_path, sample_dataframe, "formulation_kmeans", "divide_id", overwrite=False)
+
+def test_get_crosswalk_target_col_priority_order():
+    # 1. Explicitly configured column wins even if a default-named column also exists.
+    df = pd.DataFrame({'pred_id': ['a'], 'divide_id': ['b'], 'custom_target': ['c']})
+    assert raftsutil.get_crosswalk_target_col(df, 'pred_id', crosswalk_target_col='custom_target') == 'custom_target'
+
+def test_get_crosswalk_target_col_default_fallback():
+    # 2. No explicit target configured (or it's not present) -> standard hydrofabric name.
+    df = pd.DataFrame({'pred_id': ['a'], 'divide_id': ['b']})
+    assert raftsutil.get_crosswalk_target_col(df, 'pred_id', crosswalk_target_col=None) == 'divide_id'
+
+def test_get_crosswalk_target_col_subtraction_fallback():
+    # 3. No default hydrofabric name present -> subtract known metadata columns.
+    df = pd.DataFrame({'pred_id': ['a'], 'vpuid': ['01'], 'areasqkm': [1.0], 'my_custom_id': ['x']})
+    result = raftsutil.get_crosswalk_target_col(df, 'pred_id', crosswalk_target_col=None)
+    assert result == 'my_custom_id'
+
+def test_get_crosswalk_target_col_missing_pred_id_returns_none():
+    df = pd.DataFrame({'divide_id': ['b']})
+    assert raftsutil.get_crosswalk_target_col(df, 'pred_id_not_present') is None
+
+def test_get_crosswalk_target_col_no_candidates_returns_none():
+    # After subtracting pred_gpkg_id_col and all known metadata columns, nothing is left.
+    df = pd.DataFrame({'pred_id': ['a'], 'vpuid': ['01'], 'gage_id': ['g1']})
+    assert raftsutil.get_crosswalk_target_col(df, 'pred_id', crosswalk_target_col=None) is None
+
+if __name__ == '__main__':
 
 if __name__ == '__main__':
     unittest.main()
