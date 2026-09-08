@@ -655,12 +655,19 @@ def check_fix_nwissite_gageids(df:pd.DataFrame, gage_id_col:str,
             else:
                 logging.info(f"Corrected values provided in the 'fix' column of the returned DataFrame.")
 
-            df=cmbo_df.copy()                
+            df=cmbo_df.copy()
             if len(ls_still_bad)>0:
+                # NOTE: this used to be duplicated into a separate
+                # `elif len(ls_still_bad) > 0:` branch below the `if len(ls_bad_ids)
+                # > 0:` block above. That elif was unreachable dead code:
+                # ls_still_bad is only ever populated from ls_prezero, which is
+                # itself only ever built from ls_bad_ids, so ls_still_bad can be
+                # non-empty only when ls_bad_ids is also non-empty -- meaning the
+                # `if len(ls_bad_ids) > 0:` branch above is always taken instead,
+                # and the elif's extra "Consider checking..." guidance never fired.
+                # Merged here so it's not lost.
                 logging.warning("Some gage_id values still not recognized by USGS nwissite dataset.")
-        elif len(ls_still_bad) > 0:
-            logging.warning("Some gage_id values still not recognized by USGS nwissite dataset.")
-            logging.info(f"Consider checking the following gage_ids: {', '.join(ls_still_bad)}")
+                logging.info(f"Consider checking the following gage_ids: {', '.join(ls_still_bad)}")
         df[gage_id_col] = df[gage_id_col].astype(str)
     return df
 

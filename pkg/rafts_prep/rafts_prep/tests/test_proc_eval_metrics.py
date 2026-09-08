@@ -463,11 +463,21 @@ class TestCheckFixNwissiteGageIds(unittest.TestCase):
     def test_invalid_gage_ids_still_bad(self, mock_navigate_byid):
         mock_navigate_byid.side_effect = [Exception("Not Found"), Exception("Still Not Found")]
         df = pd.DataFrame({'basin_id': ['12345678901']})
-        
-        with self.assertLogs(level='WARNING') as cm:
+
+        # level='INFO' (not 'WARNING') so the merged "Consider checking..."
+        # info-level message below is actually captured -- assertLogs raises
+        # the logger's threshold to the level given, so 'WARNING' would have
+        # silently dropped it rather than proving it wasn't logged.
+        with self.assertLogs(level='INFO') as cm:
             result_df = check_fix_nwissite_gageids(df, gage_id_col='basin_id', replace_orig_gage_id_col=False)
-            
+
         self.assertTrue(any("Some gage_id values still not recognized" in log for log in cm.output))
+        # Previously only reachable via a dead `elif len(ls_still_bad) > 0:`
+        # branch; now merged into the same `if` block as the warning above.
+        self.assertTrue(any("Consider checking the following gage_ids" in log for log in cm.output))
+        # ls_still_bad holds the zero-prepended id (ls_prezero's form), not the
+        # original basin_id value.
+        self.assertTrue(any("012345678901" in log for log in cm.output))
         self.assertEqual(result_df.shape[0], 1)
         self.assertIn('fix', result_df.columns)
 
