@@ -297,17 +297,26 @@ class TestProcColSchemaAdditionalBranches(unittest.TestCase):
                 "Expected the metadata .parquet file to be written"
             )
 
-    # NOTE: proc_col_schema also has an `if len(_other_save_dirs) == 0: raise
-    # ValueError(...)` branch (right after the save_type in ('csv', 'parquet')
-    # check). It looks reachable but isn't: _other_save_dirs is only ever
-    # assigned when save_loc == 'local' (via _save_dir_struct), and
-    # _save_dir_struct populates it as non-empty under exactly the same
-    # save_type in ('csv', 'parquet') condition that gates this check. The only
-    # way to reach the check with save_type in ('csv', 'parquet') and
-    # _other_save_dirs unpopulated is save_loc == 'aws', which raises an
-    # UnboundLocalError before ever reaching this line (not the intended
-    # ValueError) since _other_save_dirs was never assigned at all in that
-    # branch. Not a coverage gap to close with a test.
+    def test_save_loc_aws_with_csv_raises_value_error(self):
+        """
+        proc_col_schema has an `if len(_other_save_dirs) == 0: raise
+        ValueError(...)` check right after the save_type in ('csv', 'parquet')
+        branch. It used to be unreachable: _other_save_dirs was only ever
+        assigned inside the save_loc == 'local' branch (via _save_dir_struct),
+        so save_loc == 'aws' left it completely undefined, and this check
+        raised UnboundLocalError instead of the intended ValueError before
+        ever reaching this line. Fixed by initializing _other_save_dirs = {}
+        unconditionally before the save_loc if/elif -- 'aws' now correctly
+        hits this ValueError for save_type in ('csv', 'parquet'), since it
+        has no directory-structure setup of its own yet (still a TODO).
+        """
+        global raw_test_df, exp_config_df
+        cfg = exp_config_df.copy()
+        cfg['save_type'] = 'csv'
+        cfg['save_loc'] = 'aws'
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self.assertRaises(ValueError):
+                proc_col_schema(raw_test_df.copy(), cfg, tmpdir)
 
 class TestProcCheckInputDf(unittest.TestCase):
     def setUp(self):
