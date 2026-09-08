@@ -2133,6 +2133,169 @@ class TestCombineRespGdfComidWrap(unittest.TestCase):
             self.assertIn('gdf_comid', result)
             self.assertEqual(result['gdf_comid'].shape[0], 2)
 
+
+def _write_minimal_attr_config(tmpdir) -> Path:
+    """A minimal, real (not mocked) attr_config.yaml sufficient for
+    AttrConfigAndVars._read_attr_config() and _read_metadata(). Points
+    dir_std_base at a directory with no metadata parquet, so _read_metadata
+    returns None and combine_resp_gdf_comid_wrap takes its dynamic
+    featureID-mapping fallback branch.
+    """
+    tmpdir = Path(tmpdir)
+    cfg = {
+        'attr_select': [{'attr_vars': ['slope']}],
+        'file_io': [
+            {'dir_base': str(tmpdir)},
+            {'dir_db_attrs': '{dir_base}/attrs'},
+            {'dir_std_base': '{dir_base}/std'},  # deliberately not where the test data lives
+            {'ds_type': 'training'},
+            {'path_meta': '{dir_std_base}/{ds}/{ds}_{ds_type}.parquet'},
+        ],
+        'formulation_metadata': [{'datasets': ['test_ds']}],
+        # combine_resp_gdf_comid_wrap accesses attr_config['col_schema'] directly
+        # (not .get()), so this key must exist even though dat_resp.attrs
+        # (set in the fixtures below) is what actually supplies the values.
+        'col_schema': [{'featureID': 'USGS-{gage_id}'}, {'featureSource': 'nwissite'}],
+    }
+    path_cfg = tmpdir / "attr_config.yaml"
+    with open(path_cfg, "w") as f:
+        yaml.safe_dump(cfg, f)
+    return path_cfg
+
+
+class TestCombineRespGdfComidWrapMismatchBranches(unittest.TestCase):
+    """
+    Extends TestCombineRespGdfComidWrap.test_combine_resp_gdf_comid_wrap (whose
+    2-gage, perfectly-aligned fixture never triggers the gage-count mismatch,
+    NA-featureID removal, or 'too many .nc files' branches) with real (not
+    mocked) xr.Dataset/GeoDataFrame objects built directly in a temp dir, sized
+    and shaped to actually exercise those branches.
+
+    NOTE: an earlier version of this class pointed at tests/data/input/
+    user_data_std/juliemai-xSSA/ (a real 220-gage fixture observed on disk).
+    That data turned out to be ephemeral, not a stable fixture: it's generated
+    and torn down by tests/test_rafts_prep_to_pred.py's
+    TestFsPrepProcAttrHydfabFsAlgo class (gated behind the private
+    testdata_20250901 bundle), and disappeared mid-session when that suite ran
+    again elsewhere. Building tests around it produced tests that silently
+    skip whenever that other suite isn't mid-run -- not a reliable coverage
+    source. Real-but-synthetic objects built here, matching the existing
+    test's own idiom, avoid that dependency entirely.
+    """
+
+    def _build_fixture(self, tmpdir, n_gages=20, featureSource='nwissite'):
+        base_dir = Path(tmpdir)
+        ds_dir = base_dir / "test_ds"
+        ds_dir.mkdir()
+        gage_ids = [f"gage_{i:03d}" for i in range(n_gages)]
+
+        dat_resp = xr.Dataset(
+            {"metric1": (("gage_id",), list(range(n_gages)))},
+            coords={"gage_id": gage_ids},
+            attrs={'featureSource': featureSource, 'featureID': 'USGS-{gage_id}'},
+        )
+        dat_resp.to_netcdf(ds_dir / "test_dataset.nc")
+        return base_dir, ds_dir, gage_ids
+
+    def test_too_many_nc_files_raises(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_dir, ds_dir, _ = self._build_fixture(tmpdir)
+            # A second .nc file in the same ds directory.
+            xr.Dataset({"metric1": (("gage_id",), [1.0])}, coords={"gage_id": ["x"]}).to_netcdf(
+                ds_dir / "a_second_copy.nc"
+            )
+            gpd.GeoDataFrame({"gage_id": ["x"], "comid": ["1"]}, geometry=[Point(0, 0)], crs="EPSG:4326") \
+                .to_file(ds_dir / "test_dataset_loc.gpkg", driver="GPKG", layer="outlet")
+
+            path_attr_config = _write_minimal_attr_config(tmpdir)
+            with self.assertRaises(ValueError):
+                raftsutil.combine_resp_gdf_comid_wrap(
+                    dir_std_base=base_dir, ds="test_ds", path_attr_config=path_attr_config
+                )
+
+    def test_gage_count_mismatch_reduces_dat_resp(self):
+        """
+        gdf_comid has fewer gages than dat_resp (5 dropped from the companion
+        GPKG) -- forces the gage-count mismatch warning and the dat_resp
+        reduction. featureSource is set to a non-'nwissite'/'comid' value so
+        rafts_retr_nhdp_comids_geom_wrap takes its offline-only branch
+        regardless of gage coverage -- this test must never touch the network.
+
+        NOTE: the function has a second, narrower warning ("...is less than
+        the number of gage_ids in the response variable...") that only fires
+        if sub_gdf_comid.shape[0] ends up *smaller* than dat_resp's gage count
+        post-reduction. Given unique gage_ids on both sides (the normal case,
+        reproduced here), reduction always brings them to exact equality, so
+        that second warning is effectively unreachable through realistic data.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            n_gages = 20
+            base_dir, ds_dir, gage_ids = self._build_fixture(
+                tmpdir, n_gages=n_gages, featureSource='test_offline_source'
+            )
+
+            # Companion GPKG missing the first 5 gage_ids entirely.
+            surviving_ids = gage_ids[5:]
+            gdf = gpd.GeoDataFrame({
+                "gage_id": surviving_ids,
+                "comid": [f"c{i}" for i in range(len(surviving_ids))],
+            }, geometry=[Point(i, i) for i in range(len(surviving_ids))], crs="EPSG:4326")
+            gdf.to_file(ds_dir / "test_dataset_loc.gpkg", driver="GPKG", layer="outlet")
+
+            path_attr_config = _write_minimal_attr_config(tmpdir)
+            with self.assertLogs(level='WARNING') as cm:
+                result = raftsutil.combine_resp_gdf_comid_wrap(
+                    dir_std_base=base_dir, ds="test_ds", path_attr_config=path_attr_config
+                )
+            log_text = "\n".join(cm.output)
+            self.assertIn("does not match the number of gage_ids", log_text)
+            self.assertEqual(result['dat_resp'].sizes['gage_id'], n_gages - 5)
+
+    def test_na_featureid_removal_via_incomplete_metadata(self):
+        """
+        The NA-featureID-removal branch is only reachable through the
+        df_meta-present path (the dynamic-mapping fallback always computes a
+        fresh, non-null featureID for every gage via string formatting, so it
+        can never produce a NaN to remove). Provides a real metadata parquet
+        file covering only some of dat_resp's gage_ids, so the
+        `.merge(df_meta_map, on='gage_id', how='left')` leaves the
+        uncovered gage_ids with a NaN featureID.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            n_gages = 15
+            base_dir, ds_dir, gage_ids = self._build_fixture(
+                tmpdir, n_gages=n_gages, featureSource='test_offline_source'
+            )
+            # Companion GPKG covers every gage (no count mismatch here).
+            gdf = gpd.GeoDataFrame({
+                "gage_id": gage_ids,
+                "comid": [f"c{i}" for i in range(n_gages)],
+            }, geometry=[Point(i, i) for i in range(n_gages)], crs="EPSG:4326")
+            gdf.to_file(ds_dir / "test_dataset_loc.gpkg", driver="GPKG", layer="outlet")
+
+            # Real metadata parquet, covering only 12 of the 15 gage_ids, at
+            # the exact path _read_metadata resolves to.
+            path_attr_config = _write_minimal_attr_config(tmpdir)
+            meta_dir = Path(tmpdir) / "std" / "test_ds"  # matches file_io's dir_std_base: '{dir_base}/std'
+            meta_dir.mkdir(parents=True)
+            covered_ids = gage_ids[:12]
+            pd.DataFrame({
+                'gage_id': covered_ids,
+                'featureID': [f"USGS-{g}" for g in covered_ids],
+                'featureSource': ['test_offline_source'] * len(covered_ids),
+            }).to_parquet(meta_dir / "test_ds_training.parquet")
+
+            with self.assertLogs(level='INFO') as cm:
+                result = raftsutil.combine_resp_gdf_comid_wrap(
+                    dir_std_base=base_dir, ds="test_ds", path_attr_config=path_attr_config
+                )
+            log_text = "\n".join(cm.output)
+            self.assertIn("returned location IDs are NA values", log_text)
+            # 15 gages - 3 uncovered by metadata (NaN featureID, removed) = 12
+            self.assertEqual(result['dat_resp'].sizes['gage_id'], 12)
+            self.assertFalse(result['gdf_comid']['featureID'].isna().any())
+
+
 class TestSimpleUtilities(unittest.TestCase):
     
     def test_check_attr_rm_dupes(self):
