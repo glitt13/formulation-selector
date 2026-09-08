@@ -9,6 +9,7 @@ ds_type: 'prediction'
 write_type: 'parquet'
 path_meta: "../../data/jul26_cal_hf4_predictors_9locations_final.parquet" # hfATLAS-formatted divide-level predictors for the 9-gage rapid test subset
 pred_file_comid_colname: 'divide_id'
+featureSource: 'hfv4_divides_raw' # raw hfv4 divide-level predictors, no basin aggregation at prediction time -- deliberately distinct from hfatl_prep_config.yaml's training-time featureSource ('hfv4_test_id').
 algo_response_vars:
   - 'cluster_labels'
 algo_type:

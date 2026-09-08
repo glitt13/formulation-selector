@@ -57,16 +57,18 @@ TRAIN_ATTRS = next(
 )
 assert len(TRAIN_ATTRS) == N_TRAIN_ATTRS
 
-# The training-side featureSource, per hfatl_prep_config.yaml's col_schema.
-# rafts_pred_algo.py inherits this same value for prediction output too (it
-# reads featureSource from the prep config linked via name_prep_config, not
-# from anything prediction-specific) -- so prediction rows here also carry
-# 'hfv4_divides_basin', even though the actual prediction data underneath
-# (jul26_cal_hf4_predictors_9locations_final.parquet) is raw, unaggregated
-# divide-level hfATLAS data, not basin-aggregated. Asserted below as
-# documented *current* behavior, not a claim that it's the semantically
-# correct tag -- flagging this mismatch is the point of the assertion.
-EXPECTED_FEATURESOURCE = "hfv4_divides_basin"
+# Training and prediction featureSource are deliberately distinct here:
+# training is on USGS gage-basin-aggregated attributes (hfatl_prep_config.yaml's
+# col_schema), while prediction runs directly on raw, unaggregated divide-level
+# hfATLAS data (jul26_cal_hf4_predictors_9locations_final.parquet) -- the two
+# are independent scales, not the same tag reused. rafts_pred_algo.py used to
+# silently inherit the training-time value for prediction output regardless
+# (it read featureSource from the prep config linked via name_prep_config,
+# with nothing prediction-specific); it now prefers the prediction config's
+# own featureSource (hfatl_pred_config.yaml) when set, falling back to the
+# training-time value only for configs that don't set one.
+EXPECTED_TRAIN_FEATURESOURCE = "hfv4_test_id"
+EXPECTED_PRED_FEATURESOURCE = "hfv4_divides_raw"
 
 
 @pytest.fixture(scope="class", autouse=True)
@@ -164,8 +166,8 @@ class TestRegionalizationPipeline:
         # expect no NaNs at all.
         n_na = df["value"].isna().sum()
         assert n_na == 0, f"Expected no NaN aggregated attribute values, got {n_na}"
-        assert set(df["featureSource"].unique()) == {EXPECTED_FEATURESOURCE}, (
-            f"Expected featureSource == {EXPECTED_FEATURESOURCE!r}, got {df['featureSource'].unique()}"
+        assert set(df["featureSource"].unique()) == {EXPECTED_TRAIN_FEATURESOURCE}, (
+            f"Expected featureSource == {EXPECTED_TRAIN_FEATURESOURCE!r}, got {df['featureSource'].unique()}"
         )
 
         gpkg_files = list(DIR_STD_BASE.glob("*_loc.gpkg"))
@@ -230,11 +232,12 @@ class TestRegionalizationPipeline:
             assert df["prediction"].nunique() <= k, (
                 f"{algo}: expected at most {k} distinct cluster labels, got {df['prediction'].nunique()}"
             )
-            # build_schema_df_pred's remaining required columns/values.
-            assert set(df["featureSource"].unique()) == {EXPECTED_FEATURESOURCE}, (
-                f"{algo}: expected featureSource == {EXPECTED_FEATURESOURCE!r}, got {df['featureSource'].unique()}. "
-                f"(Inherited from hfatl_prep_config.yaml's col_schema via name_prep_config -- rafts_pred_algo.py "
-                f"does not currently distinguish training-time vs. prediction-time featureSource.)"
+            # build_schema_df_pred's remaining required columns/values. Deliberately
+            # NOT the training featureSource (EXPECTED_TRAIN_FEATURESOURCE) --
+            # confirms rafts_pred_algo.py picks up hfatl_pred_config.yaml's own
+            # featureSource rather than silently inheriting the training-time value.
+            assert set(df["featureSource"].unique()) == {EXPECTED_PRED_FEATURESOURCE}, (
+                f"{algo}: expected featureSource == {EXPECTED_PRED_FEATURESOURCE!r}, got {df['featureSource'].unique()}"
             )
             assert set(df["resp_var"].unique()) == {"cluster_labels"}, f"{algo}: unexpected resp_var value(s)"
             assert set(df["dataset"].unique()) == {DATASET}, f"{algo}: unexpected dataset value(s)"

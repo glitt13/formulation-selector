@@ -446,6 +446,14 @@ class PredConfigParser:
         path_crosswalk_ids = pred_cfg.get('path_crosswalk_ids',None)
         crosswalk_target_col = pred_cfg.get('crosswalk_target_col',None) # Oftentimes 'divide_id' for hydrofabric applications
         overwrite_sql = pred_cfg.get('overwrite_sql', False)
+        # Prediction-time featureSource: independent of the training-time
+        # value in the attribute/prep config. Predictions may legitimately be
+        # made at a different spatial scale than training was performed on
+        # (e.g. trained on USGS gage-basin-aggregated attributes, predicting
+        # at HUC10/HUC14/divide scale), so rafts_pred_algo.py must not assume
+        # the two are the same. None here means "not explicitly set" --
+        # callers fall back to the training-time value only if this is unset.
+        featureSource = pred_cfg.get('featureSource', None)
         path_hf_finl_gpkg = pred_cfg.get('path_hf_finl_gpkg', None)
         layr_hf_finl_gpkg = pred_cfg.get('layr_hf_finl_gpkg',None)
         algo_select = pred_cfg.get('algo_select', None)
@@ -479,7 +487,8 @@ class PredConfigParser:
             'layr_hf_finl_gpkg':layr_hf_finl_gpkg,
             'overwrite_sql': overwrite_sql,
             'algo_select': algo_select,
-        }   
+            'featureSource': featureSource,
+        }
 
 def _make_home_dir(home_dir_read:str|os.PathLike=[])-> os.PathLike:
     """Make the home directory based on what is passed or use default
