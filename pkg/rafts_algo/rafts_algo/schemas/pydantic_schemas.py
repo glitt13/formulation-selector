@@ -1,4 +1,3 @@
-
 from typing import Any, Dict, Optional, Tuple, List, Union
 from pydantic import BaseModel, field_validator, model_validator
 import numpy as np
@@ -23,6 +22,8 @@ class AlgoConfig(BaseModel):
     same_test_ids: bool = True
     metrics: Optional[List[str]] = None
     uncertainty: Optional[Dict[str, Any]] = None
+    n_jobs: Optional[int] = 1
+    save_all_clusters: bool = False
 
 class PredConfig(BaseModel):
     """
@@ -55,6 +56,7 @@ class PredConfig(BaseModel):
     hf_fp_id_col: str = 'id'
     fp_toid_col: str = 'toid'
     map_divide_id_col: str = 'divide_id'
+
 # %% Pydantic model pipeline validation 
 
 class UncertaintyConfig(BaseModel):
@@ -78,7 +80,7 @@ class ModelMetadata(BaseModel):
     """
     pipeline: Any #BaseEstimator # Should be a sklearn object (e.g. pipeline, model_selection )
     X_train_shape: Optional[Tuple[int, int]] # Required for ForestCI
-    mapie: Optional[Any] = None#Optional[MapieRegressor] = None # The MAPIE regressor object (not just config)
+    mapie: Optional[Any] = None #Optional[MapieRegressor] = None # The MAPIE regressor object (not just config)
     Uncertainty: Optional[Dict[str, Any]] = None # The uncertainty configuration dict
 
     @field_validator("X_train_shape")
