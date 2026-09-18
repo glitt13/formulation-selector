@@ -17,6 +17,7 @@ Usage:
 2025-12-01 refactor: Formalized loading, processing, and writing into utility functions, Soroush Sorourian with the help of AI.
 2025-12-08 refactor: Updated dynamic metric loading logic to be retrieved from the prediction config, Soroush Sorourian
 2026-07-21 fix: read custom prediction dataset dir from path_pred_locs via read_hfatlas_wrap_dask, GL
+2026-09-18 refactor: Integrate Pydantic PredConfig schema validation to structurally enforce config typing.
 """
 
 import argparse
@@ -30,9 +31,11 @@ from logging.handlers import MemoryHandler
 import logging
 import rafts_prep.proc_eval_metrics as pem
 import numpy as np
+import yaml
 
 import rafts_algo.rafts_algo_train as raftsalgt 
 from rafts_algo.rafts_algo_train import UniversalDistanceClusterer
+from rafts_algo.schemas.pydantic_schemas import PredConfig
 
 # Imports for validation
 import importlib.util
@@ -66,19 +69,27 @@ if __name__ == "__main__":
                 {path_pred_config.parent / path_pred_config.name} config file")
     # ---   
         
+    # --- 1. Pydantic validation
+    with open(path_pred_config, 'r') as file:
+        raw_pred_cfg = yaml.safe_load(file)
+    validated_pred_cfg = PredConfig(**raw_pred_cfg)
+
+    # --- 2. Legacy parser initialization 
     pred_cfg = raftsutil.PredConfigParser(path_pred_config)
     pred_cfg._read_pred_config()
     
+    # Extract top-level scalars strictly from Pydantic model
+    uncn_bnd_pred = validated_pred_cfg.uncn_bnd_pred
+    
     # READ rafts_categories.yaml if uncn_bnd_pred is True
-    uncn_bnd_pred = pred_cfg.pred_cfg_dict.get('uncn_bnd_pred')
     logging.info("Reading uncertainty bounds from rafts_categories.yaml...")
 
     rafts_catg_uncn = pem._conv_ls_dicts_df_long()
     logging.info("Successfully loaded uncertainty bounds.")
 
     #%%  READ CONTENTS FROM THE ATTRIBUTE CONFIG
-    path_attr_config = raftsutil.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_attr_config'))
-    path_algo_config = raftsutil.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_algo_config'))
+    path_attr_config = raftsutil.build_cfig_path(path_pred_config, validated_pred_cfg.name_attr_config)
+    path_algo_config = raftsutil.build_cfig_path(path_pred_config, validated_pred_cfg.name_algo_config)
 
     attr_cfig = raftsutil.AttrConfigAndVars(path_attr_config)
     attr_cfig._read_attr_config()
@@ -171,14 +182,14 @@ if __name__ == "__main__":
     dir_out = raftsutil.rafts_save_algo_dir_struct(dir_base).get('dir_out')
     dir_out_alg_base = raftsutil.rafts_save_algo_dir_struct(dir_base).get('dir_out_alg_base')
     #%% PREDICTION FILE'S COMIDS (IMPLICIT ASSUMPTION: Each dataset processes the same IDS)
-    path_meta_pred = pred_cfg.pred_cfg_dict.get('path_meta')
-    comid_pred_col = pred_cfg.pred_cfg_dict.get('pred_file_comid_colname')
-    write_type = pred_cfg.pred_cfg_dict.get('write_type','parquet')
-    ds_type = pred_cfg.pred_cfg_dict.get('ds_type')
+    path_meta_pred = validated_pred_cfg.path_meta
+    comid_pred_col = validated_pred_cfg.pred_file_comid_colname
+    write_type = validated_pred_cfg.write_type
+    ds_type = validated_pred_cfg.ds_type
     
     #%% prediction config
-    resp_vars = pred_cfg.pred_cfg_dict.get('algo_response_vars')
-    algos = pred_cfg.pred_cfg_dict.get('algo_type')
+    resp_vars = validated_pred_cfg.algo_response_vars
+    algos = validated_pred_cfg.algo_type
 
     #%% Run prediction
     for ds in datasets:
@@ -319,7 +330,7 @@ if __name__ == "__main__":
                     df_pred['forestci'] = forest_ci
         
                 # If MAPIE is available, compute prediction intervals
-                mapie_alpha = pred_cfg.pred_cfg_dict.get('mapie_alpha')
+                mapie_alpha = validated_pred_cfg.MAPIE_alpha
                 if 'mapie' in pipeline_data and mapie_alpha:
                     mapie = pipeline_data['mapie']
                     y_pred_mapie, y_pis = mapie.predict(df_attr_sub_rmna, alpha=mapie_alpha)
