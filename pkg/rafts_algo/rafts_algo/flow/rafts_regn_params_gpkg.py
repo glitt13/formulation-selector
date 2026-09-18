@@ -13,6 +13,9 @@ filters algorithms using wildcard matching from 'algo_select'.
 
 Usage:
     >>> python rafts_regn_params_gpkg.py "/path/to/pred_config.yaml"
+
+Changelog / Contributions:
+2026-09-18 Refactored to integrate Pydantic PredConfig schema validation.
 """
 
 import argparse
@@ -22,9 +25,11 @@ import logging
 import sys
 import shutil
 import fnmatch
+import yaml
 
 import rafts_algo.utils as raftsutil
 import rafts_prep.proc_eval_metrics as pem
+from rafts_algo.schemas.pydantic_schemas import PredConfig
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Write regionalized parameters to a standalone GeoPackage.')
@@ -36,16 +41,21 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     logging.info(f"Running rafts_regn_params_gpkg.py using {path_pred_config.name}")
 
-    # --- Parse Configurations ---
+    # --- Pydantic Validation ---
+    with open(path_pred_config, 'r') as f:
+        pred_yaml = yaml.safe_load(f)
+    validated_pred_cfg = PredConfig(**pred_yaml)
+
+    # --- Parse Configurations (Legacy parser retained for f-string context) ---
     pred_cfg = raftsutil.PredConfigParser(path_pred_config)
     pred_cfg._read_pred_config()
 
-    path_attr_config = raftsutil.build_cfig_path(path_pred_config, pred_cfg.pred_cfg_dict.get('name_attr_config'))
+    path_attr_config = raftsutil.build_cfig_path(path_pred_config, validated_pred_cfg.name_attr_config)
     attr_cfig = raftsutil.AttrConfigAndVars(path_attr_config)
     attr_cfig._read_attr_config()
 
     # Load Algo Config to determine if we are doing Supervised or Unsupervised writing
-    path_algo_config = raftsutil.build_cfig_path(path_pred_config, pred_cfg.pred_cfg_dict.get('name_algo_config'))
+    path_algo_config = raftsutil.build_cfig_path(path_pred_config, validated_pred_cfg.name_algo_config)
     algo_cfig = raftsutil.AlgoConfigParser(path_algo_config)
     algo_cfig._read_algo_config()
     task_type = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"].get("task_type", "regression")
@@ -63,13 +73,14 @@ if __name__ == "__main__":
         'home_dir': str(home_dir),
     }
 
-    # Fetch configuration variables
-    overwrite_sql = pred_cfg.pred_cfg_dict.get('overwrite_sql', False)
-    base_algos = pred_cfg.pred_cfg_dict.get('algo_type', [])
-    resp_vars = pred_cfg.pred_cfg_dict.get('algo_response_vars', [])
-    pred_gpkg_id_col = pred_cfg.pred_cfg_dict.get('pred_gpkg_id_col', 'featureID')
-    crosswalk_target_col = pred_cfg.pred_cfg_dict.get('crosswalk_target_col')
-    algo_select = pred_cfg.pred_cfg_dict.get('algo_select', [])
+    # Fetch validated configuration variables directly from Pydantic
+    overwrite_sql = validated_pred_cfg.overwrite_sql
+    base_algos = validated_pred_cfg.algo_type or []
+    resp_vars = validated_pred_cfg.algo_response_vars or []
+    pred_gpkg_id_col = validated_pred_cfg.pred_gpkg_id_col or 'featureID'
+    crosswalk_target_col = validated_pred_cfg.crosswalk_target_col
+    
+    algo_select = validated_pred_cfg.algo_select or []
     if isinstance(algo_select, str):
         algo_select = [algo_select]
 
@@ -91,7 +102,7 @@ if __name__ == "__main__":
     dir_regionalization_sub.mkdir(parents=True, exist_ok=True)
     
     # Initialize Master GPKG Path
-    path_hf_finl_gpkg_raw = pred_cfg.pred_cfg_dict.get('path_hf_finl_gpkg')
+    path_hf_finl_gpkg_raw = validated_pred_cfg.path_hf_finl_gpkg
     if not path_hf_finl_gpkg_raw:
         logging.error("No 'path_hf_finl_gpkg' found in prediction config.")
         sys.exit(1)
@@ -208,7 +219,7 @@ if __name__ == "__main__":
 
                 logging.info(f"Compiling supervised predictions for algorithm: {algo}")
                 df_compiled_params = pd.DataFrame()
-                id_col_pred = pred_cfg.pred_cfg_dict.get('pred_file_comid_colname', 'featureID')
+                id_col_pred = validated_pred_cfg.pred_file_comid_colname
                 
                 # Compile all parameter predictions into a single wide DataFrame
                 for resp_var in resp_vars:
@@ -237,8 +248,8 @@ if __name__ == "__main__":
                     continue
                     
                 # OPTIONAL CROSSWALK MAPPING
-                path_crosswalk_ids_raw = pred_cfg.pred_cfg_dict.get('path_crosswalk_ids')
-                pred_gpkg_id_col = pred_cfg.pred_cfg_dict.get('pred_gpkg_id_col')
+                path_crosswalk_ids_raw = validated_pred_cfg.path_crosswalk_ids
+                pred_gpkg_id_col = validated_pred_cfg.pred_gpkg_id_col
                 
                 if path_crosswalk_ids_raw:
                     path_crosswalk_ids = Path(raftsutil.resolve_fstrings(path_crosswalk_ids_raw, context))
