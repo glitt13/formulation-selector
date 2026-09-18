@@ -8,6 +8,7 @@ Example:
 
 Changelog/Contributions
 2026-05-08 refactor: Adapt rafts_proc_algo_viz to this parallelization structure, GL
+2026-09-18 refactor: Integrate Pydantic AlgoConfig schema validation to structurally enforce config typing.
 """
 import argparse
 import pandas as pd
@@ -28,10 +29,10 @@ import sys
 import gc
 
 import copy
-import gc
 import itertools
 import concurrent.futures
-
+import yaml
+from rafts_algo.schemas.pydantic_schemas import AlgoConfig
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description = 'process the algorithm config file')
@@ -63,29 +64,38 @@ if __name__ == "__main__":
     
     # ---
     logging.info("BEGINNING algorithm training, testing, & evaluation.")
+    
+    # Initialize Pydantic validation for the config
+    with open(path_algo_config, 'r') as file:
+        raw_algo_cfg = yaml.safe_load(file)
+    validated_algo_cfg = AlgoConfig(**raw_algo_cfg)
+    
     # Initialize algo configuration class for extracting attributes
     algo_cfig = raftsutil.AlgoConfigParser(path_algo_config)
     algo_cfig._read_algo_config()
 
-    # Extract variables from dictionary created by AlgoConfigParser
+    # Extract variables from dictionary created by AlgoConfigParser (for deep grid search dicts)
     algo_config = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["algo_config"]
 
     # Generate variable algo_config_og
     algo_config_og = algo_config.copy()
 
-    verbose = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["verbose"]
-    test_size = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["test_size"]
-    seed = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["seed"]
-    read_type = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["read_type"] # Arg for how to read attribute data using comids in rafts_read_attr_comid(). May be 'all' or 'filename'.
-    metrics = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["metrics"]
-    make_plots = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["make_plots"]
-    same_test_ids = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["same_test_ids"]
-    path_attr_config = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["path_attr_config"]
-    uncertainty_cfg = algo_cfig.algo_cfg_unc_dict["algo_unc_dict"]["uncertainty_cfg"]
-    confidence_levels = algo_cfig.algo_cfg_unc_dict["algo_unc_dict"]["uncertainty_cfg"].get("confidence_levels")
-    uncn_bnd_algo = algo_cfig.algo_cfg_unc_dict["algo_unc_dict"]["uncertainty_cfg"].get("uncn_bnd_algo",False)
-    n_jobs_cfg = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"].get("n_jobs",1) # The total number of jobs for GridSearchCV. Preferably n_jobs = 1 when pooling.
-    n_jobs = 1 if n_jobs_cfg is None else n_jobs_cfg
+    # Extract top-level scalars strictly from Pydantic model
+    verbose = validated_algo_cfg.verbose
+    test_size = validated_algo_cfg.test_size
+    seed = validated_algo_cfg.seed
+    read_type = validated_algo_cfg.read_type # Arg for how to read attribute data using comids in rafts_read_attr_comid(). May be 'all' or 'filename'.
+    metrics = validated_algo_cfg.metrics
+    make_plots = validated_algo_cfg.make_plots
+    same_test_ids = validated_algo_cfg.same_test_ids
+    n_jobs = validated_algo_cfg.n_jobs or 1
+    save_all_clusters = validated_algo_cfg.save_all_clusters
+
+    uncertainty_cfg = validated_algo_cfg.uncertainty or {}
+    confidence_levels = uncertainty_cfg.get("confidence_levels", [95])
+    uncn_bnd_algo = uncertainty_cfg.get("uncn_bnd_algo", False)
+    
+    path_attr_config = raftsutil.build_cfig_path(path_algo_config, validated_algo_cfg.name_attr_config)
 
     #%% Attribute configuration
     # Initialize attribute configuration class for extracting attributes
@@ -98,8 +108,8 @@ if __name__ == "__main__":
 
     # Grab the attributes of interest from the attribute config file,
     #  OR a .csv file if specified in the algo config file.
-    name_attr_csv = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["name_attr_csv"]
-    colname_attr_csv = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["colname_attr_csv"]
+    name_attr_csv = validated_algo_cfg.name_attr_csv
+    colname_attr_csv = validated_algo_cfg.colname_attr_csv
     attrs_sel = raftsutil.read_validated_attribute_selection(
         attr_cfig=attr_cfig,
         path_cfig=path_algo_config, 
@@ -291,7 +301,7 @@ if __name__ == "__main__":
         plt.close('all')
         gc.collect()
         # %% Train, test, and evaluate
-        task_type = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"].get("task_type", "regression")
+        task_type = validated_algo_cfg.task_type
         # Override metrics if clustering (we don't need real metrics)
         if task_type == 'clustering':
             metrics = ['cluster_labels']
@@ -344,7 +354,7 @@ if __name__ == "__main__":
                 'seed': seed, 'col_locid': col_locid, 'verbose': verbose,
                 'confidence_levels': confidence_levels, 'uncn_bnd_algo': uncn_bnd_algo,
                 'min_lim': min_lim, 'max_lim': max_lim, 'make_plots': make_plots,
-                'save_all_clusters': algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"].get('save_all_clusters', False),
+                'save_all_clusters': save_all_clusters,
                 'dir_out_viz_base': dir_out_viz_base, 'dir_out_anlys_base': dir_out_anlys_base,
                 'gdf_comid': gdf_comid,'test_ids': test_ids,'n_jobs':n_jobs,
             }
