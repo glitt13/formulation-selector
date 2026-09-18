@@ -11,6 +11,7 @@ Example:
     2026-05-01 adapted to support dynamic ID joins for hfATLAS and mapie uncertainties
     2026-07-21 add custom pred gpkg capability, GL
     2026-08-07 feat: auto-generate divide-level map if crosswalk and master GPKG are present, Gemini3.1Pro
+    2026-09-18 refactor: Integrate Pydantic PredConfig schema validation.
 """
 import argparse
 import pandas as pd
@@ -22,6 +23,9 @@ import logging
 from logging.handlers import MemoryHandler
 import rafts_prep.proc_eval_metrics as pem
 import gc
+import yaml
+
+from rafts_algo.schemas.pydantic_schemas import PredConfig
 
 # Predict values and evaluate predictions
 if __name__ == "__main__":
@@ -42,20 +46,26 @@ if __name__ == "__main__":
     
     analysis_str = args.analysis_str
 
+    # --- Pydantic Validation ---
+    with open(path_pred_config, 'r') as f:
+        pred_yaml = yaml.safe_load(f)
+    validated_pred_cfg = PredConfig(**pred_yaml)
+
+    # --- Legacy Parsing ---
     pred_cfg = raftsutil.PredConfigParser(path_pred_config)
     pred_cfg._read_pred_config()
 
-    #%% prediction config var extract
-    resp_vars = pred_cfg.pred_cfg_dict.get('algo_response_vars')
-    algos = pred_cfg.pred_cfg_dict.get('algo_type')
-    path_gpkg_pred = pred_cfg.pred_cfg_dict.get('path_gpkg_pred',None)
-    pred_gpkg_lyr = pred_cfg.pred_cfg_dict.get('pred_gpkg_lyr', None)
-    pred_gpkg_id_col = pred_cfg.pred_cfg_dict.get('pred_gpkg_id_col',None)
-    crosswalk_target_col = pred_cfg.pred_cfg_dict.get('crosswalk_target_col')
+    #%% prediction config var extract (Via Pydantic where applicable)
+    resp_vars = validated_pred_cfg.algo_response_vars
+    algos = validated_pred_cfg.algo_type
+    path_gpkg_pred = validated_pred_cfg.path_gpkg_pred
+    pred_gpkg_lyr = validated_pred_cfg.pred_gpkg_lyr
+    pred_gpkg_id_col = validated_pred_cfg.pred_gpkg_id_col
+    crosswalk_target_col = validated_pred_cfg.crosswalk_target_col
 
     #%%  READ CONTENTS FROM THE ATTRIBUTE CONFIG
-    path_attr_config = raftsutil.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_attr_config',None))
-    path_algo_config = raftsutil.build_cfig_path(pred_cfg.pred_cfg_dict.get('path_pred_config'),pred_cfg.pred_cfg_dict.get('name_algo_config'))
+    path_attr_config = raftsutil.build_cfig_path(path_pred_config, validated_pred_cfg.name_attr_config)
+    path_algo_config = raftsutil.build_cfig_path(path_pred_config, validated_pred_cfg.name_algo_config)
 
     algo_cfig = raftsutil.AlgoConfigParser(path_algo_config)
     algo_cfig._read_algo_config()
@@ -87,10 +97,10 @@ if __name__ == "__main__":
     logging.info(f"Writing logs to {path_log}")
     root_logger.removeHandler(memory_handler) 
     # -------------------------------------------------------------------------
-    path_hf_finl_gpkg_raw = pred_cfg.pred_cfg_dict.get('path_hf_finl_gpkg')
-    layr_hf_finl_gpkg = pred_cfg.pred_cfg_dict.get('path_hf_finl_gpkg')
-    path_crosswalk_ids_raw = pred_cfg.pred_cfg_dict.get('path_crosswalk_ids')
-
+    
+    path_hf_finl_gpkg_raw = validated_pred_cfg.path_hf_finl_gpkg
+    layr_hf_finl_gpkg = validated_pred_cfg.layr_hf_finl_gpkg
+    path_crosswalk_ids_raw = validated_pred_cfg.path_crosswalk_ids
 
     for ds in datasets: 
         print(f"Mapping predictions for {ds} dataset")
@@ -159,7 +169,7 @@ if __name__ == "__main__":
             dir_preds_ds = Path(dir_out) / 'algorithm_predictions' / ds
             dynamic_algos = raftsutil.discover_dynamic_algos(
                 search_dir=dir_preds_ds,
-                base_algos=pred_cfg.pred_cfg_dict.get('algo_type'),
+                base_algos=algos,
                 metric=metr,
                 dataset_id=ds,
                 file_prefix="pred_",
