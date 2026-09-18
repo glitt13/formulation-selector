@@ -110,14 +110,18 @@ schema_gdf_comid = DataFrameSchema({
 # --- C. Training Evaluation Results ---
 def build_schema_rslt_eval_df(valid_metrics: List[str]) -> pa.DataFrameSchema:
     return pa.DataFrameSchema({
-        "algorithm": Column(pa.String,checks=Check.isin(["rf", "mlp"]),nullable=False),
-        "type": Column(pa.String,nullable=False),
-        "metric": Column(pa.String, checks=Check.isin(valid_metrics), nullable=False),
-        "mse": Column(pa.Float,nullable=False),
-        "r2": Column(pa.Float,nullable=False),
-        "dataset": Column(pa.String,nullable=False),
-        "file_pipe": Column(pa.String,checks=Check.str_matches(r".+\.joblib$"),nullable=False),
-        "algo": Column(pa.String,checks=Check.isin(["rf", "mlp"]),nullable=False),
+        "algorithm": Column(pa.String, nullable=False),
+        "type": Column(pa.String, nullable=False),
+        "metric": Column(pa.String, checks=Check.isin(valid_metrics) if valid_metrics else None, nullable=False),
+        
+        "mse": Column(pa.Float, nullable=True, required=False),
+        "r2": Column(pa.Float, nullable=True, required=False),
+        "silhouette_score": Column(pa.Float, nullable=True, required=False),
+        "davies_bouldin_score": Column(pa.Float, nullable=True, required=False),
+        
+        "dataset": Column(pa.String, nullable=False),
+        "file_pipe": Column(pa.String, checks=Check.str_matches(r".+\.joblib$"), nullable=False),
+        "algo": Column(pa.String, nullable=False),
     },
     coerce=True,strict=False,name="RsltEvalDF"
 )
