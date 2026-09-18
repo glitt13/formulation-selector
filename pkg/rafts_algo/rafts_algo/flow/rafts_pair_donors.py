@@ -6,6 +6,7 @@ cluster and then finding the donor basin within each cluster at the nearest eucl
 
 Changelog / Contributions
  2026-07-21 Originally created, GL with heavy consultation from Gemini3.1Pro
+ 2026-09-18 Refactored to integrate Pydantic PredConfig and AlgoConfig schema validation.
 """
 import argparse
 import pandas as pd
@@ -14,11 +15,14 @@ import logging
 from logging.handlers import MemoryHandler
 import sys
 import numpy as np
+import yaml
 
 import rafts_algo.utils as raftsutil
 import rafts_prep.proc_eval_metrics as pem
 import rafts_algo.rafts_algo_train as raftsat
 import sqlite3
+
+from rafts_algo.schemas.pydantic_schemas import PredConfig, AlgoConfig
 
 """
 Workflow script to pair ungauged receiver basins with gauged donor basins
@@ -42,12 +46,21 @@ if __name__ == "__main__":
     root_logger.setLevel(logging.INFO)
     logging.info(f"Running rafts_pair_donors.py with {path_pred_config.name}")
 
-    # --- Parse Configurations ---
+    # --- Pydantic Validation ---
+    with open(path_pred_config, 'r') as f:
+        pred_yaml = yaml.safe_load(f)
+    validated_pred_cfg = PredConfig(**pred_yaml)
+
+    path_attr_config = raftsutil.build_cfig_path(path_pred_config, validated_pred_cfg.name_attr_config)
+    path_algo_config = raftsutil.build_cfig_path(path_pred_config, validated_pred_cfg.name_algo_config)
+
+    with open(path_algo_config, 'r') as f:
+        algo_yaml = yaml.safe_load(f)
+    validated_algo_cfg = AlgoConfig(**algo_yaml)
+
+    # --- Parse Configurations (Legacy parsing to retain f-string resolution) ---
     pred_cfg = raftsutil.PredConfigParser(path_pred_config)
     pred_cfg._read_pred_config()
-
-    path_attr_config = raftsutil.build_cfig_path(path_pred_config, pred_cfg.pred_cfg_dict.get('name_attr_config'))
-    path_algo_config = raftsutil.build_cfig_path(path_pred_config, pred_cfg.pred_cfg_dict.get('name_algo_config'))
 
     attr_cfig = raftsutil.AttrConfigAndVars(path_attr_config)
     attr_cfig._read_attr_config()
@@ -55,7 +68,8 @@ if __name__ == "__main__":
     algo_cfig = raftsutil.AlgoConfigParser(path_algo_config)
     algo_cfig._read_algo_config()
     
-    task_type = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"].get("task_type", "regression")
+    # Extract validated top-level scalars
+    task_type = validated_algo_cfg.task_type
     if task_type != 'clustering':
         logging.error("Donor pairing currently requires clustering predictions. Exiting.")
         sys.exit(1)
@@ -66,7 +80,7 @@ if __name__ == "__main__":
     datasets = attr_cfig.attrs_cfg_dict.get('datasets')
     home_dir = attr_cfig.attrs_cfg_dict.get('home_dir')
     
-    id_col_pred = pred_cfg.pred_cfg_dict.get('pred_file_comid_colname')
+    id_col_pred = validated_pred_cfg.pred_file_comid_colname
     context = {
         'dir_base': str(dir_base),
         'dir_std_base': str(dir_std_base),
@@ -74,7 +88,7 @@ if __name__ == "__main__":
         'home_dir': str(home_dir),
     }
 
-    path_meta_raw = pred_cfg.pred_cfg_dict.get('path_meta')
+    path_meta_raw = validated_pred_cfg.path_meta
     path_meta = Path(raftsutil.resolve_fstrings(path_meta_raw, context))
     if not path_meta.exists():
         logging.error(f"Training metadata missing: {path_meta}. Cannot identify donors.")
@@ -87,9 +101,9 @@ if __name__ == "__main__":
     dir_regionalization = Path(dir_out) / "regionalization"
     dir_regionalization.mkdir(exist_ok=True)
 
-    # Resolve Attributes
-    name_attr_csv = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["name_attr_csv"]
-    colname_attr_csv = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["colname_attr_csv"]
+    # Resolve Attributes using validated config
+    name_attr_csv = validated_algo_cfg.name_attr_csv
+    colname_attr_csv = validated_algo_cfg.colname_attr_csv
     attrs_sel = raftsutil._id_attrs_sel_wrap(attr_cfig=attr_cfig, path_cfig=path_attr_config, 
                                           name_attr_csv=name_attr_csv, colname_attr_csv=colname_attr_csv)
 
@@ -103,8 +117,8 @@ if __name__ == "__main__":
             break
     root_logger.removeHandler(memory_handler)
 
-    resp_vars = pred_cfg.pred_cfg_dict.get('algo_response_vars')
-    algos = pred_cfg.pred_cfg_dict.get('algo_type')
+    resp_vars = validated_pred_cfg.algo_response_vars
+    algos = validated_pred_cfg.algo_type
 
     # --- Processing ---
     for ds in datasets:
@@ -292,10 +306,10 @@ if __name__ == "__main__":
                         logging.info(f"Saved assigned receiver parameters to {path_params_out}")
 
                         # 8. OPTIONAL CROSSWALK MAPPING
-                        # Fetch from the pre-parsed prediction configuration dictionary
-                        path_crosswalk_ids_raw = pred_cfg.pred_cfg_dict.get('path_crosswalk_ids')
-                        crosswalk_target_col = pred_cfg.pred_cfg_dict.get('crosswalk_target_col') # The target id column in the crosswalk file (e.g. 'divide_id')
-                        pred_gpkg_id_col = pred_cfg.pred_cfg_dict.get('pred_gpkg_id_col')
+                        # Fetch from the pre-parsed prediction configuration using validated schema
+                        path_crosswalk_ids_raw = validated_pred_cfg.path_crosswalk_ids
+                        crosswalk_target_col = validated_pred_cfg.crosswalk_target_col # The target id column in the crosswalk file (e.g. 'divide_id')
+                        pred_gpkg_id_col = validated_pred_cfg.pred_gpkg_id_col
                         
                         if path_crosswalk_ids_raw:
                             # Safely resolve any f-strings (like {dir_std_base}) in the path
@@ -366,3 +380,4 @@ if __name__ == "__main__":
 
     logging.info("FINISHED Donor-Receiver Pairing & Parameter Assignment.")
     logging.shutdown()
+    
