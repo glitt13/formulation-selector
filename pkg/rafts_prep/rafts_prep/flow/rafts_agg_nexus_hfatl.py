@@ -9,6 +9,9 @@ Aggregate hfATLAS attributes by custom nexus-gage identifiers or full-domain nex
 :usage: 
 uv run python rafts_agg_nexus_hfatl.py --path_attr_config "nex_test_attr_config.yaml"
 uv run python rafts_agg_nexus_hfatl.py --path_pred_config "nex_test_pred_config_hf22.yaml"
+
+Changelog/Contributions
+2026-09-02 Integrated Pydantic schema validation for conditional run modes.
 """
 
 import argparse
@@ -22,6 +25,8 @@ import yaml
 # RaFTS / Formulation Selector imports
 import rafts_prep.proc_eval_metrics as pem
 import rafts_algo.utils as raftsutil
+from rafts_prep.schemas.rafts_prep_pydantic_schemas import AttrSelectConfig
+from rafts_algo.schemas.pydantic_schemas import PredConfig
 
 def area_weighted_mean(x):
     """Calculate the weighted mean, handling NaNs safely."""
@@ -53,10 +58,13 @@ if __name__ == "__main__":
         path_pred_config = Path(args.path_pred_config).expanduser()
         
         with open(path_pred_config, 'r') as f:
-            pred_config = yaml.safe_load(f)
+            pred_yaml = yaml.safe_load(f)
+            
+        validated_pred_cfg = PredConfig(**pred_yaml)
+        pred_config = validated_pred_cfg.model_dump(exclude_unset=True)
             
         # Dynamically find the attribute config from the prediction config
-        name_attr_config = pred_config.get('name_attr_config')
+        name_attr_config = validated_pred_cfg.name_attr_config
         path_attr_config = Path(raftsutil.build_cfig_path(path_pred_config, name_attr_config))
     else:
         run_mode = 'training'
@@ -72,7 +80,13 @@ if __name__ == "__main__":
     # ==========================================
     attr_cfig = raftsutil.AttrConfigAndVars(path_attr_config)
     attr_cfig._read_attr_config()
-    home_dir = raftsutil._define_home_dir(attr_cfig.attr_config)
+    
+    # Isolate and validate the 'attr_select' block 
+    attr_select_raw = attr_cfig.attr_config.get('attr_select', [])
+    flat_attr_select = {k: v for d in attr_select_raw for k, v in d.items()} if isinstance(attr_select_raw, list) else attr_select_raw
+    validated_attr_select = AttrSelectConfig(**flat_attr_select)
+    
+    home_dir = attr_cfig.attrs_cfg_dict.get('home_dir', '~')
     
     try:
         name_prep_config = [x for x in attr_cfig.attr_config.get('file_io', []) if 'name_prep_config' in x][0]['name_prep_config']
@@ -82,6 +96,7 @@ if __name__ == "__main__":
         
     path_prep_config = raftsutil.build_cfig_path(path_attr_config, name_prep_config)
     
+    # Implicitly validated via Pydantic PrepConfig inside proc_eval_metrics
     config_df = pem.read_schm_ls_of_dict(schema_path=path_prep_config)
     raw_config = config_df.iloc[0].dropna().to_dict()
     fio = {k: raftsutil.resolve_fstrings(v, raw_config) for k, v in raw_config.items()}
@@ -96,15 +111,17 @@ if __name__ == "__main__":
     datasets = attr_cfig.attrs_cfg_dict.get('datasets')
     ds = datasets[0]
     
-    attr_select_list = attr_cfig.attr_config.get('attr_select', [])
-    attrs_all = [v for x in attr_select_list for k, v in x.items() if '_vars' in k]
-    attrs_sel = [x for x in list(np.concatenate([a for a in attrs_all if a])) if x]
+    # Extract validated attributes directly via Pydantic
+    attrs_sel = validated_attr_select.hfatl_vars
+    hfatl_id_col = validated_attr_select.hfatl_id_col
     
-    paths_raw = [x.get('paths_hfatl') for x in attr_select_list if x.get('paths_hfatl') is not None]
-    paths_hfatl = [Path(str(p).format(home_dir=str(home_dir))).expanduser() for p in paths_raw[0]] if paths_raw else []
-    
-    hfatl_id_col = next((x.get('hfatl_id_col') for x in attr_select_list if 'hfatl_id_col' in x), map_divide_id_col)
-    hfatl_id_format = next((x.get('hfatl_id_format') for x in attr_select_list if 'hfatl_id_format' in x), None)
+    paths_hfatl = []
+    for p in validated_attr_select.paths_hfatl:
+        resolved_path = Path(p.format(home_dir=home_dir)).expanduser()
+        if resolved_path.exists():
+            paths_hfatl.append(resolved_path)
+
+    hfatl_id_format = flat_attr_select.get('hfatl_id_format', None)
 
     # ==========================================
     # 3. SET RUN-MODE SPECIFIC VARIABLES
@@ -118,7 +135,7 @@ if __name__ == "__main__":
         resolved_pred = {k: raftsutil.resolve_fstrings(v, resolve_dict) if isinstance(v, str) else v for k, v in pred_config.items()}
         
         mapping_file_path = Path(resolved_pred.get('path_crosswalk_ids'))
-        target_id_col = resolved_pred.get('pred_file_comid_colname', 'nexus_id')
+        target_id_col = validated_pred_cfg.pred_file_comid_colname
         
         # Override to None because full domain data doesn't use the custom 'USGS-{gage}_{div}' format
         hfatl_id_format = None 
