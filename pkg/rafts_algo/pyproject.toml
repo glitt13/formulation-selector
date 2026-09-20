@@ -38,6 +38,7 @@ dependencies = [
     "pydantic>=2.9.2",
     "seaborn==0.13.2",
     "xgboost==3.4.0",
+    "pyogrio==0.12.1",
     "rafts_prep"
 ]
 
