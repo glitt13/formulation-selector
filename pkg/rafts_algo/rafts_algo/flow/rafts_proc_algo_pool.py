@@ -9,6 +9,7 @@ Example:
 Changelog/Contributions
 2026-05-08 refactor: Adapt rafts_proc_algo_viz to this parallelization structure, GL
 2026-09-18 refactor: Integrate Pydantic AlgoConfig schema validation to structurally enforce config typing.
+2026-09-21 fix: Add explicit safeguard for empty DataFrames following NA removal.
 """
 import argparse
 import pandas as pd
@@ -74,7 +75,7 @@ if __name__ == "__main__":
     algo_cfig = raftsutil.AlgoConfigParser(path_algo_config)
     algo_cfig._read_algo_config()
 
-    # Extract variables from dictionary created by AlgoConfigParser (for deep grid search dicts)
+    # Extract variables from dictionary created by AlgoConfigParser
     algo_config = algo_cfig.algo_cfg_unc_dict["algo_cfg_dict"]["algo_config"]
 
     # Generate variable algo_config_og
@@ -267,6 +268,14 @@ if __name__ == "__main__":
                 logging.warning(f"!!!!{np.round(frac_na*100,1)}%  of data are NA values and will be discarded before training/testing!!!!")
         else:
             df_attr_wide_dropna = df_attr_wide.copy()
+
+        # --- CRITICAL SAFEGUARD FOR EMPTY DATAFRAMES ---
+        if df_attr_wide_dropna.empty:
+            logging.error(f"CRITICAL: The attribute dataset for {ds} is completely empty after removing NA values. "
+                          "This usually means one or more selected attributes are missing across all locations, or every location has at least one missing attribute. "
+                          "Please review your 'hfatl_vars' list in the attribute config and check the raw parquet data.")
+            sys.exit(1)
+            
         # ---------  UPDATE gdf and comid list after possible data removal ---------- #
         # Data removal comes from from raftsutil.rafts_read_attr_comid & df_attr_wide.dropna():
         remn_comids = list(df_attr_wide_dropna.index) # these are the comids that are left after checking what data are available
