@@ -754,47 +754,60 @@ def plot_map_pred(geo_df:gpd.GeoDataFrame, states:gpd.GeoDataFrame,
         gdf_missing.plot(ax=ax, facecolor='lightgray', hatch='///', edgecolor='dimgray',
                           linewidth=0.2, alpha=0.6, zorder=1.2, label='No crosswalk data')
 
-    # --- 1. HEXBIN PLOTTING ---
-    if plot_style == 'hexbin':
+    # --- 1a. DISSOLVE-BY-CLUSTER (large clustering datasets) ---
+    if plot_style == 'hexbin' and task_type == 'clustering':
+        # hexbin bins *centroids*, not polygon area: a hexagon is only drawn if
+        # at least one divide's centroid falls inside it, so coverage tracks
+        # centroid density, not the ground the divides actually tile. That's
+        # invisible almost everywhere (network-type divides are small and
+        # dense enough that every hexagon holds dozens of centroids), but
+        # hydrofabric v4's closed-basin divides (type='landscape', no
+        # flowline) are enormous by comparison -- confirmed empirically:
+        # 52 of them are each larger than a whole hexagon at gridsize=150,
+        # the biggest spanning ~10 hexagons, so only one of those ten ever
+        # receives a centroid and the other nine render blank even though
+        # the whole divide has a real, valid cluster prediction. Dissolving
+        # the actual polygons by cluster label instead is areally complete
+        # by construction and matches what a zoomed-in per-divide plot shows.
+        logging.info(f"Dissolving {len(geo_df)} divide polygons by cluster label "
+                      f"(hexbin's centroid-density sampling misses large closed-basin divides).")
+        cmap_choice = 'tab20'
+        cmap = plt.get_cmap(cmap_choice)
+        norm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
+
+        clustered = geo_df.dropna(subset=[colname_data])[[colname_data, 'geometry']]
+        unique_clusters = sorted(clustered[colname_data].unique())
+        dissolved = clustered.dissolve(by=colname_data)
+        dissolved.plot(ax=ax, color=[cmap(norm(val)) for val in dissolved.index],
+                        zorder=2, alpha=0.9, edgecolor='none')
+        cbar_mappable = None
+
+        legend_elements = [
+            mpatches.Patch(color=cmap(norm(val)), label=f'Cluster {int(val)}')
+            for val in unique_clusters
+        ]
+        if gdf_missing is not None and not gdf_missing.empty:
+            legend_elements.append(
+                mpatches.Patch(facecolor='lightgray', hatch='///', edgecolor='dimgray', label='No crosswalk data')
+            )
+        ax.legend(handles=legend_elements, title="Clusters", prop={'size': 20},
+                  title_fontsize=24, loc='lower right')
+
+    # --- 1b. HEXBIN PLOTTING (large regression datasets) ---
+    elif plot_style == 'hexbin':
         logging.info(f"Using hexbin mapping for large dataset ({len(geo_df)} points).")
-        
-        if task_type == 'clustering':
-            # Use mode for discrete categories and a discrete colormap
-            reduce_C_func = lambda x: pd.Series(x).mode()[0] if len(x) > 0 else np.nan
-            cmap_choice = 'tab20'
-        else:
-            # Use mean for continuous regression and a continuous colormap
-            reduce_C_func = np.mean
-            cmap_choice = 'viridis'
 
         hb = ax.hexbin(
-            x=geo_df.geometry.centroid.x, 
-            y=geo_df.geometry.centroid.y, 
-            C=geo_df[colname_data], 
-            reduce_C_function=reduce_C_func, 
-            gridsize=150, 
-            cmap=cmap_choice, 
-            vmin=vmin, vmax=vmax, 
+            x=geo_df.geometry.centroid.x,
+            y=geo_df.geometry.centroid.y,
+            C=geo_df[colname_data],
+            reduce_C_function=np.mean,
+            gridsize=150,
+            cmap='viridis',
+            vmin=vmin, vmax=vmax,
             zorder=2, alpha=0.9, edgecolors='none'
         )
         cbar_mappable = hb
-
-        if task_type == 'clustering':
-            unique_clusters = sorted(geo_df[colname_data].dropna().unique())
-            cmap = plt.get_cmap(cmap_choice)
-            norm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
-            
-            # Map the exact color assigned to each cluster and create a patch for it
-            legend_elements = [
-                mpatches.Patch(color=cmap(norm(val)), label=f'Cluster {int(val)}')
-                for val in unique_clusters
-            ]
-            if gdf_missing is not None and not gdf_missing.empty:
-                legend_elements.append(
-                    mpatches.Patch(facecolor='lightgray', hatch='///', edgecolor='dimgray', label='No crosswalk data')
-                )
-            ax.legend(handles=legend_elements, title="Clusters", prop={'size': 20},
-                      title_fontsize=24, loc='lower right')
 
     # --- 2. POINTS PLOTTING ---
     points_legend_built = False
