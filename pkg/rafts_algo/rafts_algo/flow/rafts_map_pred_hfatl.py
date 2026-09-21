@@ -208,14 +208,15 @@ if __name__ == "__main__":
                 # =========================================================================
                 # HELPER: Execution sequence for map plotting
                 # =========================================================================
-                def execute_mapping(gdf_to_plot, current_analysis_str):
+                def execute_mapping(gdf_to_plot, current_analysis_str, gdf_missing=None):
                     logging.info(f"Plotting predictions for {current_analysis_str}")
                     raftsplot.plot_map_pred_wrap(
                         test_gdf=gdf_to_plot,
-                        dir_out_viz_base=dir_out_viz_base, 
+                        dir_out_viz_base=dir_out_viz_base,
                         ds=ds, metr=metr, algo_str=algo_str,
                         split_type=current_analysis_str,
-                        colname_data='prediction', epsg_reproj=3857, task_type=task_type
+                        colname_data='prediction', epsg_reproj=3857, task_type=task_type,
+                        gdf_missing=gdf_missing
                     )
                     
                     mapie_alphas = raftsutil.infer_mapie_alphas(gdf_to_plot.columns)
@@ -246,16 +247,40 @@ if __name__ == "__main__":
                 # -----------------------------------------------------
                 if df_crosswalk is not None and gdf_divides is not None and desired_id_col:
                     logging.info("Crosswalk and master GPKG found. Generating secondary divide-level map.")
-                    
-                    # Broadcast the aggregated predictions down to the divide scale
-                    df_pred_mapped = df_pred.merge(df_crosswalk, left_on='featureID', right_on=pred_gpkg_id_col, how='inner')
-                    
-                    # Merge geometries with broadcasted predictions
-                    gdf_pred_divides = gdf_divides.merge(df_pred_mapped, left_on=desired_id_col, right_on=desired_id_col, how='inner')
-                    
+
+                    # Broadcast the aggregated predictions down to the divide scale.
+                    # NOTE: left (not inner) merges here on purpose -- an inner merge
+                    # silently drops every divide_id absent from df_crosswalk, with no
+                    # record of how many or which ones were lost (only an all-or-nothing
+                    # gdf_pred_divides.empty check below). A real gap like this was
+                    # found and confirmed empirically: 13,952 of 555,866 divides in the
+                    # master GPKG (2.5%) have no entry at all in the huc12 crosswalk, so
+                    # their huc12 parent's cluster prediction (which does exist) never
+                    # reaches them -- they used to vanish from the map without a trace,
+                    # even though "the predictions populate cluster values for all
+                    # divides" upstream of this broadcast step.
+                    df_pred_mapped = df_pred.merge(df_crosswalk, left_on='featureID', right_on=pred_gpkg_id_col, how='left')
+                    n_pred_unmatched = df_pred_mapped[desired_id_col].isna().sum()
+                    if n_pred_unmatched:
+                        logging.warning(
+                            f"{n_pred_unmatched} of {len(df_pred_mapped)} predicted {pred_gpkg_id_col} "
+                            f"rows have no {desired_id_col} in the crosswalk and cannot be broadcast to divides."
+                        )
+
+                    gdf_pred_divides = gdf_divides.merge(df_pred_mapped, on=desired_id_col, how='left')
+                    missing_mask = gdf_pred_divides['prediction'].isna() if 'prediction' in gdf_pred_divides.columns else gdf_pred_divides[pred_gpkg_id_col].isna()
+                    gdf_missing_divides = gdf_pred_divides[missing_mask]
+                    gdf_pred_divides = gdf_pred_divides[~missing_mask]
+                    if not gdf_missing_divides.empty:
+                        logging.warning(
+                            f"{len(gdf_missing_divides)} of {len(gdf_divides)} divides in the master GPKG have "
+                            f"no matching prediction after the crosswalk broadcast (e.g. {gdf_missing_divides[desired_id_col].head(5).tolist()}); "
+                            f"rendering them as a distinct 'no crosswalk data' layer rather than leaving them blank."
+                        )
+
                     if not gdf_pred_divides.empty:
                         div_analysis_str = f"{analysis_str}_divides" if analysis_str else "divides"
-                        execute_mapping(gdf_pred_divides, div_analysis_str)
+                        execute_mapping(gdf_pred_divides, div_analysis_str, gdf_missing=gdf_missing_divides)
                     else:
                         logging.warning("Divide-level merge resulted in an empty GeoDataFrame.")
         
