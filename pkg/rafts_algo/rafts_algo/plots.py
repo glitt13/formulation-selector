@@ -777,6 +777,26 @@ def plot_map_pred(geo_df:gpd.GeoDataFrame, states:gpd.GeoDataFrame,
 
         clustered = geo_df.dropna(subset=[colname_data])[[colname_data, 'geometry']]
         unique_clusters = sorted(clustered[colname_data].unique())
+
+        # dissolve()'s internal unary union (GEOS) is far less tolerant of
+        # invalid polygon topology than the plotting calls used everywhere
+        # else in this module, which just rasterize each ring independently
+        # and never needed the geometries to be topologically valid relative
+        # to each other. Confirmed empirically against the real CONUS
+        # hydrofabric: only 38 of 555,866 divides are actually invalid (37
+        # self-intersections, 1 degenerate ring) -- a tiny fraction, but
+        # union_all() doesn't skip bad inputs, it raises
+        # (GEOSException: TopologyException: side location conflict) on the
+        # whole batch the first invalid geometry belongs to. make_valid()
+        # repairs those in place before the union needs them.
+        invalid_mask = ~clustered.geometry.is_valid
+        if invalid_mask.any():
+            logging.warning(f"Repairing {invalid_mask.sum()} invalid geometries before dissolving "
+                             f"(e.g. self-intersections) -- .dissolve()'s union is intolerant of them "
+                             f"even though plotting them individually never was.")
+            clustered = clustered.copy()
+            clustered.loc[invalid_mask, 'geometry'] = clustered.loc[invalid_mask, 'geometry'].make_valid()
+
         dissolved = clustered.dissolve(by=colname_data)
         dissolved.plot(ax=ax, color=[cmap(norm(val)) for val in dissolved.index],
                         zorder=2, alpha=0.9, edgecolor='none')
