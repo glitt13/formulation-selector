@@ -754,64 +754,71 @@ def plot_map_pred(geo_df:gpd.GeoDataFrame, states:gpd.GeoDataFrame,
         gdf_missing.plot(ax=ax, facecolor='lightgray', hatch='///', edgecolor='dimgray',
                           linewidth=0.2, alpha=0.6, zorder=1.2, label='No crosswalk data')
 
-    # --- 1a. DISSOLVE-BY-CLUSTER (large clustering datasets) ---
-    if plot_style == 'hexbin' and task_type == 'clustering':
-        # hexbin bins *centroids*, not polygon area: a hexagon is only drawn if
-        # at least one divide's centroid falls inside it, so coverage tracks
-        # centroid density, not the ground the divides actually tile. That's
-        # invisible almost everywhere (network-type divides are small and
+    # --- 1a. CATEGORICAL PLOTTING (any size, clustering) ---
+    points_legend_built = False
+    if task_type == 'clustering':
+        # Originally routed large (>20000-row) clustering datasets through
+        # ax.hexbin, then through geo_df.dissolve(by=colname_data) -- both
+        # replaced by this direct per-geometry categorical plot:
+        #
+        # hexbin bins *centroids*, not polygon area: a hexagon is only drawn
+        # if at least one divide's centroid falls inside it, so coverage
+        # tracks centroid density, not the ground the divides actually tile.
+        # Invisible almost everywhere (network-type divides are small and
         # dense enough that every hexagon holds dozens of centroids), but
         # hydrofabric v4's closed-basin divides (type='landscape', no
-        # flowline) are enormous by comparison -- confirmed empirically:
-        # 52 of them are each larger than a whole hexagon at gridsize=150,
-        # the biggest spanning ~10 hexagons, so only one of those ten ever
-        # receives a centroid and the other nine render blank even though
-        # the whole divide has a real, valid cluster prediction. Dissolving
-        # the actual polygons by cluster label instead is areally complete
-        # by construction and matches what a zoomed-in per-divide plot shows.
-        logging.info(f"Dissolving {len(geo_df)} divide polygons by cluster label "
-                      f"(hexbin's centroid-density sampling misses large closed-basin divides).")
-        cmap_choice = 'tab20'
-        cmap = plt.get_cmap(cmap_choice)
-        norm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
+        # flowline) are enormous by comparison -- confirmed empirically: 52
+        # are each larger than a whole hexagon at gridsize=150, the biggest
+        # spanning ~10, so 9 of those 10 never receive a centroid and render
+        # blank despite having a real, valid cluster prediction.
+        #
+        # dissolve(by=colname_data) is areally complete (fixes the above),
+        # but its internal GEOS union_all() is (a) slow at CONUS scale --
+        # benchmarked at 43.5s for 80,000 real hydrofabric polygons merged
+        # into 8 groups, vs. 4.8s for this direct per-geometry plot on the
+        # same input, ~9x faster and the gap widens with polygon count since
+        # union cost is superlinear -- and (b) intolerant of invalid
+        # geometry in a way individual-polygon rendering never was: hit
+        # GEOSException: TopologyException on the real CONUS master GPKG,
+        # which make_valid() could patch but the union step itself remains
+        # both the slowest part of this function and an unnecessary one --
+        # dissolving to fewer polygons only reduces the number of draw calls,
+        # which was never the bottleneck geopandas/matplotlib needed help
+        # with at this scale.
+        #
+        # Plotting each geometry with its own fill color, keyed categorically
+        # off colname_data, needs no union at all: it's areally complete by
+        # construction (same as dissolve) and immune to topology errors (same
+        # as the old hexbin/points paths), while being the fastest of the three.
+        logging.info(f"Using categorical mapping for cluster labels ({len(geo_df)} features).")
+        plot_kwargs = {}
+        if geo_df.geometry.geom_type.iloc[0] in ('Point', 'MultiPoint'):
+            plot_kwargs['markersize'] = 150
+        geo_df.plot(column=colname_data, ax=ax, categorical=True, cmap='tab20',
+                    legend=True, zorder=2, **plot_kwargs)
 
-        clustered = geo_df.dropna(subset=[colname_data])[[colname_data, 'geometry']]
-        unique_clusters = sorted(clustered[colname_data].unique())
+        # Customize the discrete legend
+        legend = ax.get_legend()
+        if legend:
+            legend.set_title("Clusters", prop={'size': 24})
+            for text in legend.get_texts():
+                text.set_fontsize(20)
 
-        # dissolve()'s internal unary union (GEOS) is far less tolerant of
-        # invalid polygon topology than the plotting calls used everywhere
-        # else in this module, which just rasterize each ring independently
-        # and never needed the geometries to be topologically valid relative
-        # to each other. Confirmed empirically against the real CONUS
-        # hydrofabric: only 38 of 555,866 divides are actually invalid (37
-        # self-intersections, 1 degenerate ring) -- a tiny fraction, but
-        # union_all() doesn't skip bad inputs, it raises
-        # (GEOSException: TopologyException: side location conflict) on the
-        # whole batch the first invalid geometry belongs to. make_valid()
-        # repairs those in place before the union needs them.
-        invalid_mask = ~clustered.geometry.is_valid
-        if invalid_mask.any():
-            logging.warning(f"Repairing {invalid_mask.sum()} invalid geometries before dissolving "
-                             f"(e.g. self-intersections) -- .dissolve()'s union is intolerant of them "
-                             f"even though plotting them individually never was.")
-            clustered = clustered.copy()
-            clustered.loc[invalid_mask, 'geometry'] = clustered.loc[invalid_mask, 'geometry'].make_valid()
-
-        dissolved = clustered.dissolve(by=colname_data)
-        dissolved.plot(ax=ax, color=[cmap(norm(val)) for val in dissolved.index],
-                        zorder=2, alpha=0.9, edgecolor='none')
-        cbar_mappable = None
-
-        legend_elements = [
-            mpatches.Patch(color=cmap(norm(val)), label=f'Cluster {int(val)}')
-            for val in unique_clusters
-        ]
-        if gdf_missing is not None and not gdf_missing.empty:
-            legend_elements.append(
-                mpatches.Patch(facecolor='lightgray', hatch='///', edgecolor='dimgray', label='No crosswalk data')
-            )
-        ax.legend(handles=legend_elements, title="Clusters", prop={'size': 20},
-                  title_fontsize=24, loc='lower right')
+            if gdf_missing is not None and not gdf_missing.empty:
+                # A second, independent legend for the "no data" patch --
+                # NOT folded into the one above via get_legend_handles_labels()
+                # + a rebuilt ax.legend() call: geopandas' categorical .plot()
+                # legend handles are a single PatchCollection, which
+                # matplotlib's Legend doesn't render per-category from when
+                # reconstructed that way (silently produced a blank/incorrect
+                # legend here during development). ax.add_artist() keeps this
+                # first legend intact while a second ax.legend() call adds
+                # the "no data" entry alongside it instead of replacing it.
+                ax.add_artist(legend)
+                missing_patch = mpatches.Patch(facecolor='lightgray', hatch='///', edgecolor='dimgray',
+                                                label='No crosswalk data')
+                ax.legend(handles=[missing_patch], prop={'size': 20}, loc='lower left')
+                points_legend_built = True
 
     # --- 1b. HEXBIN PLOTTING (large regression datasets) ---
     elif plot_style == 'hexbin':
@@ -829,52 +836,21 @@ def plot_map_pred(geo_df:gpd.GeoDataFrame, states:gpd.GeoDataFrame,
         )
         cbar_mappable = hb
 
-    # --- 2. POINTS PLOTTING ---
-    points_legend_built = False
-    if plot_style != 'hexbin':
-        if task_type == 'clustering':
-            logging.info("Using categorical point mapping for cluster labels.")
-            geo_df.plot(column=colname_data, ax=ax, categorical=True, cmap='tab20',
-                        legend=True, markersize=150, zorder=2)
-
-            # Customize the discrete legend
-            legend = ax.get_legend()
-            if legend:
-                legend.set_title("Clusters", prop={'size': 24})
-                for text in legend.get_texts():
-                    text.set_fontsize(20)
-
-                if gdf_missing is not None and not gdf_missing.empty:
-                    # A second, independent legend for the "no data" patch --
-                    # NOT folded into the one above via get_legend_handles_labels()
-                    # + a rebuilt ax.legend() call: geopandas' categorical .plot()
-                    # legend handles are a single PatchCollection, which
-                    # matplotlib's Legend doesn't render per-category from when
-                    # reconstructed that way (silently produced a blank/incorrect
-                    # legend here during development). ax.add_artist() keeps this
-                    # first legend intact while a second ax.legend() call adds
-                    # the "no data" entry alongside it instead of replacing it.
-                    ax.add_artist(legend)
-                    missing_patch = mpatches.Patch(facecolor='lightgray', hatch='///', edgecolor='dimgray',
-                                                    label='No crosswalk data')
-                    ax.legend(handles=[missing_patch], prop={'size': 20}, loc='lower left')
-                    points_legend_built = True
-        else:
-            logging.info("Using continuous point mapping.")
-            ms = 150 if len(geo_df) < 10000 else max(0.5, 500000 / len(geo_df))
-            geo_df.plot(column=colname_data, ax=ax, markersize=ms, cmap='viridis', legend=False, zorder=2)
-            cbar_mappable = plt.cm.ScalarMappable(norm=matplotlib.colors.Normalize(vmin=vmin, vmax=vmax), cmap='viridis')
+    # --- 2. POINTS PLOTTING (small regression datasets) ---
+    else:
+        logging.info("Using continuous point mapping.")
+        ms = 150 if len(geo_df) < 10000 else max(0.5, 500000 / len(geo_df))
+        geo_df.plot(column=colname_data, ax=ax, markersize=ms, cmap='viridis', legend=False, zorder=2)
+        cbar_mappable = plt.cm.ScalarMappable(norm=matplotlib.colors.Normalize(vmin=vmin, vmax=vmax), cmap='viridis')
 
     # Plot states boundary once for both styles
     states.boundary.plot(ax=ax, color="#555555", linewidth=1, zorder=1, alpha=0.5)
 
     # Standalone legend for the "no crosswalk data" patch when it wasn't already
-    # folded into an existing legend above (the clustering hexbin and clustering
-    # points paths each build their own legend with this patch included;
-    # regression hexbin uses a colorbar instead of a legend, and regression
-    # points plotting doesn't build a legend at all).
-    if gdf_missing is not None and not gdf_missing.empty and not points_legend_built \
-            and not (plot_style == 'hexbin' and task_type == 'clustering'):
+    # folded into the clustering legend above (regression hexbin uses a
+    # colorbar instead of a legend, and regression points plotting doesn't
+    # build a legend at all, so neither has anywhere to fold this patch into).
+    if gdf_missing is not None and not gdf_missing.empty and not points_legend_built:
         missing_patch = mpatches.Patch(facecolor='lightgray', hatch='///', edgecolor='dimgray', label='No crosswalk data')
         ax.legend(handles=[missing_patch], prop={'size': 20}, loc='lower right')
 
