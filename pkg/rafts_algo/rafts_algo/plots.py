@@ -726,7 +726,8 @@ def gen_conus_basemap(dir_out_basemap:str | Path, # This should be the data_visu
     
 def plot_map_pred(geo_df:gpd.GeoDataFrame, states:gpd.GeoDataFrame,
                   title:str,metr:str,colname_data:str='prediction',
-                  plot_style:str='auto', task_type:str='regression'
+                  plot_style:str='auto', task_type:str='regression',
+                  gdf_missing:gpd.GeoDataFrame=None
                   )->Figure:
     # Calculate vmin and vmax based on the data
     vmin = geo_df[colname_data].min(skipna=True)
@@ -741,6 +742,18 @@ def plot_map_pred(geo_df:gpd.GeoDataFrame, states:gpd.GeoDataFrame,
         - Plotting {geo_df.shape[0]} locations on map with {plot_style} style and {task_type} task_type"
     logging.info(map_msg)
     print(map_msg)
+
+    # --- 0. "NO DATA" LAYER (real polygons, drawn first / lowest zorder) ---
+    # Rows that have a real geometry but no prediction reached them (e.g. a
+    # crosswalk gap upstream) get their own visually distinct fill rather than
+    # being left out of geo_df entirely -- an area with genuinely no data
+    # should never look identical to an area that just happens to fall in a
+    # gap of the hexbin/point rendering below.
+    if gdf_missing is not None and not gdf_missing.empty:
+        logging.info(f"Rendering {len(gdf_missing)} 'no crosswalk data' divides as a distinct hatched layer.")
+        gdf_missing.plot(ax=ax, facecolor='lightgray', hatch='///', edgecolor='dimgray',
+                          linewidth=0.2, alpha=0.6, zorder=1.2, label='No crosswalk data')
+
     # --- 1. HEXBIN PLOTTING ---
     if plot_style == 'hexbin':
         logging.info(f"Using hexbin mapping for large dataset ({len(geo_df)} points).")
@@ -773,25 +786,46 @@ def plot_map_pred(geo_df:gpd.GeoDataFrame, states:gpd.GeoDataFrame,
             
             # Map the exact color assigned to each cluster and create a patch for it
             legend_elements = [
-                mpatches.Patch(color=cmap(norm(val)), label=f'Cluster {int(val)}') 
+                mpatches.Patch(color=cmap(norm(val)), label=f'Cluster {int(val)}')
                 for val in unique_clusters
             ]
-            ax.legend(handles=legend_elements, title="Clusters", prop={'size': 20}, 
+            if gdf_missing is not None and not gdf_missing.empty:
+                legend_elements.append(
+                    mpatches.Patch(facecolor='lightgray', hatch='///', edgecolor='dimgray', label='No crosswalk data')
+                )
+            ax.legend(handles=legend_elements, title="Clusters", prop={'size': 20},
                       title_fontsize=24, loc='lower right')
 
     # --- 2. POINTS PLOTTING ---
-    else: 
+    points_legend_built = False
+    if plot_style != 'hexbin':
         if task_type == 'clustering':
             logging.info("Using categorical point mapping for cluster labels.")
-            geo_df.plot(column=colname_data, ax=ax, categorical=True, cmap='tab20', 
+            geo_df.plot(column=colname_data, ax=ax, categorical=True, cmap='tab20',
                         legend=True, markersize=150, zorder=2)
-            
+
             # Customize the discrete legend
             legend = ax.get_legend()
             if legend:
                 legend.set_title("Clusters", prop={'size': 24})
                 for text in legend.get_texts():
                     text.set_fontsize(20)
+
+                if gdf_missing is not None and not gdf_missing.empty:
+                    # A second, independent legend for the "no data" patch --
+                    # NOT folded into the one above via get_legend_handles_labels()
+                    # + a rebuilt ax.legend() call: geopandas' categorical .plot()
+                    # legend handles are a single PatchCollection, which
+                    # matplotlib's Legend doesn't render per-category from when
+                    # reconstructed that way (silently produced a blank/incorrect
+                    # legend here during development). ax.add_artist() keeps this
+                    # first legend intact while a second ax.legend() call adds
+                    # the "no data" entry alongside it instead of replacing it.
+                    ax.add_artist(legend)
+                    missing_patch = mpatches.Patch(facecolor='lightgray', hatch='///', edgecolor='dimgray',
+                                                    label='No crosswalk data')
+                    ax.legend(handles=[missing_patch], prop={'size': 20}, loc='lower left')
+                    points_legend_built = True
         else:
             logging.info("Using continuous point mapping.")
             ms = 150 if len(geo_df) < 10000 else max(0.5, 500000 / len(geo_df))
@@ -799,7 +833,17 @@ def plot_map_pred(geo_df:gpd.GeoDataFrame, states:gpd.GeoDataFrame,
             cbar_mappable = plt.cm.ScalarMappable(norm=matplotlib.colors.Normalize(vmin=vmin, vmax=vmax), cmap='viridis')
 
     # Plot states boundary once for both styles
-    states.boundary.plot(ax=ax, color="#555555", linewidth=1, zorder=1, alpha=0.5)  
+    states.boundary.plot(ax=ax, color="#555555", linewidth=1, zorder=1, alpha=0.5)
+
+    # Standalone legend for the "no crosswalk data" patch when it wasn't already
+    # folded into an existing legend above (the clustering hexbin and clustering
+    # points paths each build their own legend with this patch included;
+    # regression hexbin uses a colorbar instead of a legend, and regression
+    # points plotting doesn't build a legend at all).
+    if gdf_missing is not None and not gdf_missing.empty and not points_legend_built \
+            and not (plot_style == 'hexbin' and task_type == 'clustering'):
+        missing_patch = mpatches.Patch(facecolor='lightgray', hatch='///', edgecolor='dimgray', label='No crosswalk data')
+        ax.legend(handles=[missing_patch], prop={'size': 20}, loc='lower right')
 
     # Formatting
     ax.tick_params(axis='x', labelsize= 24)
@@ -815,6 +859,16 @@ def plot_map_pred(geo_df:gpd.GeoDataFrame, states:gpd.GeoDataFrame,
     
     plt.title(title, fontsize = 28)
     bounds = geo_df.total_bounds
+    if gdf_missing is not None and not gdf_missing.empty:
+        # Extend the view to cover the "no crosswalk data" divides too -- a
+        # region that's entirely missing from geo_df (e.g. an area with zero
+        # successful crosswalk matches) would otherwise get cropped out of the
+        # frame regardless of the hatched layer drawn for it above.
+        missing_bounds = gdf_missing.total_bounds
+        bounds = np.array([
+            min(bounds[0], missing_bounds[0]), min(bounds[1], missing_bounds[1]),
+            max(bounds[2], missing_bounds[2]), max(bounds[3], missing_bounds[3]),
+        ])
     x_buffer = (bounds[2] - bounds[0]) * 0.05
     y_buffer = (bounds[3] - bounds[1]) * 0.05
     if x_buffer == 0: x_buffer = 1.0 
@@ -826,13 +880,14 @@ def plot_map_pred(geo_df:gpd.GeoDataFrame, states:gpd.GeoDataFrame,
     return fig
 
 def plot_map_pred_wrap(test_gdf:gpd.GeoDataFrame,
-                       dir_out_viz_base:str | os.PathLike, 
+                       dir_out_viz_base:str | os.PathLike,
                       ds:str,
                       metr:str,algo_str:str,
                       split_type:str='test',
                       colname_data:str='prediction',
                       epsg_reproj:int=3857,
-                      task_type:str='regression'):
+                      task_type:str='regression',
+                      gdf_missing:gpd.GeoDataFrame=None):
     """Wrapper for plotting map displays
 
     :param test_gdf: The geodataframe to plotting on maps
@@ -851,6 +906,10 @@ def plot_map_pred_wrap(test_gdf:gpd.GeoDataFrame,
     :type colname_data: str, optional
     :param epsg_reproj: The EPSG code for reprojecting data for map display, defaults to 3857
     :type epsg_reproj: int
+    :param gdf_missing: Rows with real geometry but no prediction (e.g. dropped by an
+        upstream crosswalk gap), rendered as a distinct hatched 'no data' layer instead
+        of being silently absent from the map. Defaults to None.
+    :type gdf_missing: gpd.GeoDataFrame, optional
     """
 
     path_pred_map_plot = std_map_pred_path(dir_out_viz_base,ds,metr,algo_str,split_type)
@@ -866,20 +925,31 @@ def plot_map_pred_wrap(test_gdf:gpd.GeoDataFrame,
     # Re-project for visualization
     states = states.to_crs(epsg=epsg_reproj)
     geo_df = test_gdf.to_crs(epsg=epsg_reproj)
-    geo_df_valid = geo_df[~geo_df.geometry.is_empty]
+    # NOTE: geometry.is_empty is True only for a real-but-zero-area geometry
+    # (e.g. Polygon()) -- it returns False for a None/missing geometry, which
+    # is a *different* condition (geometry.isna()). A None geometry that
+    # slipped through here would silently produce a NaN centroid, which
+    # matplotlib's hexbin just drops from the bin count with no warning at
+    # all -- catch both so nothing vanishes from the map without a log line.
+    invalid_geom_mask = geo_df.geometry.is_empty | geo_df.geometry.isna()
+    geo_df_valid = geo_df[~invalid_geom_mask]
     if geo_df_valid.shape[0] < geo_df.shape[0]:
         logging.warning(f"Lost a total {geo_df.shape[0]-geo_df_valid.shape[0]} \
-                         of {geo_df.shape[0]} data rows due to invalid geometries")
+                         of {geo_df.shape[0]} data rows due to invalid/missing geometries")
         if colname_data in geo_df_valid.columns:
             geo_df_valid = geo_df_valid.dropna(subset=[colname_data])
         geo_df_valid = geo_df_valid.reset_index(drop=True)
         geo_df = geo_df_valid.copy()
 
+    if gdf_missing is not None and not gdf_missing.empty:
+        gdf_missing = gdf_missing.to_crs(4326).to_crs(epsg=epsg_reproj)
+        gdf_missing = gdf_missing[~(gdf_missing.geometry.is_empty | gdf_missing.geometry.isna())]
+
     # Generate the map
     plot_title = f"Predicted Values: {metr} - {ds}: {algo_str} algorithm"
     plot_pred_map = plot_map_pred(geo_df=geo_df, states=states,title=plot_title,
                                   metr=metr,colname_data=colname_data,
-                                  task_type=task_type)
+                                  task_type=task_type, gdf_missing=gdf_missing)
 
     # Save the plot as a .png file
     plot_pred_map.savefig(path_pred_map_plot, dpi=300, bbox_inches='tight')
