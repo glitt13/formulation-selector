@@ -9,7 +9,8 @@ uv run python rafts_agg_hfatl_basin.py --path_prep_config "regn_prep_config.yaml
 
 Changelog/contributions
     2026-05-22 Created with Gemini3.1Pro
-    2026-09-02 Refactored to utilize targeted Pydantic AttrSelectConfig validation, SS w/ help from Gemini3.1Pro.
+    2026-09-02 Refactored to utilize targeted Pydantic AttrSelectConfig validation.
+    2026-09-21 Refactored Prep YAML parsing to explicitly extract file_io mapping columns, preventing ID merge failures.
 """
 # TODO add _std_rafts_prep_ds_companion_gpkg_path and ensure geometry is written to file
 import argparse
@@ -40,7 +41,13 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Aggregate hfATLAS attributes based on hydrofabric divides.')
     parser.add_argument('--path_prep_config', type=str, required=True, help='Path to the prep YAML configuration file')
     parser.add_argument('--path_attr_config', type=str, required=True, help='Path to the attribute YAML configuration file')
+    parser.add_argument('--validate', action='store_true', default=False,
+                        help='If present, enables schema validation of the aggregated output. Defaults to False.')
     args = parser.parse_args()
+    
+    arg_val = args.validate
+    if arg_val:
+        logging.info("Schema validation enabled. Using statically imported schemas from rafts_algo.schemas.")
 
     path_prep_config = Path(args.path_prep_config).expanduser()
     path_attr_config = Path(args.path_attr_config).expanduser()
@@ -56,61 +63,73 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
     logging.info("Parsing configurations...")
 
-    # A. Prep Config
+    # A. Parse Attribute Config base variables
     attr_cfig = raftsutil.AttrConfigAndVars(path_attr_config)
     attr_cfig._read_attr_config()
-    home_dir = attr_cfig.attrs_cfg_dict.get('home_dir')
-    col_schema_df = pem.read_schm_ls_of_dict(schema_path=path_prep_config) # Prep Config (Validated implicitly via pem.read_schm_ls_of_dict)
+    home_dir = raftsutil._define_home_dir(attr_cfig.attr_config)
+
+    # B. Parse Prep Config directly from YAML to preserve 'file_io' spatial mapping variables
+    with open(path_prep_config, 'r') as f:
+        prep_cfg_raw = yaml.safe_load(f)
+        
+    file_io_raw = prep_cfg_raw.get('file_io', [])
+    fio = {k: raftsutil.resolve_fstrings(v, {'home_dir': str(home_dir)}) if isinstance(v, str) else v for d in file_io_raw for k, v in d.items()} if isinstance(file_io_raw, list) else file_io_raw
     
-    if 'path_hf_basins_gpkg' in col_schema_df.columns:
-        path_hf_basins_gpkg = Path(col_schema_df['path_hf_basins_gpkg'].loc[0].format(home_dir=str(home_dir)))
-        gpkg_pattern = col_schema_df.get('gpkg_filename_pattern', pd.Series([r'gage_(.*)\.gpkg'])).loc[0]
+    col_schema_raw = prep_cfg_raw.get('col_schema', [])
+    cs = {k: raftsutil.resolve_fstrings(v, {'home_dir': str(home_dir)}) if isinstance(v, str) else v for d in col_schema_raw for k, v in d.items()} if isinstance(col_schema_raw, list) else col_schema_raw
+    
+    form_meta_raw = prep_cfg_raw.get('formulation_metadata', [])
+    fm = {k: v for d in form_meta_raw for k, v in d.items()} if isinstance(form_meta_raw, list) else form_meta_raw
+
+    # Extract geospatial mappings
+    path_hf_basins_gpkg = Path(fio.get('path_hf_basins_gpkg')) if 'path_hf_basins_gpkg' in fio else None
+    if path_hf_basins_gpkg:
+        gpkg_pattern = fio.get('gpkg_filename_pattern', r'gage_(.*)\.gpkg')
         if path_hf_basins_gpkg.exists():
             logging.info(f"Hydrofabric basins GPKG path: {path_hf_basins_gpkg}")
         else:
             logging.error(f"Specified path_hf_basins_gpkg does not exist: {path_hf_basins_gpkg}")
     else:
         logging.error("Missing the path_hf_basins_gpkg in the prep config, which is required to perform divide attribute aggregation to basin scales")
-    divides_layer = col_schema_df.get('hf_divides_layer', pd.Series(["divides"])).loc[0]
-    map_divide_id_col = col_schema_df.get('map_divide_id_col', pd.Series(["divide_id"])).loc[0]
-    dataset_name = col_schema_df.get('dataset_name', pd.Series(["aggregated"])).loc[0]
+        
+    divides_layer = fio.get('hf_divides_layer', 'divides')
+    map_divide_id_col = fio.get('map_divide_id_col', 'divide_id')
+    dataset_name = fm.get('dataset_name', 'aggregated')
     
-    if 'gage_id_col_gpkg' in col_schema_df.columns:
-        gage_id_col_gpkg = col_schema_df.get('gage_id_col_gpkg', pd.Series(["gage_id_col_gpkg"])).loc[0]
-    elif 'gage_id' in col_schema_df.columns: # try the default used in the raw response variable datasets
-        gage_id_col_gpkg = col_schema_df.get('gage_id', pd.Series(["gage_id"])).loc[0]
-        logging.info("Consider adding 'gage_id_col_gpkg' entry to prep config")
-        print("Consider adding 'gage_id_col_gpkg' entry to prep config")
-    else:
+    gage_id_col_gpkg = fio.get('gage_id_col_gpkg', cs.get('gage_id'))
+    if not gage_id_col_gpkg:
         logging.error("Expecting 'gage_id_col_gpkg' or 'gage_id' entries in the prep config.")
+        print("Consider adding 'gage_id_col_gpkg' entry to prep config")
 
-    regex_compiled = re.compile(gpkg_pattern,re.IGNORECASE)
+    regex_compiled = re.compile(gpkg_pattern, re.IGNORECASE)
 
-    hf_layer = col_schema_df.get('hf_fp_layer', pd.Series(["flowpaths"])).loc[0]
-    vpu_id_col = col_schema_df.get('vpu_id_col', pd.Series(["vpuid"])).loc[0]
+    hf_layer = fio.get('hf_fp_layer', 'flowpaths')
+    vpu_id_col = fio.get('vpu_id_col', 'vpuid')
     dir_std_base = Path(attr_cfig.attrs_cfg_dict.get('dir_std_base'))
 
-    # B. Attr Config
+    # C. Validate and Extract Attribute Selection Config
     dir_db_attrs = attr_cfig.attrs_cfg_dict.get('dir_db_attrs')
     datasets = attr_cfig.attrs_cfg_dict.get('datasets')
-    if len(datasets) >1:
+    if len(datasets) > 1:
         logging.error("Multiple datasets imcompatible with rafts_agg_hfatl_basin.py")
     ds = datasets[0]
     dir_db_attrs_agg_save = raftsutil.std_dir_ds_agg(dir_db_attrs, ds)
     
-    # Isolate and validate strictly the 'attr_select' block to avoid PrepConfig schema conflicts
     attr_select_raw = attr_cfig.attr_config.get('attr_select', [])
     flat_attr_select = {k: v for d in attr_select_raw for k, v in d.items()} if isinstance(attr_select_raw, list) else attr_select_raw
+    
+    # Scrub commented-out YAML list items (which parse as None) before Pydantic validation
+    if 'hfatl_vars' in flat_attr_select and isinstance(flat_attr_select['hfatl_vars'], list):
+        flat_attr_select['hfatl_vars'] = [v for v in flat_attr_select['hfatl_vars'] if v is not None]
+        
     validated_attr_select = AttrSelectConfig(**flat_attr_select)
     
-    # Extract validated attributes directly via Pydantic (replacing manual list flattening)
     attrs_sel = validated_attr_select.hfatl_vars
     hfatl_id_col = validated_attr_select.hfatl_id_col
     
-    # Resolve paths_hfatl
     paths_hfatl = []
     for p in validated_attr_select.paths_hfatl:
-        resolved_path = Path(p.format(home_dir=home_dir)).expanduser()
+        resolved_path = Path(p.format(home_dir=str(home_dir))).expanduser()
         if resolved_path.exists():
             paths_hfatl.append(resolved_path)
 
@@ -164,7 +183,7 @@ if __name__ == "__main__":
     )
     # Generate the attribute column name mapper to keep track of pint units that get 
     # stripped throughout algo training & prediction
-    raw_columns = pd.read_parquet(paths_hfatl).columns
+    raw_columns = pd.read_parquet(paths_hfatl[0]).columns
     mapper_df = raftsutil.create_hfatlas_unit_mapper(raw_columns=raw_columns)
     raftsutil.save_hfatlas_unit_mapper(mapper_df=mapper_df, dir_std_base = dir_std_base, ds=ds)
 
@@ -216,7 +235,6 @@ if __name__ == "__main__":
             
         logging.info("Attempting area-weighted mean aggregation...")
         
-        
         # Build a new aggregation dictionary using the custom weighted mean function
         wm_agg_dict = {
             col: area_weighted_mean 
@@ -236,9 +254,9 @@ if __name__ == "__main__":
 
     logging.info("Reshaping aggregated attributes to RaFTS standard long-format schema...")
     
-    # Extract tracking definitions from prep config
-    featureSource = col_schema_df.get('featureSource', pd.Series(["hf_id"])).loc[0]
-    featureID_format = col_schema_df.get('featureID', pd.Series(["{gage_id}"])).loc[0]
+    # Extract tracking definitions directly from parsed dictionaries
+    featureSource = cs.get('featureSource', 'hf_id')
+    featureID_format = cs.get('featureID', '{gage_id}')
     
     # Melt from Wide to Long
     df_long = df_aggregated.melt(
@@ -275,10 +293,13 @@ if __name__ == "__main__":
     save_dir.mkdir(parents=True, exist_ok=True)
     
     out_path = save_dir / "attr_all.parquet"
-    
+
     # Drop vpuid right before saving, as the directory structure implies the VPU
-    df_long.drop(columns=['vpuid']).to_parquet(out_path, index=False)
-    
+    df_attr_out = df_long.drop(columns=['vpuid'])
+    if arg_val:
+        raftsutil.validate_input_attributes(df_attr_out, arg_val=arg_val)
+    df_attr_out.to_parquet(out_path, index=False)
+
 
     logging.info("Generating standard algorithm points GPKG companion file...")
     
@@ -314,8 +335,5 @@ if __name__ == "__main__":
     gdf_hf.to_file(path_gpkg_rafts_prep, driver="GPKG", layer='outlet')
     logging.info(f"Saved corrected GPKG geometry companion to: {path_gpkg_rafts_prep}")
 
-    #logging.info(f"Saved GPKG geometry companion to: {path_gpkg_rafts_prep}")
-
     logging.info(f"✅ Success! Analysis-ready aggregated attributes for {df_aggregated.shape[0]} basins saved to:")
     logging.info(f"   {out_path}")
-
