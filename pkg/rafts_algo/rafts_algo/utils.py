@@ -367,7 +367,7 @@ class PredConfigParser:
                 - Required: `name_attr_config`, `name_algo_config`, 
                             `path_meta`, `ds_type`, `pred_file_comid_colname`,
                 - Parsed from attribute config: `datasets`, `dir_base`, `dir_std_base`, `home_dir`
-                - Optional: `algo_response_vars`, `algo_type`, `MAPIE_alpha`
+                - Optional: `algo_response_vars`, `algo_type`, `MAPIE_alpha`, `donor_map_states`
         Returns:
             dict: Same dictionary stored in self.pred_cfg_dict
         Raises:
@@ -457,6 +457,7 @@ class PredConfigParser:
         path_hf_finl_gpkg = pred_cfg.get('path_hf_finl_gpkg', None)
         layr_hf_finl_gpkg = pred_cfg.get('layr_hf_finl_gpkg',None)
         algo_select = pred_cfg.get('algo_select', None)
+        donor_map_states = pred_cfg.get('donor_map_states', None)
 
         # Compile dictionary
         self.pred_cfg_dict = {
@@ -488,6 +489,7 @@ class PredConfigParser:
             'overwrite_sql': overwrite_sql,
             'algo_select': algo_select,
             'featureSource': featureSource,
+            'donor_map_states': donor_map_states,
         }
 
 def _make_home_dir(home_dir_read:str|os.PathLike=[])-> os.PathLike:

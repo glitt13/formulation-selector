@@ -64,6 +64,8 @@ Algorithm choices include supervised (i.e. random forest and MLP), and unsupervi
 
 - `rafts_pair_donors.py`: Pairs donor and receiver basins within the same cluster based on euclidean distance. See [rafts_pair_donors.py](pkg/rafts_algo/rafts_algo/flow/rafts_pair_donors.py).
 
+- `rafts_map_donor_receiver.py`: Optional. Generates a static `.png` map of the donor-receiver pairing itself (receivers colored by predicted cluster, donor gage locations, connecting lines) for one or more configured regions -- e.g. Florida, the Pacific Northwest. Configured via `donor_map_states` in the prediction config; a no-op for supervised (regression) workflows. See [rafts_map_donor_receiver.py](pkg/rafts_algo/rafts_algo/flow/rafts_map_donor_receiver.py).
+
 Note: The attribute transformation workflow has been deprecated for the current processing workflows. It's recommended to perform desired transformations on the input attribute data beforehand. If attribute transformation is desired, updates will need to be made to the prediction step.
 
 7. **Regionalized Parameter Integration with Hydrofabric**: This prepares the hydrofabric .gpkg to a standardized form of regionalized parameters accepted by nextgen. For regionalization purposes only.
@@ -327,6 +329,14 @@ Configures the out-of-sample prediction step and downstream mapping.
 
 * `algo_select` The specfic algorithm string to use for the final integration into the regionalization gpkg (ie a new layer added to the copy of path_hf_finl_gpkg). Used in `rafts_regn_params_gpkg.py`. e.g. 'gower_agglomerative_k12' 
 
+* `donor_map_states`: Optional. Used only by `rafts_map_donor_receiver.py`, and only when the algo config's `task_type` is `'clustering'` (donor-receiver pairing is unsupervised-only -- this key is silently ignored for regression workflows). Generates a static donor-receiver pairing map (receivers colored by predicted cluster, donor gages as points, thin connecting lines) scoped to one or more regions. Accepts:
+  - A flat list of 2-letter state codes for a single region, e.g. `['FL']`.
+  - A dict of `{region_name: [state codes]}` for multiple named regions in one run, e.g. `{FL: ['FL'], PNW: ['WA', 'OR']}`.
+  - `[]` to explicitly opt out of this map for a given workflow.
+  - If the key is omitted from the config entirely, it defaults to Florida and the Pacific Northwest (`DEFAULT_DONOR_MAP_REGIONS` in that script) -- an explicit `[]` is required to opt out, since an omitted key is treated as "not yet configured," not "don't map."
+
+  Requires `path_gpkg_pred`/`pred_gpkg_lyr`/`pred_gpkg_id_col` (a USGS WBD HUC12 layer, for its `states` column) and `path_hf_finl_gpkg` (for donor gage locations via its `hydrolocations` layer). When a HUC12 has no donor pairing because its `path_crosswalk_ids` entry is missing due to a hydrofabric divide larger than the HUC12 itself, this substitutes the divide's own geometry as a proxy receiver rather than leaving it blank -- see `build_divide_proxy_receivers()` in that script and `scripts/qa/crosswalk_gap_diagnosis/` for the underlying diagnosis.
+
 * `path_tfrm_script` & `conda_env`: Filepath to the transformation script and its execution environment. (Required if transforming data). Not used with the modern `hfATLAS` workflow, but this was used in legacy workflows that employed `proc.attr.hydfab`.
 
 
@@ -468,6 +478,13 @@ uv run python pkg/rafts_algo/rafts_algo/flow/rafts_map_pred_hfatl.py "scripts/wo
 (Only for unsupervised clustering algorithms)
 ```bash
 uv run python pkg/rafts_algo/rafts_algo/flow/rafts_pair_donors.py "scripts/workflow_configs/path_to/*_pred_config.yaml"
+
+```
+
+**6b. Map the Donor-Receiver Pairing (optional):**
+(Only for unsupervised clustering algorithms; defaults to Florida + the Pacific Northwest, configurable via `donor_map_states` in the prediction config -- see [Prediction Config](#4-prediction-config-eg-_pred_configyaml))
+```bash
+uv run python pkg/rafts_algo/rafts_algo/flow/rafts_map_donor_receiver.py "scripts/workflow_configs/path_to/*_pred_config.yaml"
 
 ```
 
