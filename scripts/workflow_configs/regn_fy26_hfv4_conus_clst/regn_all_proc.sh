@@ -85,6 +85,16 @@ for MODEL in "${MODELS[@]}"; do
         exit 1
     }
 
+    # 6b. Map donor-receiver pairings for a configured region (e.g. a state)
+    # No-op (exit 0) unless the model's task_type is 'clustering' (donor-receiver
+    # pairing is unsupervised-only, same constraint rafts_pair_donors.py enforces)
+    # and its pred_config sets `donor_map_states` -- safe to run unconditionally here.
+    echo "--> Mapping donor-receiver pairings (if configured)..."
+    uv run --project "${DIR_REPO}/pkg" python "${DIR_PY}/rafts_map_donor_receiver.py" "${DIR_CONFIG}/${PRED_CONF}" || {
+        echo "ERROR: Donor-receiver mapping failed for ${MODEL}. Exiting."
+        exit 1
+    }
+
     # 7. Write Parameters to Compiled GeoPackage
     echo "--> Compiling regionalized parameters into master GPKG..."
     uv run --project "${DIR_REPO}/pkg" python "${DIR_PY}/rafts_regn_params_gpkg.py" "${DIR_CONFIG}/${PRED_CONF}" || {
@@ -93,6 +103,37 @@ for MODEL in "${MODELS[@]}"; do
     }
 done
 
+# -----------------------------------------------------------------------------
+# OPTIONAL QA CHECKS
+# -----------------------------------------------------------------------------
+# Post-hoc sanity checks (scripts/qa/) confirming the attrs<->crosswalk<->SQLite
+# divide_id chain has no silent gaps. Diagnostic only -- always exits 0, so it
+# never trips this script's `set -e` regardless of what it finds. Run once per
+# workflow (not once per model): the compiled SQLite output directory is shared
+# across every formulation, so any single model's pred_config covers it. Uses
+# PRED_CONF as left by the last loop iteration above.
+echo "========================================================================"
+echo "Running optional QA checks..."
+echo "========================================================================"
+"${DIR_REPO}/scripts/qa/run_qa_checks.sh" "${DIR_CONFIG}/${PRED_CONF}"
+
+echo ""
+echo "========================================================================"
+echo "Running optional CROSSWALK GAP DIAGNOSIS (spatial root-cause analysis)..."
+echo "========================================================================"
+# Spatially-aware diagnostic: for any HUC12s missing from the crosswalk,
+# determines whether a hydrofabric divide actually exists there (actionable
+# gap) or if the region is structurally divide-less (water/island/closed basin).
+# For actionable gaps, identifies whether the divide was never crosswalked or
+# was assigned elsewhere, and validates the assignment against a majority-share rule.
+#
+# Runs CONUS-wide sizing pass automatically; add --states FL to scope to Florida
+# (or any other states), or --states WA OR for multi-state regions.
+#
+# Outputs CSVs to ~/noaa/regionalization/data/output/analysis/<dataset_name>/.
+# Results are diagnostic only (always exit 0) and do not gate the workflow.
+# To skip this step, comment it out or pass a different path to regn_all_proc.sh.
+"${DIR_REPO}/scripts/qa/crosswalk_gap_diagnosis/run_crosswalk_gap_diagnosis.sh" "${DIR_CONFIG}/${PRED_CONF}"
 
 echo "========================================================================"
 echo "SUCCESS: Finished ALL hfATLAS regionalization predictions!"

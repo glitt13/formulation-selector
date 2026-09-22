@@ -7,8 +7,10 @@ import matplotlib.pyplot as plt
 import matplotlib
 from matplotlib.figure import Figure
 import matplotlib.patches as mpatches
+from matplotlib.lines import Line2D
 import pathlib
 from pathlib import Path
+from shapely.geometry import LineString
 import seaborn as sns
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
@@ -1143,3 +1145,485 @@ def plot_best_algo_wrap(geo_df, dir_out_viz_base,subdir_anlys, metr,comparison_c
     plt.close(plot_best_perf)
     plt.close('all')
     gc.collect()
+
+def std_donor_receiver_map_path(dir_out_viz_base: str | Path, ds: str, metr: str,
+                                 algo_str: str, region_str: str) -> pathlib.PosixPath:
+    """Generate a filepath for a donor-receiver pairing map
+
+    :param dir_out_viz_base: The base directory for saving plots
+    :type dir_out_viz_base: str | os.PathLike
+    :param ds: The unique dataset name
+    :type ds: str
+    :param metr: The metric/response variable of interest
+    :type metr: str
+    :param algo_str: The type of algorithm used to create the donor-receiver pairing
+    :type algo_str: str
+    :param region_str: A short identifier for the mapped region (e.g. 'FL')
+    :type region_str: str
+    :return: Standardized filepath for the saved map
+    :rtype: pathlib.PosixPath
+    """
+    path_map_plot = Path(f"{dir_out_viz_base}/{ds}/donor_receiver_map_{region_str}_{ds}_{metr}_{algo_str}.png")
+    path_map_plot.parent.mkdir(parents=True, exist_ok=True)
+    return path_map_plot
+
+def plot_donor_receiver_map(gdf_receivers: gpd.GeoDataFrame, gdf_donors: gpd.GeoDataFrame,
+                             gdf_lines: gpd.GeoDataFrame, states: gpd.GeoDataFrame, title: str,
+                             colname_cluster: str = 'cluster_id',
+                             gdf_no_pairing: gpd.GeoDataFrame = None,
+                             colname_divide_proxy: str = 'is_divide_proxy') -> Figure:
+    """Plot a donor-receiver pairing map for one region: receivers filled by their
+    predicted cluster (categorical choropleth, same 'tab20' convention as
+    :func:`plot_map_pred`), donor gage locations as solid points, receiver centroids as
+    hollow squares, and a thin line from each receiver to its assigned donor.
+
+    :param gdf_receivers: Receiver geometries with `colname_cluster`, already reprojected
+     to the same CRS as `gdf_donors`/`gdf_lines`/`states`. May mix ordinary HUC12-shaped
+     rows with divide-shaped proxy rows flagged via `colname_divide_proxy` -- both are
+     colored by the same categorical call (so cluster colors stay consistent across the
+     two), with proxy rows additionally outlined to flag the substitution to the viewer.
+    :type gdf_receivers: gpd.GeoDataFrame
+    :param gdf_donors: Donor gage point geometries (one row per donor)
+    :type gdf_donors: gpd.GeoDataFrame
+    :param gdf_lines: One LineString per receiver, connecting it to its assigned donor
+    :type gdf_lines: gpd.GeoDataFrame
+    :param states: State boundary geometries for map context
+    :type states: gpd.GeoDataFrame
+    :param title: The plot title
+    :type title: str
+    :param colname_cluster: Column in `gdf_receivers` holding the predicted cluster label, defaults to 'cluster_id'
+    :type colname_cluster: str, optional
+    :param gdf_no_pairing: Receiver geometries with no donor pairing, rendered as a distinct hatched layer, defaults to None
+    :type gdf_no_pairing: gpd.GeoDataFrame, optional
+    :param colname_divide_proxy: Boolean column in `gdf_receivers` marking rows whose geometry is
+     a hydrofabric divide (not the original HUC12) standing in for a HUC12 too small to carry its
+     own crosswalk entry, with a pairing borrowed from wherever the crosswalk actually assigned that
+     divide -- see rafts_map_donor_receiver.py. Ignored if the column isn't present. Defaults to 'is_divide_proxy'
+    :type colname_divide_proxy: str, optional
+    :return: The rendered figure
+    :rtype: Figure
+    """
+    fig, ax = plt.subplots(1, 1, figsize=(14, 16))
+
+    # "No pairing" layer drawn first / lowest zorder, same convention as plot_map_pred's
+    # "no crosswalk data" layer -- a real gap should never look identical to blank space.
+    if gdf_no_pairing is not None and not gdf_no_pairing.empty:
+        gdf_no_pairing.plot(ax=ax, facecolor='lightgray', hatch='///', edgecolor='dimgray',
+                             linewidth=0.2, alpha=0.6, zorder=1, label='No donor pairing')
+
+    gdf_receivers.plot(column=colname_cluster, ax=ax, categorical=True, cmap='tab20',
+                        legend=True, zorder=2, edgecolor='white', linewidth=0.2)
+    legend = ax.get_legend()
+    if legend:
+        legend.set_title("Predicted cluster", prop={'size': 15})
+        for text in legend.get_texts():
+            text.set_fontsize(12)
+        # add_artist keeps this legend intact while the marker-shape legend below is
+        # added as a second, independent legend -- see the analogous note in plot_map_pred.
+        ax.add_artist(legend)
+
+    # Divide-shaped proxy receivers: same fill color as any other receiver (assigned by
+    # the categorical call above, off the same colname_cluster column, so a proxy's
+    # borrowed cluster reads identically to a real receiver in that cluster) with an
+    # added dashed outline so the viewer can tell "this shape is a divide standing in
+    # for its HUC12, not the HUC12 itself" without it looking like a data error.
+    has_proxy_col = colname_divide_proxy in gdf_receivers.columns
+    if has_proxy_col and gdf_receivers[colname_divide_proxy].any():
+        gdf_proxy = gdf_receivers[gdf_receivers[colname_divide_proxy]]
+        gdf_proxy.boundary.plot(ax=ax, color='#7b2cbf', linewidth=1.6,
+                                 linestyle=(0, (4, 2)), zorder=2.5)
+
+    if not gdf_lines.empty:
+        gdf_lines.plot(ax=ax, color='#0b0b0b', linewidth=0.3, alpha=0.15, zorder=3)
+
+    # Receiver centroids: hollow squares, small and thin so the choropleth fill underneath
+    # stays visible even at HUC12 density (a marker sized near the polygon spacing blots
+    # out the fill entirely -- confirmed empirically during development).
+    centroids = gdf_receivers.geometry.centroid
+    ax.scatter(centroids.x, centroids.y, marker='s', s=5, facecolors='none',
+               edgecolors='#0b0b0b', linewidths=0.45, zorder=4)
+
+    # Donor gages: solid dots with a white halo for contrast against any fill color
+    ax.scatter(gdf_donors.geometry.x, gdf_donors.geometry.y, marker='o', s=90,
+               facecolors='#0b0b0b', edgecolors='#ffffff', linewidths=1.5, zorder=5)
+
+    states.boundary.plot(ax=ax, color="#555555", linewidth=1, zorder=0, alpha=0.5)
+
+    marker_handles = [
+        Line2D([0], [0], marker='o', color='none', markerfacecolor='#0b0b0b', markeredgecolor='#ffffff',
+               markeredgewidth=1.2, markersize=10, label='Donor gage'),
+        Line2D([0], [0], marker='s', color='none', markerfacecolor='none', markeredgecolor='#0b0b0b',
+               markeredgewidth=1.2, markersize=9, label='Receiver (centroid)'),
+    ]
+    if has_proxy_col and gdf_receivers[colname_divide_proxy].any():
+        marker_handles.append(Line2D([0], [0], color='#7b2cbf', linewidth=1.6, linestyle=(0, (4, 2)),
+                                      label='Divide-shaped proxy (large divide, borrowed pairing)'))
+    if gdf_no_pairing is not None and not gdf_no_pairing.empty:
+        marker_handles.append(mpatches.Patch(facecolor='lightgray', hatch='///', edgecolor='dimgray',
+                                              label='No donor pairing'))
+    ax.legend(handles=marker_handles, loc='lower left', fontsize=11, frameon=True)
+
+    # Bounds are anchored to the ordinary (HUC12-shaped) receivers only. A divide-shaped
+    # proxy's geometry can legitimately extend far outside the mapped region -- a divide
+    # only needs a small corner inside the region to be selected as some HUC12's dominant
+    # divide, but the divide's own footprint (drawn in full) can reach deep into a
+    # neighboring region -- confirmed empirically: a single Great-Basin-scale proxy divide
+    # stretched a WA/OR map's bounding box hundreds of miles south into California,
+    # squeezing the actual region into a small corner of the frame. Excluding proxy rows
+    # here doesn't hide any of their geometry (matplotlib still draws and simply clips
+    # whatever falls outside the view), it just keeps the view itself anchored correctly.
+    bounds_source = gdf_receivers
+    if has_proxy_col and gdf_receivers[colname_divide_proxy].any():
+        non_proxy = gdf_receivers[~gdf_receivers[colname_divide_proxy]]
+        if not non_proxy.empty:
+            bounds_source = non_proxy
+    bounds = bounds_source.total_bounds
+    if gdf_no_pairing is not None and not gdf_no_pairing.empty:
+        nb = gdf_no_pairing.total_bounds
+        bounds = np.array([min(bounds[0], nb[0]), min(bounds[1], nb[1]),
+                            max(bounds[2], nb[2]), max(bounds[3], nb[3])])
+    x_buffer = (bounds[2] - bounds[0]) * 0.08 or 1.0
+    y_buffer = (bounds[3] - bounds[1]) * 0.08 or 1.0
+    ax.set_xlim(bounds[0] - x_buffer, bounds[2] + x_buffer)
+    ax.set_ylim(bounds[1] - y_buffer, bounds[3] + y_buffer)
+
+    ax.set_title(title, fontsize=17)
+    ax.set_axis_off()
+    return plt.gcf()
+
+def plot_donor_receiver_map_wrap(gdf_receivers: gpd.GeoDataFrame, gdf_donors: gpd.GeoDataFrame,
+                                  dir_out_viz_base: str | Path, ds: str, metr: str, algo_str: str,
+                                  region_str: str, colname_donor_id: str = 'donor_id',
+                                  colname_cluster: str = 'cluster_id', epsg_reproj: int = 3857,
+                                  gdf_no_pairing: gpd.GeoDataFrame = None,
+                                  colname_divide_proxy: str = 'is_divide_proxy') -> Path:
+    """Wrapper for building, saving, and closing a donor-receiver pairing map
+
+    :param gdf_receivers: Receiver geometries with `colname_cluster` and `colname_donor_id` columns.
+     May include divide-shaped proxy rows flagged via `colname_divide_proxy` -- see
+     :func:`plot_donor_receiver_map` and rafts_map_donor_receiver.py.
+    :type gdf_receivers: gpd.GeoDataFrame
+    :param gdf_donors: Donor gage point geometries, with a 'gage_id' column matching `colname_donor_id` values
+    :type gdf_donors: gpd.GeoDataFrame
+    :param dir_out_viz_base: The base directory for storing visualization data
+    :type dir_out_viz_base: str | os.PathLike
+    :param ds: The dataset name
+    :type ds: str
+    :param metr: The response variable of interest
+    :type metr: str
+    :param algo_str: The algorithm shortstring
+    :type algo_str: str
+    :param region_str: A short identifier for the mapped region (e.g. 'FL')
+    :type region_str: str
+    :param colname_donor_id: Column in `gdf_receivers` naming each receiver's assigned donor, defaults to 'donor_id'
+    :type colname_donor_id: str, optional
+    :param colname_cluster: Column in `gdf_receivers` holding the predicted cluster label, defaults to 'cluster_id'
+    :type colname_cluster: str, optional
+    :param epsg_reproj: The EPSG code for reprojecting data for map display, defaults to 3857
+    :type epsg_reproj: int, optional
+    :param gdf_no_pairing: Receiver geometries with no donor pairing, defaults to None
+    :type gdf_no_pairing: gpd.GeoDataFrame, optional
+    :param colname_divide_proxy: Boolean column in `gdf_receivers` marking divide-shaped proxy rows,
+     defaults to 'is_divide_proxy'. Ignored if the column isn't present.
+    :type colname_divide_proxy: str, optional
+    :return: The saved map's filepath
+    :rtype: Path
+    """
+    path_map_plot = std_donor_receiver_map_path(dir_out_viz_base, ds, metr, algo_str, region_str)
+    dir_out_basemap = path_map_plot.parent.parent
+    states = gen_conus_basemap(dir_out_basemap=dir_out_basemap).to_crs(epsg=epsg_reproj)
+
+    gdf_receivers = gdf_receivers.to_crs(4326).to_crs(epsg=epsg_reproj)
+    gdf_donors = gdf_donors.to_crs(4326).to_crs(epsg=epsg_reproj)
+    if gdf_no_pairing is not None and not gdf_no_pairing.empty:
+        gdf_no_pairing = gdf_no_pairing.to_crs(4326).to_crs(epsg=epsg_reproj)
+
+    # Build one donor->receiver line per receiver, in the same projected CRS as the
+    # points being connected (a straight connector for visual reference only, not a
+    # geodesic distance measurement, so a single consistent projected CRS is sufficient).
+    # For a divide-shaped proxy row this naturally draws from the DIVIDE's own centroid
+    # (gdf_receivers.geometry is already the divide, not the original HUC12, for those rows).
+    donor_lookup = gdf_donors.set_index('gage_id')['geometry']
+    centroids = gdf_receivers.geometry.centroid
+    line_geoms = [LineString([c, donor_lookup[d]]) for c, d in zip(centroids, gdf_receivers[colname_donor_id])]
+    gdf_lines = gpd.GeoDataFrame({colname_donor_id: gdf_receivers[colname_donor_id].values},
+                                  geometry=line_geoms, crs=gdf_receivers.crs)
+
+    n_donors = gdf_donors['gage_id'].nunique()
+    n_proxy = int(gdf_receivers[colname_divide_proxy].sum()) if colname_divide_proxy in gdf_receivers.columns else 0
+    proxy_note = f" ({n_proxy} via divide-shaped proxy)" if n_proxy else ""
+    title = (f"Donor-Receiver Pairing -- {region_str}\n"
+             f"{ds} | {algo_str} | {metr} | {len(gdf_receivers)} receivers{proxy_note} -> {n_donors} donors")
+
+    fig = plot_donor_receiver_map(gdf_receivers, gdf_donors, gdf_lines, states, title,
+                                   colname_cluster=colname_cluster, gdf_no_pairing=gdf_no_pairing,
+                                   colname_divide_proxy=colname_divide_proxy)
+    fig.savefig(path_map_plot, dpi=300, bbox_inches='tight')
+    logging.info(f"Wrote donor-receiver map to \n{path_map_plot}")
+    plt.close(fig)
+    plt.close('all')
+    gc.collect()
+    return path_map_plot
+
+def std_huc12_gap_classification_map_path(dir_out_qa: str | Path, region_str: str) -> pathlib.PosixPath:
+    """Generate a filepath for a qa_check_missing_huc12_divide_existence.py classification map
+
+    :param dir_out_qa: The QA output directory for this dataset (``ctx.dir_qa_out``)
+    :type dir_out_qa: str | os.PathLike
+    :param region_str: A short identifier for the mapped region (e.g. 'FL' or 'CONUS')
+    :type region_str: str
+    :return: Standardized filepath for the saved map
+    :rtype: pathlib.PosixPath
+    """
+    path_map_plot = Path(f"{dir_out_qa}/qa_huc12_gap_classification_map_{region_str}.png")
+    path_map_plot.parent.mkdir(parents=True, exist_ok=True)
+    return path_map_plot
+
+def plot_huc12_gap_classification_map(gdf_region: gpd.GeoDataFrame, gdf_classified: gpd.GeoDataFrame,
+                                       states: gpd.GeoDataFrame, title: str,
+                                       colname_class: str = 'classification') -> Figure:
+    """Plot every HUC12 in scope with a crosswalk entry as light background context, and
+    HUC12s missing from the crosswalk colored by their gap classification -- for quick
+    visual triage of where the actionable gaps (a real divide exists but wasn't
+    crosswalked) sit versus the likely-structural ones (no real divide there at all).
+
+    :param gdf_region: Every HUC12 polygon in scope (both covered and missing)
+    :type gdf_region: gpd.GeoDataFrame
+    :param gdf_classified: The missing-HUC12 subset, with `colname_class` and geometry
+    :type gdf_classified: gpd.GeoDataFrame
+    :param states: State boundary geometries for map context
+    :type states: gpd.GeoDataFrame
+    :param title: The plot title
+    :type title: str
+    :param colname_class: Column in `gdf_classified` holding the classification label, defaults to 'classification'
+    :type colname_class: str, optional
+    :return: The rendered figure
+    :rtype: Figure
+    """
+    # Size the figure to the data's actual aspect ratio, not a fixed portrait shape --
+    # a hardcoded (14, 16) (right for a tall/narrow single state like Florida) squeezes
+    # a landscape-shaped region like CONUS into a small corner of a mostly-blank canvas,
+    # since geopandas locks the axis to equal aspect. Target a ~16in long edge.
+    bounds = gdf_region.total_bounds
+    data_w, data_h = bounds[2] - bounds[0], bounds[3] - bounds[1]
+    aspect = (data_w / data_h) if data_h > 0 else 1.0
+    if aspect >= 1:
+        figsize = (16, max(6, 16 / aspect))
+    else:
+        figsize = (max(6, 16 * aspect), 16)
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
+
+    # Background: every HUC12 in scope (covered + missing), thin light fill for
+    # geographic context -- the missing ones get painted over below.
+    gdf_region.plot(ax=ax, facecolor='#e8e8e8', edgecolor='#bbbbbb', linewidth=0.15, zorder=1)
+
+    # Fixed, non-cycled category colors -- only 2 categories here, and a warning red
+    # for the actionable class reads more usefully than an arbitrary categorical hue.
+    class_style = {
+        'divides_exist_not_crosswalked': dict(facecolor='#d62728', edgecolor='#5c0000', hatch=None,
+                                               label='divides_exist_not_crosswalked (ACTIONABLE)'),
+        'no_divide_overlap': dict(facecolor='#6699cc', edgecolor='#1b3a5c', hatch='///',
+                                   label='no_divide_overlap (likely structural)'),
+    }
+    for cls, style in class_style.items():
+        subset = gdf_classified[gdf_classified[colname_class] == cls]
+        if subset.empty:
+            continue
+        subset.plot(ax=ax, facecolor=style['facecolor'], edgecolor=style['edgecolor'],
+                    linewidth=0.3, hatch=style['hatch'], alpha=0.9, zorder=3, label=style['label'])
+
+    states.boundary.plot(ax=ax, color="#555555", linewidth=1, zorder=0, alpha=0.5)
+
+    handles = [mpatches.Patch(facecolor='#e8e8e8', edgecolor='#bbbbbb', label='has crosswalk entry')]
+    for cls in ('divides_exist_not_crosswalked', 'no_divide_overlap'):
+        if (gdf_classified[colname_class] == cls).any():
+            style = class_style[cls]
+            handles.append(mpatches.Patch(facecolor=style['facecolor'], edgecolor=style['edgecolor'],
+                                           hatch=style['hatch'], label=style['label']))
+    ax.legend(handles=handles, loc='lower left', fontsize=11, frameon=True)
+
+    x_buffer = data_w * 0.03 or 1.0
+    y_buffer = data_h * 0.03 or 1.0
+    ax.set_xlim(bounds[0] - x_buffer, bounds[2] + x_buffer)
+    ax.set_ylim(bounds[1] - y_buffer, bounds[3] + y_buffer)
+
+    ax.set_title(title, fontsize=17)
+    ax.set_axis_off()
+    return plt.gcf()
+
+def plot_huc12_gap_classification_map_wrap(gdf_region: gpd.GeoDataFrame, gdf_classified: gpd.GeoDataFrame,
+                                            dir_out_qa: str | Path, dir_out_basemap: str | Path,
+                                            region_str: str, colname_class: str = 'classification',
+                                            epsg_reproj: int = 3857) -> Path:
+    """Wrapper for building, saving, and closing a HUC12 gap classification map
+
+    :param gdf_region: Every HUC12 polygon in scope (both covered and missing)
+    :type gdf_region: gpd.GeoDataFrame
+    :param gdf_classified: The missing-HUC12 subset, with `colname_class` and geometry
+    :type gdf_classified: gpd.GeoDataFrame
+    :param dir_out_qa: The QA output directory for this dataset (``ctx.dir_qa_out``)
+    :type dir_out_qa: str | os.PathLike
+    :param dir_out_basemap: Directory to cache/read the CONUS state-boundary shapefile from
+        -- pass ``ctx.dir_out_viz_base`` to reuse the same cache other maps already use.
+    :type dir_out_basemap: str | os.PathLike
+    :param region_str: A short identifier for the mapped region (e.g. 'FL' or 'CONUS')
+    :type region_str: str
+    :param colname_class: Column in `gdf_classified` holding the classification label, defaults to 'classification'
+    :type colname_class: str, optional
+    :param epsg_reproj: The EPSG code for reprojecting data for map display, defaults to 3857
+    :type epsg_reproj: int, optional
+    :return: The saved map's filepath
+    :rtype: Path
+    """
+    path_map_plot = std_huc12_gap_classification_map_path(dir_out_qa, region_str)
+    states = gen_conus_basemap(dir_out_basemap=dir_out_basemap).to_crs(epsg=epsg_reproj)
+
+    gdf_region_proj = gdf_region.to_crs(4326).to_crs(epsg=epsg_reproj)
+    gdf_classified_proj = gdf_classified.to_crs(4326).to_crs(epsg=epsg_reproj)
+
+    n_actionable = int((gdf_classified[colname_class] == 'divides_exist_not_crosswalked').sum())
+    n_structural = int((gdf_classified[colname_class] == 'no_divide_overlap').sum())
+    title = (f"Crosswalk Gap Classification -- {region_str}\n"
+             f"{n_actionable:,} actionable, {n_structural:,} likely structural, of {len(gdf_region):,} HUC12s in scope")
+
+    fig = plot_huc12_gap_classification_map(gdf_region_proj, gdf_classified_proj, states, title,
+                                             colname_class=colname_class)
+    fig.savefig(path_map_plot, dpi=250, bbox_inches='tight')
+    logging.info(f"Wrote HUC12 gap classification map to \n{path_map_plot}")
+    plt.close(fig)
+    plt.close('all')
+    gc.collect()
+    return path_map_plot
+
+def plot_divide_reassignment_defects(df_defects: pd.DataFrame, gdf_missing_huc: gpd.GeoDataFrame,
+                                      gdf_assigned_huc: gpd.GeoDataFrame, gdf_divides: gpd.GeoDataFrame,
+                                      divide_id_col: str, title: str) -> Figure:
+    """Small-multiples grid: one zoomed-in panel per reassignment "defect" row, showing the
+    overlapping divide's footprint against both the "missing" HUC12 and whatever HUC12 the
+    crosswalk actually assigned that divide to -- so a human can visually confirm each
+    qa_check_huc12_divide_reassignment.py finding against the real geometry rather than
+    trusting the area-fraction numbers alone.
+
+    :param df_defects: Rows to plot (already the desired subset/ordering, e.g. the
+        top-N by margin), with 'huc12', `divide_id_col`, 'assigned_huc12', 'margin_frac_divide'
+    :type df_defects: pd.DataFrame
+    :param gdf_missing_huc: Geometries for the "missing" HUC12s referenced in `df_defects`, with a 'huc12' column
+    :type gdf_missing_huc: gpd.GeoDataFrame
+    :param gdf_assigned_huc: Geometries for the assigned HUC12s referenced in `df_defects`, with a 'huc12' column
+    :type gdf_assigned_huc: gpd.GeoDataFrame
+    :param gdf_divides: Geometries for the divides referenced in `df_defects`, with `divide_id_col`
+    :type gdf_divides: gpd.GeoDataFrame
+    :param divide_id_col: Column name holding the divide identifier
+    :type divide_id_col: str
+    :param title: The figure's overall title
+    :type title: str
+    :return: The rendered figure
+    :rtype: Figure
+    """
+    n = len(df_defects)
+    ncols = min(5, max(n, 1))
+    nrows = int(np.ceil(n / ncols))
+    fig, axes = plt.subplots(nrows, ncols, figsize=(4.6 * ncols, 4.8 * nrows), squeeze=False)
+    axes = axes.flatten()
+
+    huc_missing_by_id = gdf_missing_huc.set_index('huc12').geometry
+    huc_assigned_by_id = gdf_assigned_huc.set_index('huc12').geometry
+    divide_by_id = gdf_divides.set_index(divide_id_col).geometry
+
+    for i, row in enumerate(df_defects.itertuples(index=False)):
+        ax = axes[i]
+        divide_id = getattr(row, divide_id_col)
+        missing_huc = row.huc12
+        assigned_huc = row.assigned_huc12
+
+        div_geom = divide_by_id.get(divide_id)
+        miss_geom = huc_missing_by_id.get(missing_huc)
+        assn_geom = huc_assigned_by_id.get(assigned_huc) if assigned_huc else None
+
+        if div_geom is not None:
+            gpd.GeoSeries([div_geom], crs=gdf_divides.crs).plot(
+                ax=ax, facecolor='#aec7e8', edgecolor='#1f77b4', linewidth=1, alpha=0.6, zorder=1)
+        if miss_geom is not None:
+            gpd.GeoSeries([miss_geom], crs=gdf_missing_huc.crs).boundary.plot(
+                ax=ax, color='#d62728', linewidth=2.3, linestyle='--', zorder=3)
+        if assn_geom is not None:
+            gpd.GeoSeries([assn_geom], crs=gdf_assigned_huc.crs).boundary.plot(
+                ax=ax, color='#2ca02c', linewidth=2.3, zorder=3)
+
+        geoms = [g for g in (div_geom, miss_geom, assn_geom) if g is not None]
+        if geoms:
+            u = gpd.GeoSeries(geoms).union_all()
+            minx, miny, maxx, maxy = u.bounds
+            pad_x = (maxx - minx) * 0.12 or 1.0
+            pad_y = (maxy - miny) * 0.12 or 1.0
+            ax.set_xlim(minx - pad_x, maxx + pad_x)
+            ax.set_ylim(miny - pad_y, maxy + pad_y)
+
+        margin_str = f"{row.margin_frac_divide:.1%}" if pd.notna(row.margin_frac_divide) else "n/a"
+        ax.set_title(f"{missing_huc}\n{divide_id}  |  margin={margin_str}", fontsize=9.5)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        for spine in ax.spines.values():
+            spine.set_edgecolor('#999999')
+
+    for j in range(n, len(axes)):
+        axes[j].axis('off')
+
+    legend_handles = [
+        mpatches.Patch(facecolor='#aec7e8', edgecolor='#1f77b4', label='divide footprint'),
+        Line2D([0], [0], color='#d62728', linestyle='--', linewidth=2.3, label='"missing" HUC12 (no crosswalk entry)'),
+        Line2D([0], [0], color='#2ca02c', linewidth=2.3, label='HUC12 the crosswalk actually assigned'),
+    ]
+    fig.legend(handles=legend_handles, loc='lower center', ncol=3, fontsize=11, bbox_to_anchor=(0.5, -0.02))
+    fig.suptitle(title, fontsize=16, y=1.02)
+    fig.tight_layout()
+    return fig
+
+def plot_divide_reassignment_defects_wrap(df_defects: pd.DataFrame, gdf_missing_huc: gpd.GeoDataFrame,
+                                           gdf_assigned_huc: gpd.GeoDataFrame, gdf_divides: gpd.GeoDataFrame,
+                                           divide_id_col: str, dir_out_qa: str | Path, region_str: str,
+                                           top_n: int = 10, epsg_reproj: int = 3857) -> Path | None:
+    """Wrapper for building, saving, and closing the top-N divide-reassignment defect panels
+
+    :param df_defects: The full reassignment result table, pre-sorted so the most
+        actionable rows (e.g. by 'margin_frac_divide' descending) come first
+    :type df_defects: pd.DataFrame
+    :param gdf_missing_huc: Geometries for the "missing" HUC12s referenced in `df_defects`, with a 'huc12' column
+    :type gdf_missing_huc: gpd.GeoDataFrame
+    :param gdf_assigned_huc: Geometries for the assigned HUC12s referenced in `df_defects`, with a 'huc12' column
+    :type gdf_assigned_huc: gpd.GeoDataFrame
+    :param gdf_divides: Geometries for the divides referenced in `df_defects`, with `divide_id_col`
+    :type gdf_divides: gpd.GeoDataFrame
+    :param divide_id_col: Column name holding the divide identifier
+    :type divide_id_col: str
+    :param dir_out_qa: The QA output directory for this dataset (``ctx.dir_qa_out``)
+    :type dir_out_qa: str | os.PathLike
+    :param region_str: A short identifier for the mapped region (e.g. 'FL')
+    :type region_str: str
+    :param top_n: How many rows (panels) to plot, defaults to 10
+    :type top_n: int, optional
+    :param epsg_reproj: The EPSG code for reprojecting data for map display, defaults to 3857
+    :type epsg_reproj: int, optional
+    :return: The saved plot's filepath, or None if `df_defects` was empty
+    :rtype: Path | None
+    """
+    if df_defects.empty:
+        return None
+    df_top = df_defects.head(top_n).reset_index(drop=True)
+
+    path_plot = Path(dir_out_qa) / f"qa_huc12_divide_reassignment_defects_{region_str}.png"
+    path_plot.parent.mkdir(parents=True, exist_ok=True)
+
+    gdf_missing_proj = gdf_missing_huc.to_crs(4326).to_crs(epsg=epsg_reproj)
+    gdf_assigned_proj = gdf_assigned_huc.to_crs(4326).to_crs(epsg=epsg_reproj)
+    gdf_divides_proj = gdf_divides.to_crs(4326).to_crs(epsg=epsg_reproj)
+
+    title = f"Top {len(df_top)} Crosswalk Reassignment Defects -- {region_str}"
+    fig = plot_divide_reassignment_defects(df_top, gdf_missing_proj, gdf_assigned_proj, gdf_divides_proj,
+                                            divide_id_col, title)
+    fig.savefig(path_plot, dpi=200, bbox_inches='tight')
+    logging.info(f"Wrote divide reassignment defect panels to \n{path_plot}")
+    plt.close(fig)
+    plt.close('all')
+    gc.collect()
+    return path_plot
