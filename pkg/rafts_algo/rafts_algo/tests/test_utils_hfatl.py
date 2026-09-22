@@ -9,11 +9,13 @@ import numpy as np
 import unittest
 from pathlib import Path
 import sqlite3
+from pydantic import ValidationError
 
 # Assuming the target functions are imported from the relevant script (e.g., hfatlas_to_rafts_prep)
 # For the sake of this testing block, we assume they are accessible in the current namespace 
 # or imported as: 
 import rafts_algo.utils as raftsutil
+from rafts_algo.schemas.pydantic_schemas import PredConfig
 
 class TestHfAtlasToRaftsPrep(unittest.TestCase):
     
