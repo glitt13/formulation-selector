@@ -17,6 +17,11 @@ if __name__ == '__main__':
     unittest.main(argv=['first-arg-is-ignored'], exit=False)
 
 '''
+import os
+import matplotlib
+# MUST set headless backend before pyplot or rafts_algo imports to prevent Tkinter Tcl_AsyncDelete threading aborts
+matplotlib.use('Agg')
+
 import unittest
 from unittest.mock import patch, MagicMock, mock_open
 import pandas as pd
@@ -31,8 +36,8 @@ import rafts_algo.rafts_algo_train as raftsalgo
 import rafts_algo.utils as raftsutil
 import rafts_algo.plots as raftsplots
 import warnings
+from sklearn.exceptions import ConvergenceWarning
 import xarray as xr
-import os
 import numpy as np
 import forestci as fci
 from scipy import stats as st
@@ -51,11 +56,22 @@ import geopandas as gpd
 from shapely import Point
 import joblib 
 import sqlite3
+from pydantic import ValidationError
+from rafts_algo.schemas.pydantic_schemas import AlgoConfig, PredConfig
+
 # Tell pytest natively to ignore these specific warnings for this entire file
 pytestmark = pytest.mark.filterwarnings(
     "ignore:.*disp.*iprint.*:DeprecationWarning",
-    "ignore:.*lbfgs failed to converge.*:sklearn.exceptions.ConvergenceWarning"
+    "ignore:.*lbfgs failed to converge.*:sklearn.exceptions.ConvergenceWarning",
+    "ignore:.*Some inputs do not have OOB scores.*:UserWarning",
+    "ignore:.*Removed duplicate entries from 'train_sizes'.*:RuntimeWarning"
 )
+
+# Silence warnings when running via `python -m unittest` instead of pytest
+warnings.filterwarnings("ignore", category=ConvergenceWarning)
+warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
+warnings.filterwarnings("ignore", category=RuntimeWarning, module="sklearn")
+warnings.filterwarnings("ignore", message=".*Unknown solver options: iprint.*")
 
 # %% UNIT TESTING FOR AttrConfigAndVars
 parent_dir_test = Path(__file__).parent
@@ -211,7 +227,6 @@ class TestAlgoConfigParser(unittest.TestCase):
         self.assertIn("mapie", config.algo_cfg_unc_dict["algo_unc_dict"]["uncertainty_cfg"])
         print("Completed Test AlgoConfig parsing - YAML file #2")
 
-
     def test_03_uncertainty_params_custom(self):
         _, filepath = self.load_yaml("test_algo_config_03_uncertainty_nodefaults.yaml")
         config = raftsutil.AlgoConfigParser(filepath)
@@ -237,6 +252,13 @@ class TestAlgoConfigParser(unittest.TestCase):
         self.assertIn("'algorithms'", str(context.exception))
         print("Completed Test AlgoConfig parsing - YAML file #4")
 
+    def test_04_pydantic_missing_required_parameter(self):
+        raw, _ = self.load_yaml("test_algo_config_04_errortest_parammissing.yaml")
+        with self.assertRaises(ValidationError) as context:
+            AlgoConfig(**raw)
+        self.assertIn("algorithms", str(context.exception))
+        print("Completed Pydantic AlgoConfig validation - missing parameter")
+
     def test_05_wrong_datatype(self):
         _, filepath = self.load_yaml("test_algo_config_05_errortest_paramdatatype.yaml")
         config = raftsutil.AlgoConfigParser(filepath)
@@ -244,6 +266,13 @@ class TestAlgoConfigParser(unittest.TestCase):
             config._read_algo_config()
         self.assertIn("'seed' must be an integer", str(context.exception))
         print("Completed Test AlgoConfig parsing - YAML file #5")
+
+    def test_05_pydantic_wrong_datatype(self):
+        raw, _ = self.load_yaml("test_algo_config_05_errortest_paramdatatype.yaml")
+        with self.assertRaises(ValidationError) as context:
+            AlgoConfig(**raw)
+        self.assertIn("seed", str(context.exception))
+        print("Completed Pydantic AlgoConfig validation - wrong datatype")
 
     def test_06_invalid_uncertainty_structure(self):
         _, filepath = self.load_yaml("test_algo_config_06_errortest_unc_param_struct.yaml")
@@ -282,16 +311,13 @@ class TestCheckAttributesExist(unittest.TestCase):
                 mock_pdf_bad, pd.Series(['pet_mm_s01', 'cly_pc_sav'])
             )
 
-        #self.assertTrue(any("None of the provided featureIDs exist" in m for m in cm.output))
         self.assertTrue(any("Not all featureID groupings" in m for m in cm.output))
         self.assertTrue(any("TOTAL unique locations with missing attributes" in m for m in cm.output))
         self.assertTrue(any("TOTAL MISSING ATTRS" in m for m in cm.output))
-
-        # with self.assertWarns(UserWarning):
-        #     raftsutil._check_attributes_exist(mock_pdf_bad,pd.Series(['pet_mm_s01','cly_pc_sav']))
         
         print("✅ _check_attributes_exist test passed.")
-class TestFsRetrNhdpComids(unittest.TestCase):
+
+class TestRaftsRetrNhdpComids(unittest.TestCase):
 
     def test_rafts_retr_nhdp_comids(self):
 
@@ -414,7 +440,7 @@ class build_cfig_path(unittest.TestCase):
         self.assertEqual(mock_exists.call_count, 2)
         print("✅ build_cfig_path build config paths test with mock paths passed.")
 
-class TestFsSaveAlgoDirStruct(unittest.TestCase):
+class TestRaftsSaveAlgoDirStruct(unittest.TestCase):
     def test_rafts_save_algo_dir_struct(self):
         dir_base = tempfile.gettempdir()
         rslt = raftsutil.rafts_save_algo_dir_struct(dir_base)
@@ -426,7 +452,7 @@ class TestFsSaveAlgoDirStruct(unittest.TestCase):
             raftsutil.rafts_save_algo_dir_struct(dir_base + '/not_a_dir/')
         print("✅ rafts_save_algo_dir_struct creating directory structure for outputs passed.")
 
-class TestOpenResponseDataFs(unittest.TestCase):
+class TestOpenResponseDataRafts(unittest.TestCase):
     dir_std_base = tempfile.gettempdir()
 
     def test_open_response_data_rafts(self):
@@ -572,8 +598,6 @@ class TestAlgoTrainEval(unittest.TestCase):
         self.assertIn('mlp', self.train_eval.algs_dict)
         self.assertIsInstance(self.train_eval.algs_dict['mlp']['algo'], MLPRegressor)
 
-        #self.assertEqual(len(self.algo_config), len(self.train_eval))
-
     def test_predict_algos(self):
         # Test algorithm predictions
         self.train_eval.split_data()
@@ -714,9 +738,7 @@ class TestAlgoTrainEvalMlti(unittest.TestCase):
         self.rs = 32
         self.verbose = False
 
-        # self.bagging_ci_params = {'n_algos': 5}  # Example parameters
         self.confidence_levels = [90, 95]  # Example parameters
-        # self.mapie_alpha = [0.1, 0.2]
         uncertainty_cfg = {
             'forestci': [{'fci_flag': True}],
             'bagging': [{'n_algos': 10}],
@@ -769,8 +791,6 @@ class TestAlgoTrainEvalMlti(unittest.TestCase):
         self.assertTrue('rf' in  self.algo_train_eval.algo_config_grid)
         self.assertIn('mlp', self.algo_train_eval.algs_dict)
 
-
-
     def test_empty_dict(self):
         d = {}
         self.algo_train_eval.convert_to_list(d)
@@ -791,43 +811,6 @@ class TestAlgoTrainEvalMlti(unittest.TestCase):
         self.algo_train_eval.convert_to_list(d)
         self.assertEqual(d, {'a': [1, 2], 'b': {'sub1': [3, 4]}})
 
-    # def test_calculate_forestci_uncertainty(self):
-    #     # Test the calculate_forestci_uncertainty method
-    #     self.algo_train_eval.split_data()
-    #     self.algo_train_eval.train_algos()
-
-    #     rf = self.algo_train_eval.algs_dict['rf']['algo']
-    #     ci_dict = self.algo_train_eval.calculate_forestci_uncertainty(rf, self.algo_train_eval.X_train, self.algo_train_eval.X_test)
-
-    #     self.assertIn('ci_95', ci_dict)  # Check for 95% confidence interval
-    #     self.assertIn('lower_bound', ci_dict['ci_95'])
-    #     self.assertIn('upper_bound', ci_dict['ci_95'])
-    #     self.assertEqual(len(ci_dict['ci_95']['lower_bound']), len(self.algo_train_eval.X_test))
-    #     self.assertEqual(len(ci_dict['ci_95']['upper_bound']), len(self.algo_train_eval.X_test))
-
-    # def test_calculate_bagging_ci(self):
-    #     # Test the calculate_bagging_ci method
-    #     self.algo_train_eval.split_data()
-    #     self.algo_train_eval.train_algos()
-
-    #     best_algo = self.algo_train_eval.algs_dict['rf']['algo']  # Use the trained RF model
-    #     self.algo_train_eval.calculate_bagging_ci('rf', best_algo)
-
-    #     # Check if uncertainty data is stored
-    #     self.assertIn('Uncertainty', self.algo_train_eval.algs_dict['rf'])
-    #     self.assertIn('bagging_mean_pred', self.algo_train_eval.algs_dict['rf']['Uncertainty'])
-    #     self.assertIn('bagging_std_pred', self.algo_train_eval.algs_dict['rf']['Uncertainty'])
-    #     self.assertIn('bagging_confidence_intervals', self.algo_train_eval.algs_dict['rf']['Uncertainty'])
-        
-    #     # Check confidence intervals
-    #     ci = self.algo_train_eval.algs_dict['rf']['Uncertainty']['bagging_confidence_intervals']
-    #     self.assertIn('confidence_level_90', ci)
-    #     self.assertIn('confidence_level_95', ci)
-        
-    #     self.assertEqual(len(ci['confidence_level_90']['lower_bound']), len(self.algo_train_eval.X_test))
-    #     self.assertEqual(len(ci['confidence_level_90']['upper_bound']), len(self.algo_train_eval.X_test))
-    #     self.assertEqual(len(ci['confidence_level_95']['lower_bound']), len(self.algo_train_eval.X_test))
-    #     self.assertEqual(len(ci['confidence_level_95']['upper_bound']), len(self.algo_train_eval.X_test))
         
 class TestAlgoTrainEvalSngl(unittest.TestCase):
     # An algo_config with singular hyperparameter value
@@ -958,9 +941,7 @@ class TestAlgoTrainEvalBasic(unittest.TestCase):
         self.verbose = False
         self.algo_config_grid = dict()
 
-        # self.bagging_ci_params = {'n_algos': 5}  # Example parameters
         self.confidence_levels = [90, 95]  # Example parameters
-        # self.mapie_alpha = [0.1, 0.2]
         uncertainty_cfg = {
             'forestci': [{'fci_flag': True}],
             'bagging': [{'n_algos': 10}],
@@ -1001,20 +982,9 @@ class TestAlgoTrainEvalBasic(unittest.TestCase):
         # Run the method
         self.algo.train_eval()
 
-        # Check if the train_test_split was called correctly
-        #mock_train_test_split.assert_called()
-
-        # Check that the RandomForest and MLP models were trained
-        # MockRF.assert_called_once()
-        # MockMLP.assert_called_once()
-        # self.assertIn('rf',self.algo_config_grid)
-        # self.assertIn('mlp',self.algo_config)
-
         # Check predictions and evaluations were made
         self.assertIn('rf', self.algo.preds_dict)
         self.assertIn('mlp', self.algo.preds_dict)
-
-
 
         self.assertIn('rf', self.algo.eval_dict)
         self.assertIn('mlp', self.algo.eval_dict)
@@ -1025,6 +995,7 @@ class TestAlgoTrainEvalBasic(unittest.TestCase):
         # Check eval dataframe was created
         self.assertIsInstance(self.algo.eval_df, pd.DataFrame)
         self.assertFalse(self.algo.eval_df.empty)
+        
     def test_learning_curve_plotting(self):
         """Test the learning curve generation and plotting logic without mocking I/O."""
         self.algo.train_eval()
@@ -1149,7 +1120,7 @@ class TestPredConfigParser(unittest.TestCase):
             "pred_file_comid_colname": "feature_id",
             "algo_response_vars": ["runoff"],
             "algo_type": ["rf"],
-            "MAPIE_alpha": 0.1
+            "MAPIE_alpha": [0.1]
         }
         self.path_pred_config = self.test_path / "pred_config.yaml"
         with open(self.path_pred_config, 'w') as f:
@@ -1170,6 +1141,11 @@ class TestPredConfigParser(unittest.TestCase):
         self.assertEqual(parser.pred_cfg_dict['dir_base'], self.dir_base)
         self.assertEqual(parser.pred_cfg_dict['dir_std_base'], self.dir_std_base)
 
+    def test_pydantic_pred_config_success(self):
+        cfg = PredConfig(**self.pred_config)
+        self.assertEqual(cfg.ds_type, 'eval')
+        self.assertEqual(cfg.write_type, 'parquet')
+
     def test_read_pred_config_missing_required(self):
         # Remove a required field
         del self.pred_config["ds_type"]
@@ -1180,6 +1156,12 @@ class TestPredConfigParser(unittest.TestCase):
         with self.assertRaises(ValueError) as context:
             parser._read_pred_config()
         self.assertIn("Missing required keys", str(context.exception))
+
+    def test_pydantic_pred_config_missing_required(self):
+        del self.pred_config["path_meta"]
+        with self.assertRaises(ValidationError) as context:
+            PredConfig(**self.pred_config)
+        self.assertIn("path_meta", str(context.exception))
 
     def test_nonexistent_pred_config_file(self):
         parser = raftsutil.PredConfigParser(str(self.test_path / "nonexistent.yaml"))
@@ -1957,6 +1939,7 @@ class TestAlgoTrainEvalBoosting(unittest.TestCase):
         self.assertIn('Uncertainty', ate.algs_dict['xgb'])
         self.assertIn('bagging_confidence_intervals', ate.algs_dict['xgb']['Uncertainty'])
         self.assertIn('bagging_confidence_intervals', ate.algs_dict['adaboost']['Uncertainty'])
+
 class TestAlgoTrainEvalDataAndIO(unittest.TestCase):
     """No-mock tests for data splitting edge cases and physical file I/O operations."""
     
@@ -2265,8 +2248,7 @@ def test_update_database_append_missing_id_col(tmp_path, sample_dataframe, caplo
     
     # Ensure the DatabaseError was gracefully caught and logged by our updated except block
     assert f"Identifier column '{id_col}' missing in the existing table '{table_name}'" in caplog.text
-if __name__ == '__main__':
 
+if __name__ == '__main__':
     unittest.main()
     logging.shutdown()
-    
