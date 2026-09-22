@@ -14,7 +14,7 @@ or if interested in unit testing coverage:
 #     2024-10-14 Add nwissite testing, GL
 #     2025-08-19 adapted for logging, GL
 #     2026-05-05 update logging for pytest compatibility, Gemini3Pro
-
+#     2026-09-22 refactor: update exception handling for Pydantic schema validation and remove legacy fs_ nomenclature.
 
 import unittest
 from pathlib import Path
@@ -22,13 +22,14 @@ import pandas as pd
 import yaml
 import xarray as xr
 from rafts_prep.proc_eval_metrics import read_schm_ls_of_dict, proc_col_schema,\
-      _proc_check_input_config, _proc_flatten_ls_of_dict_keys, \
+      _proc_flatten_ls_of_dict_keys, \
       _proc_check_input_df, _proc_check_std_rafts_ids, check_fix_nwissite_gageids, \
       _read_std_config, _conv_ls_dicts_df_long
 import numpy as np
 from unittest.mock import patch, mock_open
 import tempfile
 import logging
+from pydantic import ValidationError
 
 # Define the unit test directory for rafts_prep
 parent_dir_test = Path(__file__).parent
@@ -173,9 +174,9 @@ class TestProcCheckInputDf(unittest.TestCase):
             
         self.assertTrue(any("The following metric columns are not in your input dataframe" in log for log in cm.output))
 
-class TestProcCheckStdFsIds(unittest.TestCase):
+class TestProcCheckStdRaftsIds(unittest.TestCase):
     def setUp(self):
-        logging.info("----- Setting up TestProcCheckStdFsIds")
+        logging.info("----- Setting up TestProcCheckStdRaftsIds")
 
     def test_notavar_error(self):
         with self.assertRaises(ValueError):
@@ -186,27 +187,6 @@ class TestProcCheckStdFsIds(unittest.TestCase):
             _proc_check_std_rafts_ids(vars_map='NSE', category='metric')
             
         self.assertTrue(any('The metric mappings from the dataset schema match expected format.' in log for log in cm.output))
-    
-class TestProcCheckInputConfig(unittest.TestCase):
-    def setUp(self):
-        global config
-        self.config = config
-
-    def test_std_keys(self):
-        with self.assertRaisesRegex(ValueError, 'Provided keys in the input config file'):
-            _proc_check_input_config(self.config, std_keys=['not the standard keys'])
-
-    def test_std_col(self):
-        with self.assertRaisesRegex(ValueError, "defined under 'col_schema'"):
-            _proc_check_input_config(self.config, req_col_schema=['not the standard col names'])
-
-    def test_form_meta(self):
-        with self.assertRaisesRegex(ValueError, "defined under 'formulation_metadata'"):
-            _proc_check_input_config(self.config, req_form_meta=['not the standard formulation metadata'])
-
-    def test_file_io(self):
-        with self.assertRaisesRegex(ValueError, "defined under 'formulation_metadata'"):
-            _proc_check_input_config(self.config, req_file_io=['not the standard dir or save keys'])
 
 class TestProcFlattenLsOfDictKeys(unittest.TestCase):
     def setUp(self):
