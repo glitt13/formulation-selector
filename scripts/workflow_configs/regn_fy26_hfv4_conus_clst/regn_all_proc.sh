@@ -41,28 +41,28 @@ for MODEL in "${MODELS[@]}"; do
     ALGO_CONF="regn_${MODEL}_algo_config.yaml"
     PRED_CONF="regn_${MODEL}_pred_config_hf4.yaml"
 
-    # # 1. Prepare the initial dataset
-    # echo "--> Preparing the initial dataset..."
-    # uv run --project "${DIR_REPO}/pkg" python "${DIR_CONFIG}/prep_regn_test_agg.py" "${DIR_CONFIG}/${PREP_CONF}" || {
-    #     echo "ERROR: Dataset preparation failed for ${MODEL}. Exiting."
-    #     exit 1
-    # }
+    # 1. Prepare the initial dataset
+    echo "--> Preparing the initial dataset..."
+    uv run --project "${DIR_REPO}/pkg" python "${DIR_CONFIG}/prep_regn_test_agg.py" "${DIR_CONFIG}/${PREP_CONF}" || {
+        echo "ERROR: Dataset preparation failed for ${MODEL}. Exiting."
+        exit 1
+    }
 
-    # # 2. Run the hfATLAS standardized prep script
-    # echo "--> Grabbing attributes..."
-    # uv run --project "${DIR_REPO}/pkg" python "${DIR_PREP}/rafts_agg_hfatl_basin.py" \
-    #     --path_prep_config "${DIR_CONFIG}/${PREP_CONF}" \
-    #     --path_attr_config "${DIR_CONFIG}/${ATTR_CONF}" || {
-    #     echo "ERROR: Attribute grabbing failed for ${MODEL}. Exiting."
-    #     exit 1
-    # }
+    # 2. Run the hfATLAS standardized prep script
+    echo "--> Grabbing attributes..."
+    uv run --project "${DIR_REPO}/pkg" python "${DIR_PREP}/rafts_agg_hfatl_basin.py" \
+        --path_prep_config "${DIR_CONFIG}/${PREP_CONF}" \
+        --path_attr_config "${DIR_CONFIG}/${ATTR_CONF}" || {
+        echo "ERROR: Attribute grabbing failed for ${MODEL}. Exiting."
+        exit 1
+    }
 
-    # # 3. Train the algorithms 
-    # echo "--> Training & testing algorithms..."
-    # uv run --project "${DIR_REPO}/pkg" python "${DIR_PY}/rafts_proc_algo_pool.py" "${DIR_CONFIG}/${ALGO_CONF}" --chunk_size 4 || {
-    #     echo "ERROR: Algorithm training failed for ${MODEL}. Exiting."
-    #     exit 1
-    # }
+    # 3. Train the algorithms 
+    echo "--> Training & testing algorithms..."
+    uv run --project "${DIR_REPO}/pkg" python "${DIR_PY}/rafts_proc_algo_pool.py" "${DIR_CONFIG}/${ALGO_CONF}" --chunk_size 4 || {
+        echo "ERROR: Algorithm training failed for ${MODEL}. Exiting."
+        exit 1
+    }
 
     # 4. Perform the prediction
     echo "--> Performing cluster predictions..."
@@ -85,12 +85,12 @@ for MODEL in "${MODELS[@]}"; do
         exit 1
     }
 
-    # # 7. Write Parameters to Compiled GeoPackage
-    # echo "--> Compiling regionalized parameters into master GPKG..."
-    # uv run --project "${DIR_REPO}/pkg" python "${DIR_PY}/rafts_regn_params_gpkg.py" "${DIR_CONFIG}/${PRED_CONF}" || {
-    #     echo "ERROR: GPKG compilation failed for ${MODEL}. Exiting."
-    #     exit 1
-    # }
+    # 7. Write Parameters to Compiled GeoPackage
+    echo "--> Compiling regionalized parameters into master GPKG..."
+    uv run --project "${DIR_REPO}/pkg" python "${DIR_PY}/rafts_regn_params_gpkg.py" "${DIR_CONFIG}/${PRED_CONF}" || {
+        echo "ERROR: GPKG compilation failed for ${MODEL}. Exiting."
+        exit 1
+    }
 done
 
 
