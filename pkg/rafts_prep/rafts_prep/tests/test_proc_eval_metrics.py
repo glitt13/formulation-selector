@@ -105,6 +105,103 @@ class TestReadSchmLsOfDict(unittest.TestCase):
         self.assertEqual(str(gen_config_df['featureID'].iloc[0]), '1111111')
 
 
+class TestReadSchmLsOfDictDuplicateColumns(unittest.TestCase):
+    """
+    Documents a real hazard in read_schm_ls_of_dict, not a hypothetical one:
+    it builds its returned DataFrame via `pd.concat(ls_form, axis=1)`, combining
+    the file_io/col_schema/formulation_metadata sections side-by-side rather
+    than merging them by key. If any two sections define the same field name,
+    the result has two same-named columns instead of one, and indexing by
+    that name returns a DataFrame instead of a Series.
+
+    This isn't contrived: FileIOConfig and FormulationMetadata both define
+    'dataset_name' (rafts_prep_pydantic_schemas.py) -- a config author who
+    reasonably sets dataset_name in file_io (it's a natural fit alongside
+    dir_save/save_type) as well as in formulation_metadata (where it's
+    actually required) hits this today.
+
+    This is also the concrete reason rafts_agg_hfatl_basin.py parses its
+    prep config by hand instead of going through read_schm_ls_of_dict /
+    PrepConfig -- see that script's changelog entry: "Refactored Prep YAML
+    parsing to explicitly extract file_io mapping columns, preventing ID
+    merge failures." This test exists so that reasoning has a concrete,
+    executable anchor instead of only living in a commit message: if
+    read_schm_ls_of_dict is ever changed to merge by key instead of
+    concatenating by position, this test should be updated (and
+    rafts_agg_hfatl_basin.py's bypass reconsidered) rather than treated as
+    a regression to silently fix.
+    """
+
+    def _write_prep_config(self, tmpdir, dataset_name_in_file_io):
+        cfg = {
+            'col_schema': [
+                {'gage_id': 'basin_id'},
+                {'featureID': 'USGS-{gage_id}'},
+                {'featureSource': 'nwissite'},
+                {'respvar_cols': 'nse'},
+            ],
+            'file_io': [
+                {'dir_save': '/tmp/out'},
+                {'save_type': 'netcdf'},
+                {'save_loc': 'local'},
+                {'path_data': '/tmp/in.csv'},
+                {'dataset_name': dataset_name_in_file_io},
+            ],
+            'formulation_metadata': [
+                {'dataset_name': 'from_formulation_metadata'},
+                {'formulation_base': 'base'},
+                {'target_var': 'Q'},
+                {'start_date': '2000-01-01'},
+                {'end_date': '2010-01-01'},
+                {'cal_status': 'Y'},
+            ],
+        }
+        path_cfg = Path(tmpdir) / "prep_config.yaml"
+        with open(path_cfg, 'w') as f:
+            yaml.safe_dump(cfg, f)
+        return path_cfg
+
+    def test_overlapping_dataset_name_produces_duplicate_columns(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path_cfg = self._write_prep_config(tmpdir, dataset_name_in_file_io='from_file_io')
+            df = read_schm_ls_of_dict(path_cfg)
+
+        # Two 'dataset_name' columns land in df.columns instead of one.
+        self.assertEqual(list(df.columns).count('dataset_name'), 2)
+
+        # Indexing by that name returns a DataFrame (both values, in section
+        # order), not a scalar-bearing Series -- any caller doing
+        # df['dataset_name'].iloc[0] silently gets whichever section's value
+        # happens to sort first, rather than an error pointing at the clash.
+        dataset_name_selection = df['dataset_name']
+        self.assertIsInstance(dataset_name_selection, pd.DataFrame)
+        self.assertEqual(dataset_name_selection.shape, (1, 2))
+        self.assertEqual(
+            dataset_name_selection.iloc[0].tolist(),
+            ['from_file_io', 'from_formulation_metadata'],
+        )
+
+    def test_no_overlap_when_file_io_omits_dataset_name(self):
+        # Sanity check / contrast case: when only one section defines
+        # dataset_name, there's exactly one column and it behaves normally.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cfg_path = self._write_prep_config(tmpdir, dataset_name_in_file_io=None)
+            # Drop the file_io dataset_name entry entirely rather than leaving
+            # it null (FileIOConfig.dataset_name is Optional, but a present-
+            # but-None entry would still flatten to a 'dataset_name' key).
+            with open(cfg_path) as f:
+                cfg = yaml.safe_load(f)
+            cfg['file_io'] = [d for d in cfg['file_io'] if 'dataset_name' not in d]
+            with open(cfg_path, 'w') as f:
+                yaml.safe_dump(cfg, f)
+
+            df = read_schm_ls_of_dict(cfg_path)
+
+        self.assertEqual(list(df.columns).count('dataset_name'), 1)
+        self.assertIsInstance(df['dataset_name'], pd.Series)
+        self.assertEqual(df['dataset_name'].iloc[0], 'from_formulation_metadata')
+
+
 class TestProcColSchema(unittest.TestCase):
     '''
     A normal run
