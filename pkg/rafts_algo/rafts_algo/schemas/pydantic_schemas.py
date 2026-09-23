@@ -107,6 +107,15 @@ class PredConfig(BaseModel):
         `path_crosswalk_ids` (e.g. 'divide_id'). Only needed when performing
         a crosswalk/aggregation. Defaults to None.
     :type crosswalk_target_col: Optional[str]
+    :param featureSource: The prediction-time featureSource provenance tag
+        (see raftsutil.build_hfatl_feature_source). Training and prediction
+        may legitimately run at different spatial scales (e.g. trained on
+        gage-basin-aggregated attributes, predicting at HUC10/HUC14/divide
+        scale), so this is independent of -- and takes priority over -- the
+        training-time featureSource from the linked prep config. Defaults to
+        None, in which case rafts_pred_algo.py falls back to the prep
+        config's value.
+    :type featureSource: Optional[str]
     :param path_hf_finl_gpkg: Path to the hydrofabric GPKG containing the
         divides referenced by `path_crosswalk_ids`; required when running
         rafts_regn_params_gpkg.py. Defaults to None.
@@ -158,6 +167,7 @@ class PredConfig(BaseModel):
     pred_gpkg_id_col: Optional[str] = None
     path_crosswalk_ids: Optional[str] = None
     crosswalk_target_col: Optional[str] = None
+    featureSource: Optional[str] = None
     path_hf_finl_gpkg: Optional[str] = None
     layr_hf_finl_gpkg: str = 'divides'
     overwrite_sql: bool = False

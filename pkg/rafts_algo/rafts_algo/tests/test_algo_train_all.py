@@ -63,6 +63,7 @@ import logging
 import io
 import sys
 from contextlib import redirect_stdout
+from types import SimpleNamespace
 # Ignore some warnings that arise during testing:
 import pytest
 import geopandas as gpd
@@ -3428,8 +3429,6 @@ def test_get_crosswalk_target_col_no_candidates_returns_none():
     # After subtracting pred_gpkg_id_col and all known metadata columns, nothing is left.
     df = pd.DataFrame({'pred_id': ['a'], 'vpuid': ['01'], 'gage_id': ['g1']})
     assert raftsutil.get_crosswalk_target_col(df, 'pred_id', crosswalk_target_col=None) is None
-
-if __name__ == '__main__':
 
 if __name__ == '__main__':
     unittest.main()
