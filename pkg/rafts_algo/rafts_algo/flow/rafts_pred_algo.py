@@ -31,9 +31,8 @@ from logging.handlers import MemoryHandler
 import logging
 import rafts_prep.proc_eval_metrics as pem
 import numpy as np
-import yaml
 
-import rafts_algo.rafts_algo_train as raftsalgt 
+import rafts_algo.rafts_algo_train as raftsalgt
 from rafts_algo.rafts_algo_train import UniversalDistanceClusterer
 from rafts_algo.schemas.pydantic_schemas import PredConfig
 
@@ -70,9 +69,7 @@ if __name__ == "__main__":
     # ---   
         
     # --- 1. Pydantic validation
-    with open(path_pred_config, 'r') as file:
-        raw_pred_cfg = yaml.safe_load(file)
-    validated_pred_cfg = PredConfig(**raw_pred_cfg)
+    validated_pred_cfg = raftsutil.load_validated_config(path_pred_config, PredConfig)
 
     # Extract top-level scalars strictly from Pydantic model
     uncn_bnd_pred = validated_pred_cfg.uncn_bnd_pred
@@ -326,7 +323,7 @@ if __name__ == "__main__":
                     df_pred['forestci'] = forest_ci
         
                 # If MAPIE is available, compute prediction intervals
-                mapie_alpha = validated_pred_cfg.MAPIE_alpha
+                mapie_alpha = validated_pred_cfg.mapie_alpha
                 if 'mapie' in pipeline_data and mapie_alpha:
                     mapie = pipeline_data['mapie']
                     y_pred_mapie, y_pis = mapie.predict(df_attr_sub_rmna, alpha=mapie_alpha)

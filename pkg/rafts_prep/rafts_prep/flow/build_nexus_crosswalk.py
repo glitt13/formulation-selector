@@ -27,7 +27,6 @@ import geopandas as gpd
 import networkx as nx
 from pathlib import Path
 import logging
-import yaml
 
 import rafts_algo.utils as raftsutil
 from rafts_algo.schemas.pydantic_schemas import PredConfig
@@ -39,10 +38,7 @@ def generate_nexus_crosswalk(path_pred_config: Path):
     logging.info(f"Parsing prediction configuration: {path_pred_config.name}")
     
     # 1. Parse Pred Config via Pydantic
-    with open(path_pred_config, 'r') as f:
-        pred_yaml = yaml.safe_load(f)
-        
-    validated_pred_cfg = PredConfig(**pred_yaml)
+    validated_pred_cfg = raftsutil.load_validated_config(path_pred_config, PredConfig)
     pred_config = validated_pred_cfg.model_dump(exclude_unset=True)
         
     # 2. Parse Associated Attr Config to get base variables (dir_std_base, ds, home_dir)

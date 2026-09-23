@@ -25,7 +25,6 @@ import logging
 import sys
 import shutil
 import fnmatch
-import yaml
 
 import rafts_algo.utils as raftsutil
 import rafts_prep.proc_eval_metrics as pem
@@ -42,9 +41,7 @@ if __name__ == "__main__":
     logging.info(f"Running rafts_regn_params_gpkg.py using {path_pred_config.name}")
 
     # --- Pydantic Validation ---
-    with open(path_pred_config, 'r') as f:
-        pred_yaml = yaml.safe_load(f)
-    validated_pred_cfg = PredConfig(**pred_yaml)
+    validated_pred_cfg = raftsutil.load_validated_config(path_pred_config, PredConfig)
 
     path_attr_config = raftsutil.build_cfig_path(path_pred_config, validated_pred_cfg.name_attr_config)
     attr_cfig = raftsutil.AttrConfigAndVars(path_attr_config)

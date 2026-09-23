@@ -937,6 +937,27 @@ def build_cfig_path(path_known_config:str | os.PathLike, path_or_name_cfig:str |
         path_cfig = None
     return path_cfig
 
+def load_validated_config(path_config: str | os.PathLike, model_cls: type) -> Any:
+    """Read a YAML config file and validate it against a Pydantic model in one step.
+
+    Several flow scripts (e.g. rafts_pred_algo.py, rafts_pair_donors.py,
+    rafts_regn_params_gpkg.py, rafts_map_pred_hfatl.py, rafts_proc_algo_pool.py,
+    build_nexus_crosswalk.py, rafts_agg_nexus_hfatl.py) each open, parse, and
+    Pydantic-validate the same config file independently; this consolidates
+    that repeated three-line pattern into a single call.
+
+    :param path_config: Path to the YAML configuration file.
+    :type path_config: str | os.PathLike
+    :param model_cls: The Pydantic BaseModel subclass to validate the parsed
+        YAML against (e.g. rafts_algo.schemas.pydantic_schemas.PredConfig).
+    :type model_cls: type
+    :return: The validated Pydantic model instance.
+    :rtype: Any
+    """
+    with open(path_config, 'r') as f:
+        raw_cfg = yaml.safe_load(f)
+    return model_cls(**raw_cfg)
+
 def build_pred_locs_path(path_meta_template: str | os.PathLike,dir_std_base: str | os.PathLike,
     ds: str,ds_type: str,write_type: str='parquet') -> Path:
     """

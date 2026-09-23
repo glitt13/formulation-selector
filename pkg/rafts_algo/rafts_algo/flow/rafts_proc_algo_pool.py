@@ -32,7 +32,6 @@ import gc
 import copy
 import itertools
 import concurrent.futures
-import yaml
 from rafts_algo.schemas.pydantic_schemas import AlgoConfig
 
 if __name__ == "__main__":
@@ -67,9 +66,7 @@ if __name__ == "__main__":
     logging.info("BEGINNING algorithm training, testing, & evaluation.")
     
     # Initialize Pydantic validation for the config
-    with open(path_algo_config, 'r') as file:
-        raw_algo_cfg = yaml.safe_load(file)
-    validated_algo_cfg = AlgoConfig(**raw_algo_cfg)
+    validated_algo_cfg = raftsutil.load_validated_config(path_algo_config, AlgoConfig)
     
     # Initialize algo configuration class for extracting attributes
     algo_cfig = raftsutil.AlgoConfigParser(path_algo_config)

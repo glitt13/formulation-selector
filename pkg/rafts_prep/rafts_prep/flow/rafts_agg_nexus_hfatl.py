@@ -20,7 +20,6 @@ from pathlib import Path
 import logging
 import numpy as np
 import sys
-import yaml
 
 # RaFTS / Formulation Selector imports
 import rafts_prep.proc_eval_metrics as pem
@@ -57,10 +56,7 @@ if __name__ == "__main__":
         logging.info("Initializing in PREDICTION mode...")
         path_pred_config = Path(args.path_pred_config).expanduser()
         
-        with open(path_pred_config, 'r') as f:
-            pred_yaml = yaml.safe_load(f)
-            
-        validated_pred_cfg = PredConfig(**pred_yaml)
+        validated_pred_cfg = raftsutil.load_validated_config(path_pred_config, PredConfig)
         pred_config = validated_pred_cfg.model_dump(exclude_unset=True)
             
         # Dynamically find the attribute config from the prediction config

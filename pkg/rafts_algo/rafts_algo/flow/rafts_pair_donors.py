@@ -15,7 +15,6 @@ import logging
 from logging.handlers import MemoryHandler
 import sys
 import numpy as np
-import yaml
 
 import rafts_algo.utils as raftsutil
 import rafts_prep.proc_eval_metrics as pem
@@ -47,16 +46,12 @@ if __name__ == "__main__":
     logging.info(f"Running rafts_pair_donors.py with {path_pred_config.name}")
 
     # --- Pydantic Validation ---
-    with open(path_pred_config, 'r') as f:
-        pred_yaml = yaml.safe_load(f)
-    validated_pred_cfg = PredConfig(**pred_yaml)
+    validated_pred_cfg = raftsutil.load_validated_config(path_pred_config, PredConfig)
 
     path_attr_config = raftsutil.build_cfig_path(path_pred_config, validated_pred_cfg.name_attr_config)
     path_algo_config = raftsutil.build_cfig_path(path_pred_config, validated_pred_cfg.name_algo_config)
 
-    with open(path_algo_config, 'r') as f:
-        algo_yaml = yaml.safe_load(f)
-    validated_algo_cfg = AlgoConfig(**algo_yaml)
+    validated_algo_cfg = raftsutil.load_validated_config(path_algo_config, AlgoConfig)
 
     # --- Parse Configurations (Legacy parsing to retain f-string resolution) ---
     attr_cfig = raftsutil.AttrConfigAndVars(path_attr_config)

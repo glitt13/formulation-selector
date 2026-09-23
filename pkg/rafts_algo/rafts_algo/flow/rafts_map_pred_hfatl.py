@@ -23,7 +23,6 @@ import logging
 from logging.handlers import MemoryHandler
 import rafts_prep.proc_eval_metrics as pem
 import gc
-import yaml
 
 from rafts_algo.schemas.pydantic_schemas import PredConfig
 
@@ -47,9 +46,7 @@ if __name__ == "__main__":
     analysis_str = args.analysis_str
 
     # --- Pydantic Validation ---
-    with open(path_pred_config, 'r') as f:
-        pred_yaml = yaml.safe_load(f)
-    validated_pred_cfg = PredConfig(**pred_yaml)
+    validated_pred_cfg = raftsutil.load_validated_config(path_pred_config, PredConfig)
 
     #%% prediction config var extract (Via Pydantic where applicable)
     resp_vars = validated_pred_cfg.algo_response_vars

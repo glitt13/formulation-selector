@@ -1,5 +1,5 @@
 from typing import Any, Dict, Optional, Tuple, List, Union
-from pydantic import BaseModel, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 import numpy as np
 import re
 
@@ -127,9 +127,9 @@ class PredConfig(BaseModel):
         'gower_agglomerative_k4') used for the final regionalization GPKG
         layer. Defaults to None.
     :type algo_select: Optional[str]
-    :param MAPIE_alpha: Alpha values for MAPIE prediction interval
-        estimation. Defaults to None.
-    :type MAPIE_alpha: Optional[List[float]]
+    :param mapie_alpha: Alpha values for MAPIE prediction interval
+        estimation, read from the YAML's 'MAPIE_alpha' key. Defaults to None.
+    :type mapie_alpha: Optional[List[float]]
     :param uncn_bnd_pred: Whether to apply min/max physical bounds to
         predictions. Defaults to False.
     :type uncn_bnd_pred: bool
@@ -164,7 +164,9 @@ class PredConfig(BaseModel):
     algo_response_vars: Optional[List[str]] = None
     algo_type: Optional[List[str]] = None
     algo_select: Optional[str] = None
-    MAPIE_alpha: Optional[List[float]] = None
+    # Field name is snake_case per convention; 'MAPIE_alpha' is kept as the
+    # validation alias since that's the YAML key every existing config uses.
+    mapie_alpha: Optional[List[float]] = Field(default=None, alias='MAPIE_alpha')
     uncn_bnd_pred: bool = False
 
     # Topology and Flowpath Mappings (for nexus mapping scripts)
