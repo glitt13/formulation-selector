@@ -51,10 +51,6 @@ if __name__ == "__main__":
         pred_yaml = yaml.safe_load(f)
     validated_pred_cfg = PredConfig(**pred_yaml)
 
-    # --- Legacy Parsing ---
-    pred_cfg = raftsutil.PredConfigParser(path_pred_config)
-    pred_cfg._read_pred_config()
-
     #%% prediction config var extract (Via Pydantic where applicable)
     resp_vars = validated_pred_cfg.algo_response_vars
     algos = validated_pred_cfg.algo_type

@@ -46,10 +46,6 @@ if __name__ == "__main__":
         pred_yaml = yaml.safe_load(f)
     validated_pred_cfg = PredConfig(**pred_yaml)
 
-    # --- Parse Configurations (Legacy parser retained for f-string context) ---
-    pred_cfg = raftsutil.PredConfigParser(path_pred_config)
-    pred_cfg._read_pred_config()
-
     path_attr_config = raftsutil.build_cfig_path(path_pred_config, validated_pred_cfg.name_attr_config)
     attr_cfig = raftsutil.AttrConfigAndVars(path_attr_config)
     attr_cfig._read_attr_config()

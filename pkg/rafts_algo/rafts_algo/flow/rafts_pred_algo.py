@@ -74,10 +74,6 @@ if __name__ == "__main__":
         raw_pred_cfg = yaml.safe_load(file)
     validated_pred_cfg = PredConfig(**raw_pred_cfg)
 
-    # --- 2. Legacy parser initialization 
-    pred_cfg = raftsutil.PredConfigParser(path_pred_config)
-    pred_cfg._read_pred_config()
-    
     # Extract top-level scalars strictly from Pydantic model
     uncn_bnd_pred = validated_pred_cfg.uncn_bnd_pred
     

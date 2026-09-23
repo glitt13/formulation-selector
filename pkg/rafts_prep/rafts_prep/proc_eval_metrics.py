@@ -158,9 +158,6 @@ def read_schm_ls_of_dict(schema_path: str | os.PathLike) -> pd.DataFrame:
     with open(schema_path, 'r') as file:
         config = yaml.safe_load(file)
 
-    # Run check on expected config formats
-    # _proc_check_input_config(config)
-    
     # Run check on expected config formats via Pydantic
     validated_config = PrepConfig(**config)
     

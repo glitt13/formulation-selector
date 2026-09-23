@@ -59,15 +59,9 @@ if __name__ == "__main__":
     validated_algo_cfg = AlgoConfig(**algo_yaml)
 
     # --- Parse Configurations (Legacy parsing to retain f-string resolution) ---
-    pred_cfg = raftsutil.PredConfigParser(path_pred_config)
-    pred_cfg._read_pred_config()
-
     attr_cfig = raftsutil.AttrConfigAndVars(path_attr_config)
     attr_cfig._read_attr_config()
-    
-    algo_cfig = raftsutil.AlgoConfigParser(path_algo_config)
-    algo_cfig._read_algo_config()
-    
+
     # Extract validated top-level scalars
     task_type = validated_algo_cfg.task_type
     if task_type != 'clustering':

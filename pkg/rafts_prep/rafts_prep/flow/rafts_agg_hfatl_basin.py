@@ -25,7 +25,7 @@ import numpy as np
 # RaFTS / Formulation Selector imports
 import rafts_prep.proc_eval_metrics as pem
 import rafts_algo.utils as raftsutil
-from rafts_prep.schemas.rafts_prep_pydantic_schemas import AttrSelectConfig
+from rafts_prep.schemas.rafts_prep_pydantic_schemas import AttrSelectConfig, flatten_yaml_list
 
 # Calculate the weighted mean, handling NaNs safely
 def area_weighted_mean(x):
@@ -72,14 +72,13 @@ if __name__ == "__main__":
     with open(path_prep_config, 'r') as f:
         prep_cfg_raw = yaml.safe_load(f)
         
-    file_io_raw = prep_cfg_raw.get('file_io', [])
-    fio = {k: raftsutil.resolve_fstrings(v, {'home_dir': str(home_dir)}) if isinstance(v, str) else v for d in file_io_raw for k, v in d.items()} if isinstance(file_io_raw, list) else file_io_raw
-    
-    col_schema_raw = prep_cfg_raw.get('col_schema', [])
-    cs = {k: raftsutil.resolve_fstrings(v, {'home_dir': str(home_dir)}) if isinstance(v, str) else v for d in col_schema_raw for k, v in d.items()} if isinstance(col_schema_raw, list) else col_schema_raw
-    
-    form_meta_raw = prep_cfg_raw.get('formulation_metadata', [])
-    fm = {k: v for d in form_meta_raw for k, v in d.items()} if isinstance(form_meta_raw, list) else form_meta_raw
+    fio = flatten_yaml_list(prep_cfg_raw.get('file_io', []))
+    fio = {k: raftsutil.resolve_fstrings(v, {'home_dir': str(home_dir)}) if isinstance(v, str) else v for k, v in fio.items()}
+
+    cs = flatten_yaml_list(prep_cfg_raw.get('col_schema', []))
+    cs = {k: raftsutil.resolve_fstrings(v, {'home_dir': str(home_dir)}) if isinstance(v, str) else v for k, v in cs.items()}
+
+    fm = flatten_yaml_list(prep_cfg_raw.get('formulation_metadata', []))
 
     # Extract geospatial mappings
     path_hf_basins_gpkg = Path(fio.get('path_hf_basins_gpkg')) if 'path_hf_basins_gpkg' in fio else None
@@ -90,8 +89,14 @@ if __name__ == "__main__":
         else:
             logging.error(f"Specified path_hf_basins_gpkg does not exist: {path_hf_basins_gpkg}")
     else:
-        logging.error("Missing the path_hf_basins_gpkg in the prep config, which is required to perform divide attribute aggregation to basin scales")
-        
+        # Fatal: every downstream reference (gpkg_pattern, path_hf_basins_gpkg.is_dir(), etc.)
+        # requires this to be set. Logging alone previously let execution fall
+        # through to a confusing NameError/AttributeError far below instead of
+        # a clear config error here.
+        msg = "Missing the path_hf_basins_gpkg in the prep config, which is required to perform divide attribute aggregation to basin scales"
+        logging.error(msg)
+        raise ValueError(msg)
+
     divides_layer = fio.get('hf_divides_layer', 'divides')
     map_divide_id_col = fio.get('map_divide_id_col', 'divide_id')
     dataset_name = fm.get('dataset_name', 'aggregated')
@@ -116,7 +121,7 @@ if __name__ == "__main__":
     dir_db_attrs_agg_save = raftsutil.std_dir_ds_agg(dir_db_attrs, ds)
     
     attr_select_raw = attr_cfig.attr_config.get('attr_select', [])
-    flat_attr_select = {k: v for d in attr_select_raw for k, v in d.items()} if isinstance(attr_select_raw, list) else attr_select_raw
+    flat_attr_select = flatten_yaml_list(attr_select_raw)
     
     # Scrub commented-out YAML list items (which parse as None) before Pydantic validation
     if 'hfatl_vars' in flat_attr_select and isinstance(flat_attr_select['hfatl_vars'], list):

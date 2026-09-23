@@ -25,7 +25,7 @@ import yaml
 # RaFTS / Formulation Selector imports
 import rafts_prep.proc_eval_metrics as pem
 import rafts_algo.utils as raftsutil
-from rafts_prep.schemas.rafts_prep_pydantic_schemas import AttrSelectConfig
+from rafts_prep.schemas.rafts_prep_pydantic_schemas import AttrSelectConfig, flatten_yaml_list
 from rafts_algo.schemas.pydantic_schemas import PredConfig
 
 def area_weighted_mean(x):
@@ -83,7 +83,7 @@ if __name__ == "__main__":
     
     # Isolate and validate the 'attr_select' block 
     attr_select_raw = attr_cfig.attr_config.get('attr_select', [])
-    flat_attr_select = {k: v for d in attr_select_raw for k, v in d.items()} if isinstance(attr_select_raw, list) else attr_select_raw
+    flat_attr_select = flatten_yaml_list(attr_select_raw)
     validated_attr_select = AttrSelectConfig(**flat_attr_select)
     
     home_dir = attr_cfig.attrs_cfg_dict.get('home_dir', '~')

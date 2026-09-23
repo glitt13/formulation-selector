@@ -29,7 +29,6 @@ import numpy as np
 from unittest.mock import patch, mock_open
 import tempfile
 import logging
-import re
 from pydantic import ValidationError
 
 # Define the unit test directory for rafts_prep
@@ -41,39 +40,23 @@ dir_save = tempfile.gettempdir()
 # Load the YAML configuration file from the testing data
 schema_dir_test = Path(parent_dir_test,"user_data_schema.yaml")
 
-# --- HOTFIX: Force the test YAML file to comply with the new Pydantic schemas ---
-# We use direct string replacement to preserve all legacy comments.
-with open(schema_dir_test, 'r') as file:
-    yaml_content = file.read()
-
-# Coerce boolean and integer values into Pydantic-compliant strings
-yaml_content = re.sub(r"-\s*'val_respvar'\s*:\s*True", "- 'val_respvar': 'True'", yaml_content)
-yaml_content = re.sub(r"-\s*'featureID'\s*:\s*1111111", "- 'featureID': '1111111'", yaml_content)
-
-# Inject missing path_hf_gpkg into file_io block if not present
-if 'path_hf_gpkg' not in yaml_content:
-    yaml_content = re.sub(
-        r"(file_io:.*?)\n", 
-        r"\1\n  - 'path_hf_gpkg': '{home_dir}/placeholder/path.gpkg'", 
-        yaml_content
-    )
-
-with open(schema_dir_test, 'w') as file:
-    file.write(yaml_content)
-
-# Load the updated YAML into the config dictionary for test usage
+# user_data_schema.yaml is already Pydantic-compliant (quoted 'True'/'1111111',
+# path_hf_gpkg present) -- load it directly rather than rewriting it in place.
 with open(schema_dir_test, 'r') as file:
     config = yaml.safe_load(file)
-# --------------------------------------------------------------------------------
 
 # Reads the testing config dataframe
 exp_config_df = pd.read_csv(Path(parent_dir_test,"test_config_df.csv"), index_col=None)
 
-# --- HOTFIX: Align CSV expected data with new Pydantic schema rules ---
+# test_config_df.csv itself (unlike user_data_schema.yaml, which is already
+# Pydantic-compliant) still reads val_respvar/featureID as native bool/int
+# via pd.read_csv's type inference, and has no path_hf_gpkg column at all --
+# these coerce exp_config_df to match what PrepConfig actually returns
+# (str/str, plus a placeholder path_hf_gpkg) so downstream equality checks
+# against read_schm_ls_of_dict()'s output compare like with like.
 exp_config_df['val_respvar'] = 'True'
 exp_config_df['featureID'] = '1111111'
 exp_config_df['path_hf_gpkg'] = '{home_dir}/placeholder/path.gpkg'
-# ----------------------------------------------------------------------
 
 home_dir = "~"
 # Transform the home_dir to user dir

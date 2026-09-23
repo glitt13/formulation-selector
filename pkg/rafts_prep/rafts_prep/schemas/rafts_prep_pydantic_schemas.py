@@ -2,7 +2,19 @@ from pydantic import BaseModel, Field, model_validator, AliasChoices
 from typing import List, Optional, Any, Dict
 
 def flatten_yaml_list(v: Any) -> dict:
-    """Helper to flatten the list-of-dicts structure used in the YAMLs."""
+    """Flatten the list-of-single-key-dicts structure used throughout the
+    RaFTS YAML configs (e.g. ``file_io``, ``col_schema``, ``references``)
+    into a single flat dict.
+
+    :param v: The raw value from the parsed YAML. If it is a list where
+        every item is a dict, each item's key(s)/value(s) are merged into
+        one flat dict. Any other type (already a dict, a scalar, etc.) is
+        returned unchanged.
+    :type v: Any
+    :return: The flattened dict, or `v` unchanged if it wasn't a
+        list-of-dicts.
+    :rtype: dict
+    """
     if isinstance(v, list) and all(isinstance(i, dict) for i in v):
         return {k: val for d in v for k, val in d.items()}
     return v
@@ -12,11 +24,17 @@ class FileIOConfig(BaseModel):
     dir_save: str
     save_type: str
     save_loc: str
-    path_data: str 
-    path_hf_gpkg: str
-    
+    path_data: str
+
     # Optional parameters
     home_dir: str = "~"
+    # hfATLAS-only: the GPKG containing hfATLAS divides, required for mapping
+    # divide_id to the standardized featureID/featureSource (see
+    # rafts_agg_hfatl_basin.py). The Legacy NLDI/xSSA workflow never defines
+    # this key (see CLAUDE.md section 3), so it must not be required here --
+    # scripts that actually need it (e.g. rafts_agg_hfatl_basin.py) already
+    # fail with a clear error when it's missing.
+    path_hf_gpkg: Optional[str] = None
     data_source: Optional[str] = None
     dir_base: Optional[str] = None
     dir_std_base: Optional[str] = None
@@ -109,14 +127,22 @@ class PrepConfig(BaseModel):
     col_schema: ColSchemaConfig
     file_io: FileIOConfig
     formulation_metadata: FormulationMetadata
-    references: Optional[Any] = None
-    
+    references: Optional[Dict[str, Any]] = None
+
     @model_validator(mode='before')
     @classmethod
     def check_std_keys(cls, values):
         std_keys = ['file_io', 'col_schema', 'formulation_metadata', 'references']
         if any(key not in std_keys for key in values.keys()):
             raise ValueError(f"Provided keys in the input config file: {dict(values).keys()} do not match the standard keys: {std_keys}")
+        # Unlike col_schema/file_io/formulation_metadata, references has no
+        # dedicated sub-model to flatten its list-of-single-key-dicts YAML
+        # shape internally, so it must be flattened here -- otherwise it
+        # reaches read_schm_ls_of_dict() as a raw list and produces one
+        # DataFrame row per reference entry instead of one flattened row
+        # (corrupting the single-row contract for every other column).
+        if 'references' in values:
+            values['references'] = flatten_yaml_list(values['references'])
         return values
 
 class AttrSelectConfig(BaseModel):
