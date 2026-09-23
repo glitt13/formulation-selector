@@ -235,7 +235,7 @@ if __name__ == "__main__":
                 # predicting at HUC10/HUC14/divide scale), so the training-time
                 # value from the linked prep config (`fio`) is only a fallback
                 # for configs that haven't set a prediction-specific one.
-                pred_featureSource = pred_cfg.pred_cfg_dict.get('featureSource')
+                pred_featureSource = validated_pred_cfg.featureSource
                 df_attr_wide['featureSource'] = pred_featureSource or fio.get('featureSource', 'hf_id')
 
             map_feat_srce_feat_id = df_attr_wide[['featureID','featureSource']].drop_duplicates()
