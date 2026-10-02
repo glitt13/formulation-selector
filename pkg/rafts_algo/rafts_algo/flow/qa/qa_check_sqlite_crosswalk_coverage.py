@@ -16,7 +16,10 @@ Path resolution:
     (dir_out/regionalization/<pred_config's parent dir name>/) are derived
     from it using the exact same logic rafts_regn_params_gpkg.py uses to
     decide where to write those files -- see rafts_algo.qa_utils.resolve_qa_context.
-    --dir_sqlite overrides the derived directory if needed.
+    --dir_sqlite overrides the derived directory if needed. The divide-id
+    column name is read from the pred_config's `crosswalk_target_col`
+    (falling back to 'divide_id' if unset), the same convention every other
+    script in this directory uses -- never hardcoded.
 
     Since rafts_regn_params_gpkg.py writes one compiled *.sqlite per algo
     into a directory shared by every formulation in a given workflow (the
@@ -46,12 +49,14 @@ import pandas as pd
 from rafts_algo.qa_utils import resolve_qa_context
 
 
-def get_table_divide_ids(path_sqlite: Path) -> dict:
-    """Read the unique divide_id set from every table in a SQLite file.
+def get_table_divide_ids(path_sqlite: Path, divide_id_col: str) -> dict:
+    """Read the unique divide-id set from every table in a SQLite file.
 
     :param path_sqlite: Path to a compiled_regionalized_params_*.sqlite file.
     :type path_sqlite: Path
-    :return: Mapping of table_name -> set of divide_id values.
+    :param divide_id_col: Column name holding the divide identifier (e.g. 'divide_id').
+    :type divide_id_col: str
+    :return: Mapping of table_name -> set of divide-id values.
     :rtype: dict
     """
     result = {}
@@ -62,18 +67,18 @@ def get_table_divide_ids(path_sqlite: Path) -> dict:
         for table in tables:
             cur.execute(f'PRAGMA table_info("{table}")')
             cols = [c[1] for c in cur.fetchall()]
-            if "divide_id" not in cols:
-                print(f"  [skip] {table}: no divide_id column ({cols})")
+            if divide_id_col not in cols:
+                print(f"  [skip] {table}: no {divide_id_col!r} column ({cols})")
                 continue
-            df = pd.read_sql(f'SELECT DISTINCT divide_id FROM "{table}"', conn)
-            result[table] = set(df["divide_id"].astype(str))
+            df = pd.read_sql(f'SELECT DISTINCT "{divide_id_col}" FROM "{table}"', conn)
+            result[table] = set(df[divide_id_col].astype(str))
     return result
 
 
 def run(path_pred_config: Path, dir_sqlite: Path = None, dir_out: Path = None) -> int:
     """Run the compiled-SQLite-vs-crosswalk coverage check.
 
-    :return: Count of crosswalk divide_ids missing from every SQLite table
+    :return: Count of crosswalk divide-ids missing from every SQLite table
         (0 means fully covered).
     :rtype: int
     """
@@ -85,6 +90,8 @@ def run(path_pred_config: Path, dir_sqlite: Path = None, dir_out: Path = None) -
         print(f"[SKIP] Crosswalk file does not exist: {ctx.path_crosswalk_ids}")
         return 0
 
+    divide_id_col = ctx.pred_cfg.pred_cfg_dict.get('crosswalk_target_col') or 'divide_id'
+
     dir_sqlite = Path(dir_sqlite).expanduser() if dir_sqlite else ctx.dir_regionalization
     sqlite_files = sorted(dir_sqlite.glob("*.sqlite"))
     if not sqlite_files:
@@ -95,26 +102,27 @@ def run(path_pred_config: Path, dir_sqlite: Path = None, dir_out: Path = None) -
     print(f"path_pred_config: {path_pred_config}")
     print(f"path_crosswalk_ids: {ctx.path_crosswalk_ids}")
     print(f"dir_sqlite: {dir_sqlite}")
+    print(f"divide_id_col: {divide_id_col}")
 
-    df_crosswalk = pd.read_parquet(ctx.path_crosswalk_ids, columns=["divide_id"])
-    crosswalk_ids = set(df_crosswalk["divide_id"].astype(str))
-    print(f"Crosswalk ({ctx.path_crosswalk_ids.name}): {len(crosswalk_ids):,} unique divide_id\n")
+    df_crosswalk = pd.read_parquet(ctx.path_crosswalk_ids, columns=[divide_id_col])
+    crosswalk_ids = set(df_crosswalk[divide_id_col].astype(str))
+    print(f"Crosswalk ({ctx.path_crosswalk_ids.name}): {len(crosswalk_ids):,} unique {divide_id_col}\n")
 
     print(f"Found {len(sqlite_files)} SQLite file(s):")
     all_table_ids = {}
     for f in sqlite_files:
         print(f"{f.name}:")
-        tables = get_table_divide_ids(f)
+        tables = get_table_divide_ids(f, divide_id_col)
         for table, ids in tables.items():
-            print(f"  {table}: {len(ids):,} unique divide_id")
+            print(f"  {table}: {len(ids):,} unique {divide_id_col}")
         all_table_ids.update({f"{f.stem}::{t}": ids for t, ids in tables.items()})
 
     if not all_table_ids:
-        print("[SKIP] No tables with a divide_id column found in any SQLite file.")
+        print(f"[SKIP] No tables with a {divide_id_col!r} column found in any SQLite file.")
         return 0
 
     union_ids = set().union(*all_table_ids.values())
-    print(f"\nUnion across all tables: {len(union_ids):,} unique divide_id")
+    print(f"\nUnion across all tables: {len(union_ids):,} unique {divide_id_col}")
 
     not_regionalized = sorted(crosswalk_ids - union_ids)
     pct = 100 * len(not_regionalized) / max(len(crosswalk_ids), 1)
@@ -127,7 +135,7 @@ def run(path_pred_config: Path, dir_sqlite: Path = None, dir_out: Path = None) -
         dir_out = Path(dir_out)
         dir_out.mkdir(parents=True, exist_ok=True)
         out_path = dir_out / f"qa_out_sqlite_missing_from_crosswalk_{path_pred_config.stem}.csv"
-        pd.DataFrame({"divide_id": not_regionalized}).to_csv(out_path, index=False)
+        pd.DataFrame({divide_id_col: not_regionalized}).to_csv(out_path, index=False)
         print(f"  wrote full list to {out_path}")
 
     print("\nPer-table gap vs. crosswalk:")
@@ -137,9 +145,9 @@ def run(path_pred_config: Path, dir_sqlite: Path = None, dir_out: Path = None) -
         extra = ids - crosswalk_ids
         if gap or extra:
             any_per_table_gap = True
-        print(f"  {name}: {len(gap):,} crosswalk divides missing, {len(extra):,} extra divide_ids not in crosswalk")
+        print(f"  {name}: {len(gap):,} crosswalk divides missing, {len(extra):,} extra {divide_id_col} not in crosswalk")
     if not any_per_table_gap:
-        print("  None -- every table's divide_id set exactly matches the crosswalk.")
+        print(f"  None -- every table's {divide_id_col} set exactly matches the crosswalk.")
 
     return len(not_regionalized)
 
