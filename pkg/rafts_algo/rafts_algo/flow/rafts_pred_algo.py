@@ -236,7 +236,12 @@ if __name__ == "__main__":
                 # value from the linked prep config (`fio`) is only a fallback
                 # for configs that haven't set a prediction-specific one.
                 pred_featureSource = validated_pred_cfg.featureSource
-                df_attr_wide['featureSource'] = pred_featureSource or fio.get('featureSource', 'hf_id')
+                # `is not None`, not `or` -- an explicitly-configured empty string is
+                # still a deliberate (if unusual) choice and must not be silently
+                # treated the same as "unset" by falling through to the training-time
+                # value. None is PredConfig's actual "unset" sentinel.
+                df_attr_wide['featureSource'] = (pred_featureSource if pred_featureSource is not None
+                                                  else fio.get('featureSource', 'hf_id'))
 
             map_feat_srce_feat_id = df_attr_wide[['featureID','featureSource']].drop_duplicates()
             df_attr_wide.set_index('featureID',inplace = True)    

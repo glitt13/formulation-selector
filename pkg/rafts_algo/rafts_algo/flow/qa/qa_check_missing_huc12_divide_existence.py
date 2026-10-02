@@ -54,6 +54,7 @@ Example:
                Everglades) are much bigger than a single HUC12, GL
 """
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -202,7 +203,7 @@ def run(path_pred_config: Path, states: list = None, min_coverage_frac: float = 
 
     if states:
         states_norm = [s.strip().upper() for s in states]
-        state_pattern = '|'.join(rf'\b{s}\b' for s in states_norm)
+        state_pattern = '|'.join(rf'\b{re.escape(s)}\b' for s in states_norm)
         gdf_region = gdf_huc12[gdf_huc12['states'].astype(str).str.contains(state_pattern, regex=True, na=False)]
         region_label = "-".join(states_norm)
     else:

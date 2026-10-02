@@ -116,6 +116,20 @@ class PredConfig(BaseModel):
         None, in which case rafts_pred_algo.py falls back to the prep
         config's value.
     :type featureSource: Optional[str]
+    :param donor_map_states: Region(s) rafts_map_donor_receiver.py maps donor-receiver
+        pairings for -- only used when the algo config's task_type is 'clustering'.
+        A flat list of 2-letter state codes for a single region (e.g. ['FL']), a dict
+        of {region_name: [state codes]} for multiple named regions, or [] to opt out
+        of the map entirely. Defaults to None, in which case that script falls back to
+        its own built-in default regions (Florida and the Pacific Northwest) --
+        distinct from an explicit [] opt-out. Declared here (previously validated only
+        via the untyped PredConfigParser dict, unlike featureSource) so a malformed
+        value (e.g. a plain string instead of a list/dict) is rejected here rather than
+        failing confusingly wherever rafts_map_donor_receiver.py first iterates it. Note
+        this does not catch a *mistyped key name* (e.g. donor_map_state) -- PredConfig
+        has no model_config restricting extra keys, so an unrecognized key is silently
+        ignored rather than rejected, same as any other config key in this model.
+    :type donor_map_states: Optional[Union[List[str], Dict[str, List[str]]]]
     :param path_hf_finl_gpkg: Path to the hydrofabric GPKG containing the
         divides referenced by `path_crosswalk_ids`; required when running
         rafts_regn_params_gpkg.py. Defaults to None.
@@ -168,6 +182,7 @@ class PredConfig(BaseModel):
     path_crosswalk_ids: Optional[str] = None
     crosswalk_target_col: Optional[str] = None
     featureSource: Optional[str] = None
+    donor_map_states: Optional[Union[List[str], Dict[str, List[str]]]] = None
     path_hf_finl_gpkg: Optional[str] = None
     layr_hf_finl_gpkg: str = 'divides'
     overwrite_sql: bool = False

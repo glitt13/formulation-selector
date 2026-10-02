@@ -35,7 +35,13 @@ if __name__ == "__main__":
 
     # Logger setup - first define required paths/name in the config
     home_dir = Path("~/").expanduser()
-    dir_save = [x for x in config['file_io'] if 'dir_save' in x.keys()][0]['dir_save'].format(home_dir = home_dir)
+    file_io = config.get('file_io')
+    if not file_io:
+        raise ValueError(f"'file_io' section missing or empty in config: {path_config}")
+    dir_save_entries = [x for x in file_io if 'dir_save' in x.keys()]
+    if not dir_save_entries:
+        raise ValueError(f"No 'dir_save' entry found under 'file_io' in config: {path_config}")
+    dir_save = dir_save_entries[0]['dir_save'].format(home_dir = home_dir)
 
     # Generate path to the log file & initialize logging
     path_log = pem.std_path_log(dir_input=dir_save, path_config=path_config,

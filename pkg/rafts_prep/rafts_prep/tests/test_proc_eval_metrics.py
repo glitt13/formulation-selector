@@ -475,11 +475,19 @@ class TestCheckFixNwissiteGageIds(unittest.TestCase):
         # Previously only reachable via a dead `elif len(ls_still_bad) > 0:`
         # branch; now merged into the same `if` block as the warning above.
         self.assertTrue(any("Consider checking the following gage_ids" in log for log in cm.output))
-        # ls_still_bad holds the zero-prepended id (ls_prezero's form), not the
-        # original basin_id value.
-        self.assertTrue(any("012345678901" in log for log in cm.output))
+        # ls_still_bad must hold the ORIGINAL basin_id value, not the zero-prepended
+        # ls_prezero form -- it's compared against cmbo_df[gage_id_col] (original ids)
+        # to null out the 'fix' column below, and logged for a human to action on.
+        # Confirmed empirically: appending the prezero'd form instead meant a gage_id
+        # bad in both forms never matched the original-id column, so its 'fix' value
+        # never actually got nulled despite never being verified.
+        self.assertTrue(any("12345678901" in log and "012345678901" not in log for log in cm.output))
         self.assertEqual(result_df.shape[0], 1)
         self.assertIn('fix', result_df.columns)
+        # The 'fix' column must be nulled for an id that failed both the original
+        # and prezero'd lookup -- not left holding the never-actually-verified
+        # prezero'd guess.
+        self.assertTrue(pd.isna(result_df['fix'].iloc[0]))
 
     @patch('pynhd.NLDI.navigate_byid')
     def test_empty_dataframe(self, mock_navigate_byid):

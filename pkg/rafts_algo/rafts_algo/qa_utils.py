@@ -157,7 +157,12 @@ def resolve_huc12_layer(pred_cfg_dict: dict, context: dict, id_zfill_width: int 
     if not (path_gpkg_pred and pred_gpkg_lyr and pred_gpkg_id_col):
         raise FileNotFoundError("path_gpkg_pred/pred_gpkg_lyr/pred_gpkg_id_col not all set in pred_config.")
 
-    path_gpkg_pred_rslv = Path(str(path_gpkg_pred).format(**context))
+    # resolve_fstrings (not a raw str.format()) for consistency with resolve_divides_layer
+    # below and every production flow script -- it tolerates placeholders beyond what's
+    # in `context` (e.g. a per-dataset {ds} some workflows use in path_gpkg_pred), where
+    # a raw .format() would raise KeyError and this function's narrower
+    # except (FileNotFoundError, KeyError) callers would silently [SKIP] instead.
+    path_gpkg_pred_rslv = Path(raftsutil.resolve_fstrings(path_gpkg_pred, context))
     if not path_gpkg_pred_rslv.exists():
         raise FileNotFoundError(f"Prediction-locations GPKG not found: {path_gpkg_pred_rslv}")
 
