@@ -35,6 +35,7 @@ Usage:
                HUC12s dominated by a larger divide, instead of leaving them hatched, GL
 """
 import argparse
+import re
 import sys
 import logging
 from logging.handlers import MemoryHandler
@@ -141,19 +142,26 @@ def build_divide_proxy_receivers(gdf_no_pairing: gpd.GeoDataFrame, gdf_divides: 
         return empty_proxy, gdf_no_pairing
 
     dominant['assigned_huc12'] = dominant[divide_id_col].map(divide_to_assigned_huc)
-    dp_by_huc = dp.set_index('receiver_id')
-    resolvable = dominant[dominant['assigned_huc12'].isin(dp_by_huc.index)]
+    # Join on the actual key (assigned_huc12 <-> receiver_id) rather than building
+    # `borrowed` via dp_by_huc.loc[list-like] and zipping its .values against
+    # resolvable's .values by position -- that relied on .loc preserving the given
+    # list's order, an implicit pandas behavior rather than something asserted here.
+    # dp's caller already enforces unique receiver_id (.drop_duplicates('receiver_id')
+    # in __main__), so this merge can't fan out rows.
+    resolvable = dominant.merge(
+        dp[['receiver_id', 'cluster_id', 'donor_id']],
+        left_on='assigned_huc12', right_on='receiver_id', how='inner',
+    )
     if resolvable.empty:
         return empty_proxy, gdf_no_pairing
 
-    borrowed = dp_by_huc.loc[resolvable['assigned_huc12'], ['cluster_id', 'donor_id']].reset_index(drop=True)
     divide_geom = gdf_divides.set_index(divide_id_col).geometry
 
     gdf_proxy = gpd.GeoDataFrame({
         pred_gpkg_id_col: resolvable[pred_gpkg_id_col].values,
         divide_id_col: resolvable[divide_id_col].values,
-        'cluster_id': borrowed['cluster_id'].values,
-        'donor_id': borrowed['donor_id'].values,
+        'cluster_id': resolvable['cluster_id'].values,
+        'donor_id': resolvable['donor_id'].values,
         'is_divide_proxy': True,
     }, geometry=[divide_geom[d] for d in resolvable[divide_id_col]], crs=gdf_divides.crs)
     gdf_proxy['cluster_id'] = gdf_proxy['cluster_id'].astype('Int64')
@@ -328,9 +336,26 @@ if __name__ == "__main__":
                     else pd.read_parquet(path_crosswalk_ids, columns=[divide_id_col, pred_gpkg_id_col])
                 df_crosswalk[divide_id_col] = df_crosswalk[divide_id_col].astype(str)
                 df_crosswalk[pred_gpkg_id_col] = df_crosswalk[pred_gpkg_id_col].astype(str).str.zfill(12)
+                # The crosswalk is documented elsewhere as strictly 1:1 (one row per
+                # divide_id), but that's a data-quality expectation, not something
+                # enforced here -- a duplicated divide_id would make the two .map()
+                # calls below raise InvalidIndexError deep inside build_divide_proxy_receivers
+                # instead of failing loudly where the data was actually loaded. Keep
+                # the first occurrence and warn, rather than let a corrupt crosswalk
+                # silently disable this whole best-effort enhancement.
+                if df_crosswalk[divide_id_col].duplicated().any():
+                    n_dup = int(df_crosswalk[divide_id_col].duplicated().sum())
+                    logging.warning(f"Crosswalk has {n_dup:,} duplicate {divide_id_col} rows "
+                                     f"(expected strictly 1:1); keeping the first occurrence of each.")
+                    df_crosswalk = df_crosswalk.drop_duplicates(divide_id_col, keep='first')
                 divide_to_assigned_huc = df_crosswalk.set_index(divide_id_col)[pred_gpkg_id_col]
 
                 gdf_divides_ds = resolve_divides_layer(pred_cfg.pred_cfg_dict, vals, divide_id_col)
+                if gdf_divides_ds[divide_id_col].duplicated().any():
+                    n_dup = int(gdf_divides_ds[divide_id_col].duplicated().sum())
+                    logging.warning(f"Divides layer has {n_dup:,} duplicate {divide_id_col} rows; "
+                                     f"keeping the first occurrence of each.")
+                    gdf_divides_ds = gdf_divides_ds.drop_duplicates(divide_id_col, keep='first')
                 divide_area_sqkm = gdf_divides_ds.to_crs('EPSG:5070').set_index(divide_id_col).geometry.area / 1e6
                 logging.info(f"Loaded {len(gdf_divides_ds):,} divides for the divide-proxy receiver enhancement ({ds}).")
             except Exception as e:
@@ -366,7 +391,7 @@ if __name__ == "__main__":
                 dp = dp.drop_duplicates('receiver_id')
 
                 for region_str, region_states in regions.items():
-                    state_pattern = '|'.join(rf'\b{s}\b' for s in region_states)
+                    state_pattern = '|'.join(rf'\b{re.escape(s)}\b' for s in region_states)
                     gdf_region = gdf_recv_all[gdf_recv_all['states'].astype(str).str.contains(
                         state_pattern, regex=True, na=False)]
                     if gdf_region.empty:
@@ -387,14 +412,21 @@ if __name__ == "__main__":
                     # Resolve as many of those unpaired HUC12s as possible into divide-shaped
                     # proxy receivers (see build_divide_proxy_receivers) before locating donor
                     # gages, so a borrowed donor from outside the region's own pairing set still
-                    # gets included below.
+                    # gets included below. Wrapped in try/except so this stays genuinely
+                    # best-effort (per the comment where gdf_divides_ds is loaded above) --
+                    # an unexpected failure here (e.g. unresolvable geometry) falls back to
+                    # plain hatched gaps for this one region/algo/resp_var instead of crashing
+                    # the whole run.
+                    gdf_proxy = gpd.GeoDataFrame(columns=['donor_id'], geometry=gpd.GeoSeries([], crs=gdf_region.crs))
                     if gdf_divides_ds is not None and not gdf_no_pairing.empty:
-                        gdf_proxy, gdf_no_pairing = build_divide_proxy_receivers(
-                            gdf_no_pairing, gdf_divides_ds, divide_to_assigned_huc, divide_area_sqkm,
-                            dp, pred_gpkg_id_col, divide_id_col,
-                        )
-                    else:
-                        gdf_proxy = gpd.GeoDataFrame(columns=['donor_id'], geometry=gpd.GeoSeries([], crs=gdf_region.crs))
+                        try:
+                            gdf_proxy, gdf_no_pairing = build_divide_proxy_receivers(
+                                gdf_no_pairing, gdf_divides_ds, divide_to_assigned_huc, divide_area_sqkm,
+                                dp, pred_gpkg_id_col, divide_id_col,
+                            )
+                        except Exception as e:
+                            logging.warning(f"Divide-proxy receiver resolution failed for {ds}/{algo_str}/"
+                                             f"{resp_var}/{region_str}: {e}. Falling back to plain hatched gaps.")
 
                     donors_needed = set(region_pairs['donor_id']) | set(gdf_proxy['donor_id'].dropna())
                     donors_pts = (hl_nwis_exp[hl_nwis_exp['gage_id'].isin(donors_needed)]

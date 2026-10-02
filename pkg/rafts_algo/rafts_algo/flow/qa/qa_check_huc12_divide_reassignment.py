@@ -40,6 +40,14 @@ Classification is based on frac_of_divide_in_*_huc:
       does, yet was still chosen. This is inconsistent with a majority-share
       rule and is the strongest signal of an actual crosswalk-build defect
       (stale source data, a different/buggy assignment rule, etc.).
+    - indeterminate_missing_area_data: the divide-normalized share couldn't
+      be computed for the missing HUC12, the assigned HUC12, or both (e.g.
+      a zero/negative divide area, or an assigned HUC12 id that doesn't
+      resolve in the loaded HUC12 layer at all). Reported separately rather
+      than risking a false majority/minority call -- NaN comparisons are
+      always False in Python, so without this bucket such a row would
+      silently fall into "minority_share" (the strongest-defect signal)
+      regardless of whether a real defect exists.
 
 Path resolution: identical to qa_check_missing_huc12_divide_existence.py --
 --path_pred_config is the only required input; everything else is read from
@@ -58,6 +66,7 @@ Example:
     2026-09-22 Originally created, GL
 """
 import argparse
+import re
 import sys
 from pathlib import Path
 
@@ -115,7 +124,7 @@ def run(path_pred_config: Path, states: list = None, min_coverage_frac: float = 
 
     if states:
         states_norm = [s.strip().upper() for s in states]
-        state_pattern = '|'.join(rf'\b{s}\b' for s in states_norm)
+        state_pattern = '|'.join(rf'\b{re.escape(s)}\b' for s in states_norm)
         gdf_region = gdf_huc12_all[gdf_huc12_all['states'].astype(str).str.contains(state_pattern, regex=True, na=False)]
         region_label = "-".join(states_norm)
     else:
@@ -205,9 +214,20 @@ def run(path_pred_config: Path, states: list = None, min_coverage_frac: float = 
         inter_area_assigned = frac_assigned * assigned_huc_area
         frac_divide_assigned = inter_area_assigned / d_area if d_area > 0 else float('nan')
 
-        classification = ('assigned_elsewhere_majority_share_of_divide'
-                           if frac_divide_assigned >= frac_divide_missing
-                           else 'assigned_elsewhere_minority_share_of_divide')
+        # A NaN on either side (d_area <= 0, or assigned_huc not resolving in
+        # huc_area_sqkm -- e.g. an id-format mismatch between the crosswalk and the
+        # loaded HUC12 layer) must not reach the >= comparison below: Python's NaN
+        # comparisons are always False, so `frac_divide_assigned >= frac_divide_missing`
+        # would silently fall into the else branch and mislabel a case where the
+        # share just couldn't be computed as 'assigned_elsewhere_minority_share_of_divide'
+        # -- this script's own strongest "confirmed crosswalk defect" signal -- when
+        # it's actually missing data, not evidence of anything.
+        if pd.isna(frac_divide_missing) or pd.isna(frac_divide_assigned):
+            classification = 'indeterminate_missing_area_data'
+        else:
+            classification = ('assigned_elsewhere_majority_share_of_divide'
+                               if frac_divide_assigned >= frac_divide_missing
+                               else 'assigned_elsewhere_minority_share_of_divide')
         rows.append((missing_huc, divide_id, row.frac_of_missing_huc, frac_divide_missing,
                      assigned_huc, frac_assigned, frac_divide_assigned, d_area, classification))
 

@@ -623,7 +623,14 @@ def check_fix_nwissite_gageids(df:pd.DataFrame, gage_id_col:str,
 
         logging.info(f"Checking whether prepending '0' fixes {len(ls_prezero)} total gage_ids that were not recognized during the first check")
         logging.info(f"This may take {round(len(ls_prezero)/60/3.2,2)} minutes for the second check.")
-        for prezero in ls_prezero:
+        # ls_still_bad must hold the ORIGINAL (non-prezero'd) gage_id, not `prezero` --
+        # it's later compared against cmbo_df[gage_id_col], which holds original ids
+        # (`.isin(ls_still_bad)` below), and logged for a human to action on. Confirmed
+        # empirically: when this appended `prezero` instead, a gage_id genuinely bad in
+        # both forms (e.g. original "2378170") never matched "02378170" against
+        # gage_id_col, so its 'fix' column kept the never-actually-verified prezero'd
+        # value instead of being nulled out as unresolvable.
+        for gid, prezero in zip(ls_bad_ids, ls_prezero):
             try:
                 nldi.navigate_byid(fsource=featureSource,fid= featureID.format(gage_id=prezero),
                                                 navigation='upstreamMain',
@@ -631,7 +638,7 @@ def check_fix_nwissite_gageids(df:pd.DataFrame, gage_id_col:str,
                                                 distance=1 # the shortest distance
                                                 ).loc[0]['nhdplus_comid']
             except:
-                ls_still_bad.append(prezero)
+                ls_still_bad.append(gid)
                 pass
 
         
