@@ -24,7 +24,10 @@ Path resolution:
     -- override it explicitly if a given workflow doesn't follow that layout.
     --path_out_csv (if any divide_ids are missing) defaults to the standard
     dir_out/analysis/<dataset_name>/ directory raftsutil.std_corr_path and
-    raftsutil.std_test_pred_obs_path also write into.
+    raftsutil.std_test_pred_obs_path also write into. The divide-id column
+    name is read from the pred_config's `crosswalk_target_col` (falling
+    back to 'divide_id' if unset), the same convention every other script
+    in this directory uses -- never hardcoded.
 
 Exit code is always 0 (see scripts/qa/README.md): this is a diagnostic, not
 a pass/fail gate, so it never aborts a calling shell pipeline.
@@ -43,27 +46,29 @@ import rafts_algo.utils as raftsutil
 from rafts_algo.qa_utils import resolve_qa_context
 
 
-def get_attrs_divide_ids(path_parquet: Path) -> set:
-    """Extract the unique set of divide_ids from an hfATLAS wide-format parquet file.
+def get_attrs_divide_ids(path_parquet: Path, divide_id_col: str) -> set:
+    """Extract the unique set of divide-ids from an hfATLAS wide-format parquet file.
 
     :param path_parquet: Path to an hfATLAS attribute/parameter parquet file
         (pint-aware dequantified tuple column headers).
     :type path_parquet: Path
-    :return: Unique divide_id values present in the file.
+    :param divide_id_col: Column name holding the divide identifier (e.g. 'divide_id').
+    :type divide_id_col: str
+    :return: Unique divide-id values present in the file.
     :rtype: set
     """
     # attrs_sel=[] forces read_hfatlas_wrap_dask to only pull map_id_col,
     # skipping the (potentially large) attribute columns entirely.
     df = raftsutil.read_hfatlas_wrap_dask(
-        paths_hfatl=[path_parquet], attrs_sel=[], map_id_col="divide_id"
+        paths_hfatl=[path_parquet], attrs_sel=[], map_id_col=divide_id_col
     )
-    return set(df["divide_id"].astype(str))
+    return set(df[divide_id_col].astype(str))
 
 
 def run(path_pred_config: Path, dir_attrs: Path = None, path_out_csv: Path = None) -> int:
     """Run the attrs-vs-crosswalk coverage check.
 
-    :return: Count of divide_ids with attribute data but no crosswalk entry
+    :return: Count of divide-ids with attribute data but no crosswalk entry
         (0 means fully covered).
     :rtype: int
     """
@@ -74,6 +79,8 @@ def run(path_pred_config: Path, dir_attrs: Path = None, path_out_csv: Path = Non
     if not ctx.path_crosswalk_ids.exists():
         print(f"[SKIP] Crosswalk file does not exist: {ctx.path_crosswalk_ids}")
         return 0
+
+    divide_id_col = ctx.pred_cfg.pred_cfg_dict.get('crosswalk_target_col') or 'divide_id'
 
     if dir_attrs is None:
         if ctx.dir_raw_root is None:
@@ -90,18 +97,19 @@ def run(path_pred_config: Path, dir_attrs: Path = None, path_out_csv: Path = Non
     print(f"path_pred_config: {path_pred_config}")
     print(f"path_crosswalk_ids: {ctx.path_crosswalk_ids}")
     print(f"dir_attrs: {dir_attrs}")
+    print(f"divide_id_col: {divide_id_col}")
     print(f"Found {len(attrs_files)} attribute file(s):")
 
     attrs_divide_ids = set()
     for f in attrs_files:
-        ids = get_attrs_divide_ids(f)
-        print(f"  {f.name}: {len(ids):,} unique divide_id")
+        ids = get_attrs_divide_ids(f, divide_id_col)
+        print(f"  {f.name}: {len(ids):,} unique {divide_id_col}")
         attrs_divide_ids |= ids
-    print(f"Union across all attribute files: {len(attrs_divide_ids):,} unique divide_id\n")
+    print(f"Union across all attribute files: {len(attrs_divide_ids):,} unique {divide_id_col}\n")
 
-    df_crosswalk = pd.read_parquet(ctx.path_crosswalk_ids, columns=["divide_id"])
-    crosswalk_divide_ids = set(df_crosswalk["divide_id"].astype(str))
-    print(f"Crosswalk ({ctx.path_crosswalk_ids.name}): {len(crosswalk_divide_ids):,} unique divide_id\n")
+    df_crosswalk = pd.read_parquet(ctx.path_crosswalk_ids, columns=[divide_id_col])
+    crosswalk_divide_ids = set(df_crosswalk[divide_id_col].astype(str))
+    print(f"Crosswalk ({ctx.path_crosswalk_ids.name}): {len(crosswalk_divide_ids):,} unique {divide_id_col}\n")
 
     missing = sorted(attrs_divide_ids - crosswalk_divide_ids)
     pct = 100 * len(missing) / max(len(attrs_divide_ids), 1)
@@ -109,15 +117,15 @@ def run(path_pred_config: Path, dir_attrs: Path = None, path_out_csv: Path = Non
           f"of {len(attrs_divide_ids):,} ({pct:.3f}%)")
 
     if missing:
-        print(f"Sample missing divide_ids: {missing[:10]}")
+        print(f"Sample missing {divide_id_col}: {missing[:10]}")
         if path_out_csv is None:
             path_out_csv = ctx.dir_qa_out / f"qa_out_attrs_missing_from_crosswalk_{path_pred_config.stem}.csv"
         path_out_csv = Path(path_out_csv)
         path_out_csv.parent.mkdir(parents=True, exist_ok=True)
-        pd.DataFrame({"divide_id": missing}).to_csv(path_out_csv, index=False)
+        pd.DataFrame({divide_id_col: missing}).to_csv(path_out_csv, index=False)
         print(f"Wrote full list to {path_out_csv}")
     else:
-        print("None -- every divide_id with attribute data also has a crosswalk entry.")
+        print(f"None -- every {divide_id_col} with attribute data also has a crosswalk entry.")
 
     no_attrs = crosswalk_divide_ids - attrs_divide_ids
     print(f"\n(For reference) Crosswalk divides with NO attribute data: {len(no_attrs):,} "
