@@ -11,6 +11,15 @@ Like `scripts/qa/`, the check *logic* lives in the `rafts_algo` package
 (`pkg/rafts_algo/rafts_algo/flow/qa/` and `qa_utils.py`) so it's importable
 and testable; this directory holds only the standalone driver and this doc.
 
+Despite the HUC12-flavored naming (kept for continuity with this diagnosis's
+origin), none of the scripts assume the aggregation-unit id column is
+literally named `'huc12'` -- they read whatever the workflow's own
+`pred_gpkg_id_col` is configured to be (per CLAUDE.md's "don't hardcode
+identifier columns" rule) and thread that through. `--id_zfill_width`
+(default 12, pass 0 to disable) controls zero-padding for fixed-width codes
+like HUC12 -- override it for a different aggregation unit (e.g. HUC10) or
+drop it if the id isn't a zero-padded fixed-width code at all.
+
 ## The strategy
 
 1. **Does a hydrofabric divide actually exist inside the missing HUC12?**
