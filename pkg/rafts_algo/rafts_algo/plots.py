@@ -1497,7 +1497,7 @@ def plot_huc12_gap_classification_map_wrap(gdf_region: gpd.GeoDataFrame, gdf_cla
 
 def plot_divide_reassignment_defects(df_defects: pd.DataFrame, gdf_missing_huc: gpd.GeoDataFrame,
                                       gdf_assigned_huc: gpd.GeoDataFrame, gdf_divides: gpd.GeoDataFrame,
-                                      divide_id_col: str, title: str) -> Figure:
+                                      divide_id_col: str, title: str, huc12_col: str = 'huc12') -> Figure:
     """Small-multiples grid: one zoomed-in panel per reassignment "defect" row, showing the
     overlapping divide's footprint against both the "missing" HUC12 and whatever HUC12 the
     crosswalk actually assigned that divide to -- so a human can visually confirm each
@@ -1505,11 +1505,11 @@ def plot_divide_reassignment_defects(df_defects: pd.DataFrame, gdf_missing_huc: 
     trusting the area-fraction numbers alone.
 
     :param df_defects: Rows to plot (already the desired subset/ordering, e.g. the
-        top-N by margin), with 'huc12', `divide_id_col`, 'assigned_huc12', 'margin_frac_divide'
+        top-N by margin), with `huc12_col`, `divide_id_col`, 'assigned_huc12', 'margin_frac_divide'
     :type df_defects: pd.DataFrame
-    :param gdf_missing_huc: Geometries for the "missing" HUC12s referenced in `df_defects`, with a 'huc12' column
+    :param gdf_missing_huc: Geometries for the "missing" HUC12s referenced in `df_defects`, with a `huc12_col` column
     :type gdf_missing_huc: gpd.GeoDataFrame
-    :param gdf_assigned_huc: Geometries for the assigned HUC12s referenced in `df_defects`, with a 'huc12' column
+    :param gdf_assigned_huc: Geometries for the assigned HUC12s referenced in `df_defects`, with a `huc12_col` column
     :type gdf_assigned_huc: gpd.GeoDataFrame
     :param gdf_divides: Geometries for the divides referenced in `df_defects`, with `divide_id_col`
     :type gdf_divides: gpd.GeoDataFrame
@@ -1517,6 +1517,10 @@ def plot_divide_reassignment_defects(df_defects: pd.DataFrame, gdf_missing_huc: 
     :type divide_id_col: str
     :param title: The figure's overall title
     :type title: str
+    :param huc12_col: Column name holding the aggregation-unit (e.g. HUC12) identifier in
+     `gdf_missing_huc`/`gdf_assigned_huc`/`df_defects` -- not assumed to literally be 'huc12',
+     defaults to 'huc12'
+    :type huc12_col: str, optional
     :return: The rendered figure
     :rtype: Figure
     """
@@ -1526,14 +1530,14 @@ def plot_divide_reassignment_defects(df_defects: pd.DataFrame, gdf_missing_huc: 
     fig, axes = plt.subplots(nrows, ncols, figsize=(4.6 * ncols, 4.8 * nrows), squeeze=False)
     axes = axes.flatten()
 
-    huc_missing_by_id = gdf_missing_huc.set_index('huc12').geometry
-    huc_assigned_by_id = gdf_assigned_huc.set_index('huc12').geometry
+    huc_missing_by_id = gdf_missing_huc.set_index(huc12_col).geometry
+    huc_assigned_by_id = gdf_assigned_huc.set_index(huc12_col).geometry
     divide_by_id = gdf_divides.set_index(divide_id_col).geometry
 
     for i, row in enumerate(df_defects.itertuples(index=False)):
         ax = axes[i]
         divide_id = getattr(row, divide_id_col)
-        missing_huc = row.huc12
+        missing_huc = getattr(row, huc12_col)
         assigned_huc = row.assigned_huc12
 
         div_geom = divide_by_id.get(divide_id)
@@ -1582,15 +1586,16 @@ def plot_divide_reassignment_defects(df_defects: pd.DataFrame, gdf_missing_huc: 
 def plot_divide_reassignment_defects_wrap(df_defects: pd.DataFrame, gdf_missing_huc: gpd.GeoDataFrame,
                                            gdf_assigned_huc: gpd.GeoDataFrame, gdf_divides: gpd.GeoDataFrame,
                                            divide_id_col: str, dir_out_qa: str | Path, region_str: str,
-                                           top_n: int = 10, epsg_reproj: int = 3857) -> Path | None:
+                                           top_n: int = 10, epsg_reproj: int = 3857,
+                                           huc12_col: str = 'huc12') -> Path | None:
     """Wrapper for building, saving, and closing the top-N divide-reassignment defect panels
 
     :param df_defects: The full reassignment result table, pre-sorted so the most
         actionable rows (e.g. by 'margin_frac_divide' descending) come first
     :type df_defects: pd.DataFrame
-    :param gdf_missing_huc: Geometries for the "missing" HUC12s referenced in `df_defects`, with a 'huc12' column
+    :param gdf_missing_huc: Geometries for the "missing" HUC12s referenced in `df_defects`, with a `huc12_col` column
     :type gdf_missing_huc: gpd.GeoDataFrame
-    :param gdf_assigned_huc: Geometries for the assigned HUC12s referenced in `df_defects`, with a 'huc12' column
+    :param gdf_assigned_huc: Geometries for the assigned HUC12s referenced in `df_defects`, with a `huc12_col` column
     :type gdf_assigned_huc: gpd.GeoDataFrame
     :param gdf_divides: Geometries for the divides referenced in `df_defects`, with `divide_id_col`
     :type gdf_divides: gpd.GeoDataFrame
@@ -1604,6 +1609,9 @@ def plot_divide_reassignment_defects_wrap(df_defects: pd.DataFrame, gdf_missing_
     :type top_n: int, optional
     :param epsg_reproj: The EPSG code for reprojecting data for map display, defaults to 3857
     :type epsg_reproj: int, optional
+    :param huc12_col: Column name holding the aggregation-unit (e.g. HUC12) identifier -- not
+     assumed to literally be 'huc12', defaults to 'huc12'
+    :type huc12_col: str, optional
     :return: The saved plot's filepath, or None if `df_defects` was empty
     :rtype: Path | None
     """
@@ -1620,7 +1628,7 @@ def plot_divide_reassignment_defects_wrap(df_defects: pd.DataFrame, gdf_missing_
 
     title = f"Top {len(df_top)} Crosswalk Reassignment Defects -- {region_str}"
     fig = plot_divide_reassignment_defects(df_top, gdf_missing_proj, gdf_assigned_proj, gdf_divides_proj,
-                                            divide_id_col, title)
+                                            divide_id_col, title, huc12_col=huc12_col)
     fig.savefig(path_plot, dpi=200, bbox_inches='tight')
     logging.info(f"Wrote divide reassignment defect panels to \n{path_plot}")
     plt.close(fig)

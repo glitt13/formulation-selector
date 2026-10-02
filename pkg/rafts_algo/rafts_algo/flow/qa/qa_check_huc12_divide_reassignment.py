@@ -72,13 +72,18 @@ from rafts_algo.flow.qa.qa_check_missing_huc12_divide_existence import is_conus_
 
 
 def run(path_pred_config: Path, states: list = None, min_coverage_frac: float = 0.05,
-        path_out_csv: Path = None, top_n_plot: int = 10) -> int:
+        path_out_csv: Path = None, top_n_plot: int = 10, id_zfill_width: int = 12) -> int:
     """Run the HUC12-divide reassignment diagnostic.
 
     :param top_n_plot: How many of the strongest-evidence defect rows (by
         'margin_frac_divide', descending) to render as visual close-up panels,
         defaults to 10. Pass 0 to skip plotting.
     :type top_n_plot: int, optional
+    :param id_zfill_width: Zero-pad the aggregation-unit id (pred_config's
+        pred_gpkg_id_col) to this width before comparing against the crosswalk --
+        12 for standard HUC12 codes. Pass 0/None if the configured id column isn't
+        a fixed-width zero-padded code. Defaults to 12.
+    :type id_zfill_width: int, optional
     :return: Count of rows classified 'assigned_elsewhere_smaller_overlap_there'
         -- the strongest evidence of an actual crosswalk-build defect (0 means
         every explainable divide either has no crosswalk entry at all, or was
@@ -98,9 +103,12 @@ def run(path_pred_config: Path, states: list = None, min_coverage_frac: float = 
     context = {'dir_std_base': str(pred_cfg_dict.get('dir_std_base')), 'home_dir': str(pred_cfg_dict.get('home_dir'))}
     pred_gpkg_id_col = pred_cfg_dict.get('pred_gpkg_id_col')
     divide_id_col = pred_cfg_dict.get('crosswalk_target_col') or 'divide_id'
+    # The aggregation-unit id column is whatever the workflow's own pred_config
+    # names it -- never assumed to be literally 'huc12'.
+    huc12_col = pred_gpkg_id_col
 
     try:
-        gdf_huc12_all = resolve_huc12_layer(pred_cfg_dict, context)
+        gdf_huc12_all = resolve_huc12_layer(pred_cfg_dict, context, id_zfill_width=id_zfill_width)
     except (FileNotFoundError, KeyError) as e:
         print(f"[SKIP] Could not read HUC12 layer: {e}")
         return 0
@@ -111,7 +119,7 @@ def run(path_pred_config: Path, states: list = None, min_coverage_frac: float = 
         gdf_region = gdf_huc12_all[gdf_huc12_all['states'].astype(str).str.contains(state_pattern, regex=True, na=False)]
         region_label = "-".join(states_norm)
     else:
-        gdf_region = gdf_huc12_all[is_conus_huc12(gdf_huc12_all)]
+        gdf_region = gdf_huc12_all[is_conus_huc12(gdf_huc12_all, huc12_col=huc12_col)]
         region_label = "CONUS"
 
     if gdf_region.empty:
@@ -120,11 +128,13 @@ def run(path_pred_config: Path, states: list = None, min_coverage_frac: float = 
 
     df_crosswalk = pd.read_parquet(ctx.path_crosswalk_ids, columns=[divide_id_col, pred_gpkg_id_col])
     df_crosswalk[divide_id_col] = df_crosswalk[divide_id_col].astype(str)
-    df_crosswalk[pred_gpkg_id_col] = df_crosswalk[pred_gpkg_id_col].astype(str).str.zfill(12)
+    df_crosswalk[pred_gpkg_id_col] = df_crosswalk[pred_gpkg_id_col].astype(str)
+    if id_zfill_width:
+        df_crosswalk[pred_gpkg_id_col] = df_crosswalk[pred_gpkg_id_col].str.zfill(id_zfill_width)
     divide_to_assigned_huc = df_crosswalk.set_index(divide_id_col)[pred_gpkg_id_col]
     crosswalk_hucs = set(df_crosswalk[pred_gpkg_id_col])
 
-    gdf_missing = gdf_region[~gdf_region['huc12'].isin(crosswalk_hucs)].copy()
+    gdf_missing = gdf_region[~gdf_region[huc12_col].isin(crosswalk_hucs)].copy()
     print(f"path_pred_config: {path_pred_config}")
     print(f"path_crosswalk_ids: {ctx.path_crosswalk_ids}")
     print(f"Region: {region_label} ({len(gdf_region):,} HUC12s in scope, "
@@ -142,7 +152,8 @@ def run(path_pred_config: Path, states: list = None, min_coverage_frac: float = 
         return 0
     print(f"Read {len(gdf_divides):,} divides for spatial join (this can take a while at CONUS scale)...")
 
-    df_ov_missing = find_huc12_divide_overlaps(gdf_missing, gdf_divides, divide_id_col, min_frac=min_coverage_frac)
+    df_ov_missing = find_huc12_divide_overlaps(gdf_missing, gdf_divides, divide_id_col,
+                                                min_frac=min_coverage_frac, huc12_col=huc12_col)
     df_ov_missing = df_ov_missing.rename(columns={'frac_of_huc': 'frac_of_missing_huc'})
     if df_ov_missing.empty:
         print(f"No divide covers >= {min_coverage_frac:.0%} of any missing HUC12's area in this region "
@@ -161,21 +172,22 @@ def run(path_pred_config: Path, states: list = None, min_coverage_frac: float = 
     # huc-normalized overlap fractions above into absolute intersection areas,
     # and from there into divide-normalized shares (see module docstring for
     # why that's the metric that actually explains the assignment).
-    huc_area_sqkm = (gdf_huc12_all.set_index('huc12').to_crs(equal_area_crs).geometry.area / 1e6)
+    huc_area_sqkm = (gdf_huc12_all.set_index(huc12_col).to_crs(equal_area_crs).geometry.area / 1e6)
 
     # Assigned-HUC12 overlap, computed only for the (small) set of candidate
     # divides found above -- not a bulk join against the full HUC12 layer.
     divide_ids_needed = set(df_ov_missing[divide_id_col])
     assigned_hucs_needed = {divide_to_assigned_huc.get(d) for d in divide_ids_needed} - {None}
-    gdf_assigned_hucs = gdf_huc12_all[gdf_huc12_all['huc12'].isin(assigned_hucs_needed)]
+    gdf_assigned_hucs = gdf_huc12_all[gdf_huc12_all[huc12_col].isin(assigned_hucs_needed)]
     gdf_divides_needed = gdf_divides[gdf_divides[divide_id_col].isin(divide_ids_needed)]
-    df_ov_assigned = find_huc12_divide_overlaps(gdf_assigned_hucs, gdf_divides_needed, divide_id_col, min_frac=0.0)
-    frac_of_assigned_huc = df_ov_assigned.set_index([divide_id_col, 'huc12'])['frac_of_huc']
+    df_ov_assigned = find_huc12_divide_overlaps(gdf_assigned_hucs, gdf_divides_needed, divide_id_col,
+                                                 min_frac=0.0, huc12_col=huc12_col)
+    frac_of_assigned_huc = df_ov_assigned.set_index([divide_id_col, huc12_col])['frac_of_huc']
 
     rows = []
     for row in df_ov_missing.itertuples(index=False):
         divide_id = getattr(row, divide_id_col)
-        missing_huc = row.huc12
+        missing_huc = getattr(row, huc12_col)
         assigned_huc = divide_to_assigned_huc.get(divide_id)
         d_area = float(divide_area_sqkm.get(divide_id, float('nan')))
 
@@ -200,7 +212,7 @@ def run(path_pred_config: Path, states: list = None, min_coverage_frac: float = 
                      assigned_huc, frac_assigned, frac_divide_assigned, d_area, classification))
 
     result = pd.DataFrame(rows, columns=[
-        'huc12', divide_id_col, 'frac_of_missing_huc', 'frac_of_divide_in_missing_huc',
+        huc12_col, divide_id_col, 'frac_of_missing_huc', 'frac_of_divide_in_missing_huc',
         'assigned_huc12', 'frac_of_assigned_huc', 'frac_of_divide_in_assigned_huc',
         'divide_area_sqkm', 'classification',
     ])
@@ -251,7 +263,7 @@ def run(path_pred_config: Path, states: list = None, min_coverage_frac: float = 
             path_plot = raftsplot.plot_divide_reassignment_defects_wrap(
                 df_defects=df_defects, gdf_missing_huc=gdf_missing, gdf_assigned_huc=gdf_assigned_hucs,
                 gdf_divides=gdf_divides_needed, divide_id_col=divide_id_col, dir_out_qa=ctx.dir_qa_out,
-                region_str=region_label, top_n=top_n_plot,
+                region_str=region_label, top_n=top_n_plot, huc12_col=huc12_col,
             )
             print(f"Wrote top-{min(top_n_plot, n_true_gap)} defect close-up panels to {path_plot}")
         except Exception as e:
@@ -282,7 +294,11 @@ if __name__ == "__main__":
                          help="How many of the strongest-evidence defect rows to render as visual "
                               "close-up panels (divide footprint vs. both HUC12 boundaries). Default 10. "
                               "Pass 0 to skip plotting.")
+    parser.add_argument("--id_zfill_width", type=int, default=12,
+                         help="Zero-pad the aggregation-unit id (pred_config's pred_gpkg_id_col) to this "
+                              "width before comparing against the crosswalk -- 12 for standard HUC12 codes. "
+                              "Pass 0 if the configured id column isn't a fixed-width zero-padded code. Default 12.")
     args = parser.parse_args()
     n_true_gap = run(args.path_pred_config.expanduser(), args.states, args.min_coverage_frac,
-                      args.path_out_csv, args.top_n_plot)
+                      args.path_out_csv, args.top_n_plot, args.id_zfill_width)
     sys.exit(0)  # diagnostic only -- see scripts/qa/README.md

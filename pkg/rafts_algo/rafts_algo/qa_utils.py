@@ -126,15 +126,27 @@ def resolve_qa_context(path_pred_config: Path) -> QaConfigContext:
     )
 
 
-def resolve_huc12_layer(pred_cfg_dict: dict, context: dict) -> gpd.GeoDataFrame:
-    """Read the WBD HUC12 layer a workflow's pred_config points to for receiver
-    geometries (the same layer rafts_map_donor_receiver.py and rafts_map_pred_hfatl.py use).
+def resolve_huc12_layer(pred_cfg_dict: dict, context: dict, id_zfill_width: int = None) -> gpd.GeoDataFrame:
+    """Read the WBD-style aggregation-unit layer a workflow's pred_config points to for
+    receiver geometries (the same layer rafts_map_donor_receiver.py and
+    rafts_map_pred_hfatl.py use). Despite the name (kept for continuity with this
+    diagnosis's HUC12 origin -- see scripts/qa/crosswalk_gap_diagnosis/), this does not
+    assume the identifier column is literally named 'huc12': it keeps whatever
+    `pred_gpkg_id_col` is configured to be, so the same crosswalk-gap diagnosis works
+    against any WBD-style aggregation unit (HUC10, HUC14, a custom basin id, etc.), not
+    just HUC12.
 
     :param pred_cfg_dict: ``PredConfigParser.pred_cfg_dict`` for the prediction config.
     :type pred_cfg_dict: dict
     :param context: f-string resolution context, e.g. ``{'dir_std_base':..., 'home_dir':...}``.
     :type context: dict
-    :return: HUC12 polygons with a zero-padded, 12-digit 'huc12' column and a 'states' column.
+    :param id_zfill_width: If given, zero-pads the id column (as a string) to this width --
+        e.g. 12 for standard 12-digit HUC12 codes, where a plain `str()` cast can otherwise
+        drop a leading zero that got lost to an int/float dtype on read. Defaults to None
+        (no padding), since not every aggregation unit's id is a fixed-width zero-padded code.
+    :type id_zfill_width: int, optional
+    :return: Polygons with the configured `pred_gpkg_id_col`-named id column (cast to str,
+        zero-padded if `id_zfill_width` is given) and a 'states' column.
     :rtype: gpd.GeoDataFrame
     :raises FileNotFoundError: If ``path_gpkg_pred`` is unset or doesn't resolve to a real file.
     :raises KeyError: If the layer lacks the configured id column or a 'states' column.
@@ -154,10 +166,11 @@ def resolve_huc12_layer(pred_cfg_dict: dict, context: dict) -> gpd.GeoDataFrame:
         raise KeyError(f"'{pred_gpkg_id_col}' not found in {pred_gpkg_lyr} layer of {path_gpkg_pred_rslv}.")
     if 'states' not in gdf.columns:
         raise KeyError(f"'states' column not found in {pred_gpkg_lyr} layer of {path_gpkg_pred_rslv} "
-                        f"(expected for a USGS WBD HUC12 layer).")
+                        f"(expected for a USGS WBD-style aggregation-unit layer).")
 
-    gdf = gdf.rename(columns={pred_gpkg_id_col: 'huc12'})
-    gdf['huc12'] = gdf['huc12'].astype(str).str.zfill(12)
+    gdf[pred_gpkg_id_col] = gdf[pred_gpkg_id_col].astype(str)
+    if id_zfill_width:
+        gdf[pred_gpkg_id_col] = gdf[pred_gpkg_id_col].str.zfill(id_zfill_width)
     if gdf.crs is None:
         gdf = gdf.set_crs(epsg=4326)
     return gdf

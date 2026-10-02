@@ -77,7 +77,7 @@ NON_CONUS_STATES = {'AK', 'HI', 'PR', 'VI', 'GU', 'AS', 'CN', 'MX'}
 CONUS_HUC2_CODES = {f'{i:02d}' for i in range(1, 19)}
 
 
-def is_conus_huc12(gdf_huc12: gpd.GeoDataFrame) -> pd.Series:
+def is_conus_huc12(gdf_huc12: gpd.GeoDataFrame, huc12_col: str = 'huc12') -> pd.Series:
     """Boolean mask for HUC12s in the CONUS-wide default scope.
 
     Filters on the HUC12 id's own 2-digit HUC2 region prefix rather than the WBD
@@ -91,12 +91,15 @@ def is_conus_huc12(gdf_huc12: gpd.GeoDataFrame) -> pd.Series:
     secondary filter for any US-territory HUC12s that fall within a CONUS
     HUC2 code but are still tagged with a non-CONUS state abbreviation.
 
-    :param gdf_huc12: HUC12 polygons with a 'huc12' column and a 'states' column.
+    :param gdf_huc12: HUC12 polygons with a `huc12_col` column and a 'states' column.
     :type gdf_huc12: gpd.GeoDataFrame
+    :param huc12_col: Column name holding the HUC12 identifier, defaults to 'huc12'.
+     Pass the workflow's actual `pred_gpkg_id_col` here if it differs.
+    :type huc12_col: str, optional
     :return: True for rows in the CONUS-wide default scope.
     :rtype: pd.Series
     """
-    huc2 = gdf_huc12['huc12'].str[:2]
+    huc2 = gdf_huc12[huc12_col].str[:2]
     is_conus_huc2 = huc2.isin(CONUS_HUC2_CODES)
     not_excluded_state = ~gdf_huc12['states'].astype(str).str.contains(
         '|'.join(NON_CONUS_STATES), regex=True, na=False)
@@ -104,7 +107,8 @@ def is_conus_huc12(gdf_huc12: gpd.GeoDataFrame) -> pd.Series:
 
 
 def classify_missing_huc12s(gdf_missing_huc12: gpd.GeoDataFrame, gdf_divides: gpd.GeoDataFrame,
-                             divide_id_col: str, min_coverage_frac: float = 0.05) -> pd.DataFrame:
+                             divide_id_col: str, min_coverage_frac: float = 0.05,
+                             huc12_col: str = 'huc12') -> pd.DataFrame:
     """Classify each missing HUC12 by whether real hydrofabric divide coverage exists inside it.
 
     Uses an intersects-predicate spatial join to find candidate (huc12, divide)
@@ -114,7 +118,7 @@ def classify_missing_huc12s(gdf_missing_huc12: gpd.GeoDataFrame, gdf_divides: gp
     expressed as a fraction of *that HUC12's own area* -- see the module docstring
     for why the divide's area is the wrong denominator here.
 
-    :param gdf_missing_huc12: HUC12 polygons with no crosswalk entry, with a 'huc12' column.
+    :param gdf_missing_huc12: HUC12 polygons with no crosswalk entry, with a `huc12_col` column.
     :type gdf_missing_huc12: gpd.GeoDataFrame
     :param gdf_divides: Hydrofabric divide polygons, with `divide_id_col`.
     :type gdf_divides: gpd.GeoDataFrame
@@ -123,11 +127,14 @@ def classify_missing_huc12s(gdf_missing_huc12: gpd.GeoDataFrame, gdf_divides: gp
     :param min_coverage_frac: Minimum fraction of a HUC12's own area that must be
         covered by real divide(s), summed, to count as "a divide exists here", defaults to 0.05
     :type min_coverage_frac: float, optional
-    :return: One row per missing HUC12: huc12, n_divides_overlapping,
+    :param huc12_col: Column name holding the HUC12 identifier, defaults to 'huc12'.
+     Pass the workflow's actual `pred_gpkg_id_col` here if it differs.
+    :type huc12_col: str, optional
+    :return: One row per missing HUC12: `huc12_col`, n_divides_overlapping,
         overlapping_divide_ids, total_coverage_frac, classification.
     :rtype: pd.DataFrame
     """
-    base_result = gdf_missing_huc12[['huc12']].copy()
+    base_result = gdf_missing_huc12[[huc12_col]].copy()
     base_result['n_divides_overlapping'] = 0
     base_result['overlapping_divide_ids'] = ''
     base_result['total_coverage_frac'] = 0.0
@@ -135,11 +142,12 @@ def classify_missing_huc12s(gdf_missing_huc12: gpd.GeoDataFrame, gdf_divides: gp
 
     # Noise floor (0.001 = 0.1% of the HUC12's area) discards boundary-vertex
     # digitization slivers; the real classification threshold is min_coverage_frac.
-    df_ov = find_huc12_divide_overlaps(gdf_missing_huc12, gdf_divides, divide_id_col, min_frac=0.001)
+    df_ov = find_huc12_divide_overlaps(gdf_missing_huc12, gdf_divides, divide_id_col,
+                                        min_frac=0.001, huc12_col=huc12_col)
     if df_ov.empty:
         return base_result
 
-    agg = df_ov.groupby('huc12').agg(
+    agg = df_ov.groupby(huc12_col).agg(
         n_divides_overlapping=(divide_id_col, 'count'),
         overlapping_divide_ids=(divide_id_col, lambda s: ';'.join(s)),
         total_coverage_frac=('frac_of_huc', 'sum'),
@@ -149,16 +157,22 @@ def classify_missing_huc12s(gdf_missing_huc12: gpd.GeoDataFrame, gdf_divides: gp
         lambda f: 'divides_exist_not_crosswalked' if f >= min_coverage_frac else 'no_divide_overlap'
     )
 
-    result = base_result.set_index('huc12')
+    result = base_result.set_index(huc12_col)
     result.update(agg)
     result['n_divides_overlapping'] = result['n_divides_overlapping'].astype(int)
     return result.reset_index()
 
 
 def run(path_pred_config: Path, states: list = None, min_coverage_frac: float = 0.05,
-        path_out_csv: Path = None) -> int:
+        path_out_csv: Path = None, id_zfill_width: int = 12) -> int:
     """Run the missing-HUC12 divide-existence check.
 
+    :param id_zfill_width: Zero-pad the aggregation-unit id to this width (e.g. 12 for
+        standard HUC12 codes) before comparing against the crosswalk, since a plain
+        str() cast can otherwise drop a leading zero lost to an int/float dtype on
+        read. Pass 0/None if the configured `pred_gpkg_id_col` isn't a fixed-width
+        zero-padded code. Defaults to 12.
+    :type id_zfill_width: int, optional
     :return: Count of missing HUC12s classified as 'divides_exist_not_crosswalked'
         (the actionable subset; 0 means every gap in scope is a real structural
         no-divide case, or there was no gap at all).
@@ -176,9 +190,12 @@ def run(path_pred_config: Path, states: list = None, min_coverage_frac: float = 
     context = {'dir_std_base': str(pred_cfg_dict.get('dir_std_base')), 'home_dir': str(pred_cfg_dict.get('home_dir'))}
     pred_gpkg_id_col = pred_cfg_dict.get('pred_gpkg_id_col')
     divide_id_col = pred_cfg_dict.get('crosswalk_target_col') or 'divide_id'
+    # The aggregation-unit id column is whatever the workflow's own pred_config
+    # names it -- never assumed to be literally 'huc12'.
+    huc12_col = pred_gpkg_id_col
 
     try:
-        gdf_huc12 = resolve_huc12_layer(pred_cfg_dict, context)
+        gdf_huc12 = resolve_huc12_layer(pred_cfg_dict, context, id_zfill_width=id_zfill_width)
     except (FileNotFoundError, KeyError) as e:
         print(f"[SKIP] Could not read HUC12 layer: {e}")
         return 0
@@ -189,7 +206,7 @@ def run(path_pred_config: Path, states: list = None, min_coverage_frac: float = 
         gdf_region = gdf_huc12[gdf_huc12['states'].astype(str).str.contains(state_pattern, regex=True, na=False)]
         region_label = "-".join(states_norm)
     else:
-        gdf_region = gdf_huc12[is_conus_huc12(gdf_huc12)]
+        gdf_region = gdf_huc12[is_conus_huc12(gdf_huc12, huc12_col=huc12_col)]
         region_label = "CONUS"
 
     if gdf_region.empty:
@@ -197,9 +214,12 @@ def run(path_pred_config: Path, states: list = None, min_coverage_frac: float = 
         return 0
 
     df_crosswalk = pd.read_parquet(ctx.path_crosswalk_ids, columns=[pred_gpkg_id_col])
-    crosswalk_hucs = set(df_crosswalk[pred_gpkg_id_col].astype(str).str.zfill(12))
+    crosswalk_hucs = df_crosswalk[pred_gpkg_id_col].astype(str)
+    if id_zfill_width:
+        crosswalk_hucs = crosswalk_hucs.str.zfill(id_zfill_width)
+    crosswalk_hucs = set(crosswalk_hucs)
 
-    gdf_missing = gdf_region[~gdf_region['huc12'].isin(crosswalk_hucs)].copy()
+    gdf_missing = gdf_region[~gdf_region[huc12_col].isin(crosswalk_hucs)].copy()
     print(f"path_pred_config: {path_pred_config}")
     print(f"path_crosswalk_ids: {ctx.path_crosswalk_ids}")
     print(f"Region: {region_label} ({len(gdf_region):,} HUC12s in scope)")
@@ -216,16 +236,16 @@ def run(path_pred_config: Path, states: list = None, min_coverage_frac: float = 
         return 0
     print(f"Read {len(gdf_divides):,} divides for spatial join (this can take a while at CONUS scale)...")
 
-    result = classify_missing_huc12s(gdf_missing, gdf_divides, divide_id_col, min_coverage_frac)
+    result = classify_missing_huc12s(gdf_missing, gdf_divides, divide_id_col, min_coverage_frac, huc12_col=huc12_col)
     # Keep geometry through the merge (a plain column selection off a GeoDataFrame
     # drops it unless 'geometry' is explicitly included) -- the classification map
     # below needs it, and result would otherwise end up geometry-less.
-    merge_cols = ['huc12', 'states', 'areasqkm', 'geometry']
-    result = result.merge(gdf_missing[merge_cols].astype({'huc12': str}), on='huc12', how='left')
+    merge_cols = [huc12_col, 'states', 'areasqkm', 'geometry']
+    result = result.merge(gdf_missing[merge_cols].astype({huc12_col: str}), on=huc12_col, how='left')
     result = gpd.GeoDataFrame(result, geometry='geometry', crs=gdf_missing.crs)
     for optional_col in ('hutype', 'tohuc', 'name'):
         if optional_col in gdf_missing.columns:
-            result = result.merge(gdf_missing[['huc12', optional_col]], on='huc12', how='left')
+            result = result.merge(gdf_missing[[huc12_col, optional_col]], on=huc12_col, how='left')
 
     counts = result['classification'].value_counts()
     print("\nClassification of missing HUC12s:")
@@ -284,6 +304,11 @@ if __name__ == "__main__":
     parser.add_argument("--path_out_csv", type=Path, default=None,
                          help="Where to write the classification CSV. Defaults to "
                               "dir_out/analysis/<dataset_name>/qa_out_missing_huc12_divide_existence_<region>_<pred_config_stem>.csv.")
+    parser.add_argument("--id_zfill_width", type=int, default=12,
+                         help="Zero-pad the aggregation-unit id (pred_config's pred_gpkg_id_col) to this "
+                              "width before comparing against the crosswalk -- 12 for standard HUC12 codes. "
+                              "Pass 0 if the configured id column isn't a fixed-width zero-padded code. Default 12.")
     args = parser.parse_args()
-    n_actionable = run(args.path_pred_config.expanduser(), args.states, args.min_coverage_frac, args.path_out_csv)
+    n_actionable = run(args.path_pred_config.expanduser(), args.states, args.min_coverage_frac,
+                        args.path_out_csv, args.id_zfill_width)
     sys.exit(0)  # diagnostic only -- see scripts/qa/README.md
